@@ -1,0 +1,126 @@
+// Main application styles
+
+.app-container {
+  min-height: 100vh;
+  background-color: var(--bs-light);
+}
+
+// Standard authenticated layout
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+
+  .app-body {
+    display: flex;
+    flex: 1;
+    
+    .app-main {
+      flex: 1;
+      background-color: var(--bs-light);
+      overflow-x: auto;
+      
+      .container-fluid {
+        max-width: 1200px;
+      }
+    }
+  }
+}
+
+// Auth pages layout (login, etc.)
+.auth-layout {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// POS specific layout (full screen)
+.pos-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+
+  .pos-main {
+    flex: 1;
+    overflow: hidden;
+    background-color: #fff;
+  }
+}
+
+// Loading screen
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #fff;
+  z-index: 9999;
+}
+
+// Global loading overlay
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+
+  .loading-content {
+    text-align: center;
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .app-layout {
+    .app-body {
+      flex-direction: column;
+    }
+  }
+}
+
+// Print styles
+@media print {
+  .app-layout {
+    .app-body {
+      app-sidebar {
+        display: none;
+      }
+    }
+  }
+  
+  app-header {
+    display: none;
+  }
+  
+  .app-main {
+    .container-fluid {
+      padding: 0 !important;
+    }
+  }
+}
+
+// High contrast mode
+@media (prefers-contrast: high) {
+  .app-container {
+    background-color: #fff;
+  }
+}
+
+// Reduced motion
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

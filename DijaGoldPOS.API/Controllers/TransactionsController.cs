@@ -1,0 +1,530 @@
+using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+
+namespace DijaGoldPOS.API.Controllers;
+
+/// <summary>
+/// Transactions controller for POS transaction operations
+/// </summary>
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class TransactionsController : ControllerBase
+{
+    private readonly ITransactionService _transactionService;
+    private readonly IReceiptService _receiptService;
+    private readonly IAuditService _auditService;
+    private readonly ILogger<TransactionsController> _logger;
+
+    public TransactionsController(
+        ITransactionService transactionService,
+        IReceiptService receiptService,
+        IAuditService auditService,
+        ILogger<TransactionsController> logger)
+    {
+        _transactionService = transactionService;
+        _receiptService = receiptService;
+        _auditService = auditService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Process a sale transaction
+    /// </summary>
+    /// <param name="request">Sale transaction request</param>
+    /// <returns>Transaction result with receipt</returns>
+    [HttpPost("sale")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ProcessSale([FromBody] SaleTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            // Convert DTO to service request
+            var saleRequest = new SaleTransactionRequest
+            {
+                BranchId = request.BranchId,
+                CustomerId = request.CustomerId,
+                AmountPaid = request.AmountPaid,
+                PaymentMethod = request.PaymentMethod,
+                Items = request.Items.Select(i => new SaleItemRequest
+                {
+                    ProductId = i.ProductId,
+                    Quantity = i.Quantity,
+                    CustomDiscountPercentage = i.CustomDiscountPercentage
+                }).ToList()
+            };
+
+            var result = await _transactionService.ProcessSaleAsync(saleRequest, userId);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ApiResponse.ErrorResponse(result.ErrorMessage ?? "Transaction failed"));
+            }
+
+            if (result.Transaction == null)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Transaction processing failed"));
+            }
+
+            var transactionDto = MapTransactionToDto(result.Transaction);
+
+            _logger.LogInformation("Sale transaction {TransactionNumber} processed successfully by user {UserId}", 
+                result.Transaction.TransactionNumber, userId);
+
+            return CreatedAtAction(nameof(GetTransaction), new { id = result.Transaction.Id }, 
+                ApiResponse<TransactionDto>.SuccessResponse(transactionDto, "Sale transaction completed successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing sale transaction");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while processing the sale"));
+        }
+    }
+
+    /// <summary>
+    /// Process a return transaction
+    /// </summary>
+    /// <param name="request">Return transaction request</param>
+    /// <returns>Return transaction result</returns>
+    [HttpPost("return")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ProcessReturn([FromBody] ReturnTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            var managerId = userId; // Manager is processing the return
+
+            // Convert DTO to service request
+            var returnRequest = new ReturnTransactionRequest
+            {
+                OriginalTransactionId = request.OriginalTransactionId,
+                ReturnReason = request.ReturnReason,
+                ReturnAmount = request.ReturnAmount,
+                Items = request.Items.Select(i => new ReturnItemRequest
+                {
+                    OriginalTransactionItemId = i.OriginalTransactionItemId,
+                    ReturnQuantity = i.ReturnQuantity
+                }).ToList()
+            };
+
+            var result = await _transactionService.ProcessReturnAsync(returnRequest, userId, managerId);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ApiResponse.ErrorResponse(result.ErrorMessage ?? "Return transaction failed"));
+            }
+
+            if (result.Transaction == null)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Return transaction processing failed"));
+            }
+
+            var transactionDto = MapTransactionToDto(result.Transaction);
+
+            _logger.LogInformation("Return transaction {TransactionNumber} processed successfully by user {UserId}", 
+                result.Transaction.TransactionNumber, userId);
+
+            return CreatedAtAction(nameof(GetTransaction), new { id = result.Transaction.Id }, 
+                ApiResponse<TransactionDto>.SuccessResponse(transactionDto, "Return transaction completed successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing return transaction");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while processing the return"));
+        }
+    }
+
+    /// <summary>
+    /// Process a repair transaction
+    /// </summary>
+    /// <param name="request">Repair transaction request</param>
+    /// <returns>Repair transaction result</returns>
+    [HttpPost("repair")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ProcessRepair([FromBody] RepairTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            // Convert DTO to service request
+            var repairRequest = new RepairTransactionRequest
+            {
+                BranchId = request.BranchId,
+                CustomerId = request.CustomerId,
+                RepairDescription = request.RepairDescription,
+                RepairAmount = request.RepairAmount,
+                EstimatedCompletionDate = request.EstimatedCompletionDate,
+                AmountPaid = request.AmountPaid,
+                PaymentMethod = request.PaymentMethod
+            };
+
+            var result = await _transactionService.ProcessRepairAsync(repairRequest, userId);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ApiResponse.ErrorResponse(result.ErrorMessage ?? "Repair transaction failed"));
+            }
+
+            if (result.Transaction == null)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Repair transaction processing failed"));
+            }
+
+            var transactionDto = MapTransactionToDto(result.Transaction);
+
+            _logger.LogInformation("Repair transaction {TransactionNumber} processed successfully by user {UserId}", 
+                result.Transaction.TransactionNumber, userId);
+
+            return CreatedAtAction(nameof(GetTransaction), new { id = result.Transaction.Id }, 
+                ApiResponse<TransactionDto>.SuccessResponse(transactionDto, "Repair transaction completed successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing repair transaction");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while processing the repair"));
+        }
+    }
+
+    /// <summary>
+    /// Get transaction by ID
+    /// </summary>
+    /// <param name="id">Transaction ID</param>
+    /// <returns>Transaction details</returns>
+    [HttpGet("{id}")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTransaction(int id)
+    {
+        try
+        {
+            var transaction = await _transactionService.GetTransactionAsync(id);
+
+            if (transaction == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Transaction not found"));
+            }
+
+            var transactionDto = MapTransactionToDto(transaction);
+
+            return Ok(ApiResponse<TransactionDto>.SuccessResponse(transactionDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving transaction {TransactionId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving the transaction"));
+        }
+    }
+
+    /// <summary>
+    /// Get transaction by transaction number
+    /// </summary>
+    /// <param name="transactionNumber">Transaction number</param>
+    /// <param name="branchId">Branch ID</param>
+    /// <returns>Transaction details</returns>
+    [HttpGet("by-number/{transactionNumber}")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTransactionByNumber(string transactionNumber, [FromQuery] int branchId)
+    {
+        try
+        {
+            var transaction = await _transactionService.GetTransactionByNumberAsync(transactionNumber, branchId);
+
+            if (transaction == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Transaction not found"));
+            }
+
+            var transactionDto = MapTransactionToDto(transaction);
+
+            return Ok(ApiResponse<TransactionDto>.SuccessResponse(transactionDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving transaction by number {TransactionNumber}", transactionNumber);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving the transaction"));
+        }
+    }
+
+    /// <summary>
+    /// Search transactions with filtering and pagination
+    /// </summary>
+    /// <param name="searchRequest">Search parameters</param>
+    /// <returns>List of transactions</returns>
+    [HttpGet("search")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<TransactionDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SearchTransactions([FromQuery] TransactionSearchRequestDto searchRequest)
+    {
+        try
+        {
+            // Convert DTO to service request
+            var serviceSearchRequest = new Services.TransactionSearchRequest
+            {
+                BranchId = searchRequest.BranchId,
+                TransactionNumber = searchRequest.TransactionNumber,
+                TransactionType = searchRequest.TransactionType,
+                Status = searchRequest.Status,
+                CustomerId = searchRequest.CustomerId,
+                CashierId = searchRequest.CashierId,
+                FromDate = searchRequest.FromDate,
+                ToDate = searchRequest.ToDate,
+                MinAmount = searchRequest.MinAmount,
+                MaxAmount = searchRequest.MaxAmount,
+                PageNumber = searchRequest.PageNumber,
+                PageSize = searchRequest.PageSize
+            };
+
+            var (transactions, totalCount) = await _transactionService.SearchTransactionsAsync(serviceSearchRequest);
+
+            var transactionDtos = transactions.Select(MapTransactionToDto).ToList();
+
+            var result = new PagedResult<TransactionDto>
+            {
+                Items = transactionDtos,
+                TotalCount = totalCount,
+                PageNumber = searchRequest.PageNumber,
+                PageSize = searchRequest.PageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / searchRequest.PageSize)
+            };
+
+            return Ok(ApiResponse<PagedResult<TransactionDto>>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching transactions");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while searching transactions"));
+        }
+    }
+
+    /// <summary>
+    /// Cancel a transaction
+    /// </summary>
+    /// <param name="request">Cancellation request</param>
+    /// <returns>Success message</returns>
+    [HttpPost("cancel")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CancelTransaction([FromBody] CancelTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            var managerId = userId; // Manager is cancelling the transaction
+
+            var success = await _transactionService.CancelTransactionAsync(
+                request.TransactionId, request.Reason, userId, managerId);
+
+            if (!success)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Failed to cancel transaction"));
+            }
+
+            _logger.LogInformation("Transaction {TransactionId} cancelled by user {UserId}", 
+                request.TransactionId, userId);
+
+            return Ok(ApiResponse.SuccessResponse("Transaction cancelled successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling transaction {TransactionId}", request.TransactionId);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while cancelling the transaction"));
+        }
+    }
+
+    /// <summary>
+    /// Reprint transaction receipt
+    /// </summary>
+    /// <param name="request">Reprint request</param>
+    /// <returns>Receipt content and print status</returns>
+    [HttpPost("reprint-receipt")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionReceiptDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReprintReceipt([FromBody] ReprintReceiptRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            var (success, receiptContent) = await _receiptService.ReprintReceiptAsync(
+                request.TransactionId, userId, request.Copies);
+
+            if (!success || string.IsNullOrEmpty(receiptContent))
+            {
+                return NotFound(ApiResponse.ErrorResponse("Failed to reprint receipt or transaction not found"));
+            }
+
+            var receiptDto = new TransactionReceiptDto
+            {
+                ReceiptContent = receiptContent,
+                PrintedSuccessfully = success
+            };
+
+            _logger.LogInformation("Receipt reprinted for transaction {TransactionId} by user {UserId}", 
+                request.TransactionId, userId);
+
+            return Ok(ApiResponse<TransactionReceiptDto>.SuccessResponse(receiptDto, "Receipt reprinted successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reprinting receipt for transaction {TransactionId}", request.TransactionId);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while reprinting the receipt"));
+        }
+    }
+
+    /// <summary>
+    /// Get transaction summary for a date range
+    /// </summary>
+    /// <param name="branchId">Branch ID</param>
+    /// <param name="fromDate">From date</param>
+    /// <param name="toDate">To date</param>
+    /// <returns>Transaction summary</returns>
+    [HttpGet("summary")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTransactionSummary(
+        [FromQuery] int? branchId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate)
+    {
+        try
+        {
+            var searchRequest = new Services.TransactionSearchRequest
+            {
+                BranchId = branchId,
+                FromDate = fromDate ?? DateTime.Today,
+                ToDate = toDate ?? DateTime.Today.AddDays(1).AddTicks(-1),
+                PageSize = int.MaxValue
+            };
+
+            var (transactions, totalCount) = await _transactionService.SearchTransactionsAsync(searchRequest);
+
+            var summary = new TransactionSummaryDto
+            {
+                TransactionCount = totalCount,
+                TotalAmount = transactions.Sum(t => t.TotalAmount),
+                TotalTax = transactions.Sum(t => t.TotalTaxAmount),
+                AverageTransactionValue = totalCount > 0 ? transactions.Sum(t => t.TotalAmount) / totalCount : 0,
+                TransactionsByType = transactions
+                    .GroupBy(t => t.TransactionType)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+                AmountsByPaymentMethod = transactions
+                    .GroupBy(t => t.PaymentMethod)
+                    .ToDictionary(g => g.Key, g => g.Sum(t => t.TotalAmount))
+            };
+
+            return Ok(ApiResponse<TransactionSummaryDto>.SuccessResponse(summary));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating transaction summary");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while generating transaction summary"));
+        }
+    }
+
+    #region Private Helper Methods
+
+    /// <summary>
+    /// Map Transaction entity to DTO
+    /// </summary>
+    private static TransactionDto MapTransactionToDto(Models.Transaction transaction)
+    {
+        return new TransactionDto
+        {
+            Id = transaction.Id,
+            TransactionNumber = transaction.TransactionNumber,
+            TransactionType = transaction.TransactionType,
+            TransactionDate = transaction.TransactionDate,
+            BranchId = transaction.BranchId,
+            BranchName = transaction.Branch?.Name ?? "",
+            CustomerId = transaction.CustomerId,
+            CustomerName = transaction.Customer?.FullName,
+            CashierName = transaction.Cashier?.FullName ?? "",
+            ApprovedByName = transaction.ApprovedByUser?.FullName,
+            Subtotal = transaction.Subtotal,
+            TotalMakingCharges = transaction.TotalMakingCharges,
+            TotalTaxAmount = transaction.TotalTaxAmount,
+            DiscountAmount = transaction.DiscountAmount,
+            TotalAmount = transaction.TotalAmount,
+            AmountPaid = transaction.AmountPaid,
+            ChangeGiven = transaction.ChangeGiven,
+            PaymentMethod = transaction.PaymentMethod,
+            Status = transaction.Status,
+            ReturnReason = transaction.ReturnReason,
+            RepairDescription = transaction.RepairDescription,
+            EstimatedCompletionDate = transaction.EstimatedCompletionDate,
+            ReceiptPrinted = transaction.ReceiptPrinted,
+            Items = transaction.TransactionItems?.Select(ti => new TransactionItemDto
+            {
+                Id = ti.Id,
+                ProductId = ti.ProductId,
+                ProductName = ti.Product?.Name ?? "",
+                ProductCode = ti.Product?.ProductCode ?? "",
+                KaratType = ti.Product?.KaratType ?? Models.Enums.KaratType.K18,
+                Quantity = ti.Quantity,
+                UnitWeight = ti.UnitWeight,
+                TotalWeight = ti.TotalWeight,
+                GoldRatePerGram = ti.GoldRatePerGram,
+                UnitPrice = ti.UnitPrice,
+                MakingChargesAmount = ti.MakingChargesAmount,
+                DiscountPercentage = ti.DiscountPercentage,
+                DiscountAmount = ti.DiscountAmount,
+                LineTotal = ti.LineTotal
+            }).ToList() ?? new List<TransactionItemDto>(),
+            Taxes = transaction.TransactionTaxes?.Select(tt => new TransactionTaxDto
+            {
+                Id = tt.Id,
+                TaxName = tt.TaxConfiguration?.TaxName ?? "",
+                TaxCode = tt.TaxConfiguration?.TaxCode ?? "",
+                TaxRate = tt.TaxRate,
+                TaxableAmount = tt.TaxableAmount,
+                TaxAmount = tt.TaxAmount
+            }).ToList() ?? new List<TransactionTaxDto>()
+        };
+    }
+
+    #endregion
+}
