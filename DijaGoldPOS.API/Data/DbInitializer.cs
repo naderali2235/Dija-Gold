@@ -48,7 +48,7 @@ public static class DbInitializer
         // Seed sample products
         await SeedProductsAsync(context);
 
-        await context.SaveChanges();
+        await context.SaveChangesAsync();
     }
 
     /// <summary>

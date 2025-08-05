@@ -22,6 +22,12 @@ public class InventoryMovement : BaseEntity
     public string MovementType { get; set; } = string.Empty;
     
     /// <summary>
+    /// Date and time when the movement occurred
+    /// </summary>
+    [Required]
+    public DateTime MovementDate { get; set; } = DateTime.UtcNow;
+    
+    /// <summary>
     /// Reference to source document (TransactionId, PurchaseOrderId, etc.)
     /// </summary>
     [MaxLength(50)]

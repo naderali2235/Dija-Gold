@@ -86,6 +86,21 @@ public class Supplier : BaseEntity
     public string? Notes { get; set; }
     
     /// <summary>
+    /// Date of last transaction with this supplier (nullable)
+    /// </summary>
+    public DateTime? LastTransactionDate { get; set; }
+    
+    /// <summary>
+    /// Alias for ContactPersonName for compatibility
+    /// </summary>
+    public string? ContactPerson => ContactPersonName;
+    
+    /// <summary>
+    /// Alias for Phone for compatibility
+    /// </summary>
+    public string? PhoneNumber => Phone;
+    
+    /// <summary>
     /// Navigation property to products from this supplier
     /// </summary>
     public virtual ICollection<Product> Products { get; set; } = new List<Product>();

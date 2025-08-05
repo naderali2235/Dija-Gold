@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,18 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // Add HTTP context accessor for audit service
 builder.Services.AddHttpContextAccessor();
+
+// Add Repository Pattern and Unit of Work
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
+builder.Services.AddScoped<IInventoryMovementRepository, InventoryMovementRepository>();
+builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
+builder.Services.AddScoped<IGoldRateRepository, GoldRateRepository>();
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IBranchRepository, BranchRepository>();
+builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Add business services
 builder.Services.AddScoped<ITokenService, TokenService>();

@@ -1,0 +1,712 @@
+using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+
+namespace DijaGoldPOS.API.Controllers;
+
+/// <summary>
+/// Branches controller for branch management operations
+/// </summary>
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class BranchesController : ControllerBase
+{
+    private readonly ApplicationDbContext _context;
+    private readonly IAuditService _auditService;
+    private readonly IPricingService _pricingService;
+    private readonly ILogger<BranchesController> _logger;
+
+    public BranchesController(
+        ApplicationDbContext context,
+        IAuditService auditService,
+        IPricingService pricingService,
+        ILogger<BranchesController> logger)
+    {
+        _context = context;
+        _auditService = auditService;
+        _pricingService = pricingService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Get all branches with optional filtering and pagination
+    /// </summary>
+    /// <param name="searchRequest">Search parameters</param>
+    /// <returns>List of branches</returns>
+    [HttpGet]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<BranchDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBranches([FromQuery] BranchSearchRequestDto searchRequest)
+    {
+        try
+        {
+            var query = _context.Branches.AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(searchRequest.SearchTerm))
+            {
+                var searchTerm = searchRequest.SearchTerm.ToLower();
+                query = query.Where(b => 
+                    b.Name.ToLower().Contains(searchTerm) ||
+                    b.Code.ToLower().Contains(searchTerm) ||
+                    (b.Address != null && b.Address.ToLower().Contains(searchTerm)) ||
+                    (b.ManagerName != null && b.ManagerName.ToLower().Contains(searchTerm))
+                );
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchRequest.Code))
+            {
+                query = query.Where(b => b.Code == searchRequest.Code);
+            }
+
+            if (searchRequest.IsHeadquarters.HasValue)
+            {
+                query = query.Where(b => b.IsHeadquarters == searchRequest.IsHeadquarters.Value);
+            }
+
+            if (searchRequest.IsActive.HasValue)
+            {
+                query = query.Where(b => b.IsActive == searchRequest.IsActive.Value);
+            }
+
+            // Apply sorting - headquarters first, then by name
+            query = query.OrderByDescending(b => b.IsHeadquarters).ThenBy(b => b.Name);
+
+            // Get total count
+            var totalCount = await query.CountAsync();
+
+            // Apply pagination
+            var branches = await query
+                .Skip((searchRequest.PageNumber - 1) * searchRequest.PageSize)
+                .Take(searchRequest.PageSize)
+                .Select(b => new BranchDto
+                {
+                    Id = b.Id,
+                    Name = b.Name,
+                    Code = b.Code,
+                    Address = b.Address,
+                    Phone = b.Phone,
+                    ManagerName = b.ManagerName,
+                    IsHeadquarters = b.IsHeadquarters,
+                    CreatedAt = b.CreatedAt,
+                    IsActive = b.IsActive
+                })
+                .ToListAsync();
+
+            var result = new PagedResult<BranchDto>
+            {
+                Items = branches,
+                TotalCount = totalCount,
+                PageNumber = searchRequest.PageNumber,
+                PageSize = searchRequest.PageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / searchRequest.PageSize)
+            };
+
+            return Ok(ApiResponse<PagedResult<BranchDto>>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving branches");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving branches"));
+        }
+    }
+
+    /// <summary>
+    /// Get branch by ID
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <returns>Branch details</returns>
+    [HttpGet("{id}")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<BranchDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBranch(int id)
+    {
+        try
+        {
+            var branch = await _context.Branches
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            var branchDto = new BranchDto
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                ManagerName = branch.ManagerName,
+                IsHeadquarters = branch.IsHeadquarters,
+                CreatedAt = branch.CreatedAt,
+                IsActive = branch.IsActive
+            };
+
+            return Ok(ApiResponse<BranchDto>.SuccessResponse(branchDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving branch with ID {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving the branch"));
+        }
+    }
+
+    /// <summary>
+    /// Create a new branch
+    /// </summary>
+    /// <param name="request">Branch creation request</param>
+    /// <returns>Created branch</returns>
+    [HttpPost]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<BranchDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateBranch([FromBody] CreateBranchRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            // Check for duplicate branch code
+            var existingBranch = await _context.Branches
+                .FirstOrDefaultAsync(b => b.Code == request.Code);
+            if (existingBranch != null)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("A branch with this code already exists"));
+            }
+
+            // If setting as headquarters, ensure no other headquarters exists
+            if (request.IsHeadquarters)
+            {
+                var hasHeadquarters = await _context.Branches.AnyAsync(b => b.IsHeadquarters && b.IsActive);
+                if (hasHeadquarters)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Only one headquarters branch is allowed. Please update the existing headquarters first."));
+                }
+            }
+
+            var branch = new Branch
+            {
+                Name = request.Name,
+                Code = request.Code,
+                Address = request.Address,
+                Phone = request.Phone,
+                ManagerName = request.ManagerName,
+                IsHeadquarters = request.IsHeadquarters,
+                IsActive = true
+            };
+
+            _context.Branches.Add(branch);
+            await _context.SaveChangesAsync();
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            await _auditService.LogAsync(
+                userId,
+                "CREATE",
+                "Branch",
+                branch.Id.ToString(),
+                $"Created branch: {branch.Name} ({branch.Code})"
+            );
+
+            var branchDto = new BranchDto
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                ManagerName = branch.ManagerName,
+                IsHeadquarters = branch.IsHeadquarters,
+                CreatedAt = branch.CreatedAt,
+                IsActive = branch.IsActive
+            };
+
+            return CreatedAtAction(nameof(GetBranch), new { id = branch.Id }, 
+                ApiResponse<BranchDto>.SuccessResponse(branchDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating branch");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while creating the branch"));
+        }
+    }
+
+    /// <summary>
+    /// Update an existing branch
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <param name="request">Branch update request</param>
+    /// <returns>Updated branch</returns>
+    [HttpPut("{id}")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<BranchDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateBranch(int id, [FromBody] UpdateBranchRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            // Check for duplicate branch code (excluding current branch)
+            if (request.Code != branch.Code)
+            {
+                var existingBranch = await _context.Branches
+                    .FirstOrDefaultAsync(b => b.Code == request.Code && b.Id != id);
+                if (existingBranch != null)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("A branch with this code already exists"));
+                }
+            }
+
+            // If setting as headquarters, ensure no other headquarters exists
+            if (request.IsHeadquarters && !branch.IsHeadquarters)
+            {
+                var hasHeadquarters = await _context.Branches.AnyAsync(b => b.IsHeadquarters && b.IsActive && b.Id != id);
+                if (hasHeadquarters)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Only one headquarters branch is allowed. Please update the existing headquarters first."));
+                }
+            }
+
+            // Update branch properties
+            branch.Name = request.Name;
+            branch.Code = request.Code;
+            branch.Address = request.Address;
+            branch.Phone = request.Phone;
+            branch.ManagerName = request.ManagerName;
+            branch.IsHeadquarters = request.IsHeadquarters;
+            branch.ModifiedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            await _auditService.LogAsync(
+                userId,
+                "UPDATE",
+                "Branch",
+                branch.Id.ToString(),
+                $"Updated branch: {branch.Name} ({branch.Code})"
+            );
+
+            var branchDto = new BranchDto
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                ManagerName = branch.ManagerName,
+                IsHeadquarters = branch.IsHeadquarters,
+                CreatedAt = branch.CreatedAt,
+                IsActive = branch.IsActive
+            };
+
+            return Ok(ApiResponse<BranchDto>.SuccessResponse(branchDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating branch with ID {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while updating the branch"));
+        }
+    }
+
+    /// <summary>
+    /// Soft delete a branch
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <returns>Success response</returns>
+    [HttpDelete("{id}")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteBranch(int id)
+    {
+        try
+        {
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            // Check if branch is headquarters
+            if (branch.IsHeadquarters)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Cannot delete headquarters branch"));
+            }
+
+            // Check if branch has inventory
+            var hasInventory = await _context.Inventories.AnyAsync(i => i.BranchId == id);
+            if (hasInventory)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Cannot delete branch with inventory items"));
+            }
+
+            // Check if branch has users assigned
+            var hasUsers = await _context.Users.AnyAsync(u => u.BranchId == id);
+            if (hasUsers)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Cannot delete branch with assigned users"));
+            }
+
+            branch.IsActive = false;
+            branch.ModifiedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            await _auditService.LogAsync(
+                userId,
+                "DELETE",
+                "Branch",
+                branch.Id.ToString(),
+                $"Soft deleted branch: {branch.Name} ({branch.Code})"
+            );
+
+            return Ok(ApiResponse.SuccessResponse("Branch deleted successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting branch with ID {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while deleting the branch"));
+        }
+    }
+
+    /// <summary>
+    /// Get branch inventory summary
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <returns>Branch inventory summary</returns>
+    [HttpGet("{id}/inventory")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<BranchInventorySummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBranchInventory(int id)
+    {
+        try
+        {
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            var inventoryQuery = _context.Inventories
+                .Include(i => i.Product)
+                .Where(i => i.BranchId == id);
+
+            var inventoryItems = await inventoryQuery.ToListAsync();
+
+            var totalProducts = inventoryItems.Count;
+            var totalWeight = inventoryItems.Sum(i => i.WeightOnHand);
+            var lowStockItems = inventoryItems.Count(i => i.MinimumStockLevel > 0 && i.QuantityOnHand <= i.MinimumStockLevel);
+            var outOfStockItems = inventoryItems.Count(i => i.QuantityOnHand <= 0);
+
+            // Calculate total value (this is a simplified calculation)
+            decimal totalValue = 0;
+            foreach (var item in inventoryItems)
+            {
+                try
+                {
+                    var pricing = await _pricingService.CalculatePriceAsync(
+                        item.Product.CategoryType,
+                        item.Product.KaratType,
+                        item.WeightOnHand,
+                        item.Product.MakingChargesApplicable
+                    );
+                    totalValue += pricing.FinalPrice;
+                }
+                catch
+                {
+                    // If pricing fails, skip this item
+                    continue;
+                }
+            }
+
+            // Get top 10 items by quantity
+            var topItems = inventoryItems
+                .OrderByDescending(i => i.QuantityOnHand)
+                .Take(10)
+                .Select(i => new BranchInventoryItemDto
+                {
+                    ProductId = i.ProductId,
+                    ProductCode = i.Product.ProductCode,
+                    ProductName = i.Product.Name,
+                    QuantityOnHand = i.QuantityOnHand,
+                    WeightOnHand = i.WeightOnHand,
+                    EstimatedValue = 0, // Would calculate this based on current gold rates
+                    IsLowStock = i.MinimumStockLevel > 0 && i.QuantityOnHand <= i.MinimumStockLevel,
+                    IsOutOfStock = i.QuantityOnHand <= 0
+                })
+                .ToList();
+
+            var summary = new BranchInventorySummaryDto
+            {
+                BranchId = branch.Id,
+                BranchName = branch.Name,
+                BranchCode = branch.Code,
+                TotalProducts = totalProducts,
+                TotalWeight = totalWeight,
+                TotalValue = totalValue,
+                LowStockItems = lowStockItems,
+                OutOfStockItems = outOfStockItems,
+                TopItems = topItems
+            };
+
+            return Ok(ApiResponse<BranchInventorySummaryDto>.SuccessResponse(summary));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory summary for branch {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving branch inventory"));
+        }
+    }
+
+    /// <summary>
+    /// Get branch staff
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <returns>Branch staff information</returns>
+    [HttpGet("{id}/staff")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<BranchStaffDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBranchStaff(int id)
+    {
+        try
+        {
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            var staff = await _context.Users
+                .Where(u => u.BranchId == id)
+                .Select(u => new BranchStaffMemberDto
+                {
+                    UserId = u.Id,
+                    UserName = u.UserName ?? "",
+                    FullName = u.FullName,
+                    Email = u.Email ?? "",
+                    Role = string.Join(", ", u.UserRoles.Select(ur => ur.Role.Name ?? "")),
+                    AssignedDate = u.CreatedAt,
+                    IsActive = u.IsActive
+                })
+                .ToListAsync();
+
+            var staffDto = new BranchStaffDto
+            {
+                BranchId = branch.Id,
+                BranchName = branch.Name,
+                Staff = staff,
+                TotalStaffCount = staff.Count
+            };
+
+            return Ok(ApiResponse<BranchStaffDto>.SuccessResponse(staffDto));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving staff for branch {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving branch staff"));
+        }
+    }
+
+    /// <summary>
+    /// Get branch performance metrics
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <param name="date">Report date (optional, defaults to today)</param>
+    /// <returns>Branch performance metrics</returns>
+    [HttpGet("{id}/performance")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<BranchPerformanceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBranchPerformance(int id, [FromQuery] DateTime? date = null)
+    {
+        try
+        {
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            var reportDate = date ?? DateTime.Today;
+            var startOfDay = reportDate.Date;
+            var endOfDay = startOfDay.AddDays(1).AddTicks(-1);
+
+            var startOfMonth = new DateTime(reportDate.Year, reportDate.Month, 1);
+            var endOfMonth = startOfMonth.AddMonths(1).AddTicks(-1);
+
+            // Daily metrics
+            var dailyTransactions = await _context.Transactions
+                .Where(t => t.BranchId == id && t.TransactionDate >= startOfDay && t.TransactionDate <= endOfDay)
+                .ToListAsync();
+
+            var dailySales = dailyTransactions.Sum(t => t.TotalAmount);
+            var dailyTransactionCount = dailyTransactions.Count;
+
+            // Monthly metrics
+            var monthlyTransactions = await _context.Transactions
+                .Where(t => t.BranchId == id && t.TransactionDate >= startOfMonth && t.TransactionDate <= endOfMonth)
+                .ToListAsync();
+
+            var monthlySales = monthlyTransactions.Sum(t => t.TotalAmount);
+            var monthlyTransactionCount = monthlyTransactions.Count;
+
+            // Average transaction value
+            var averageTransactionValue = monthlyTransactionCount > 0 ? monthlySales / monthlyTransactionCount : 0;
+
+            // Active customers (customers with transactions this month)
+            var activeCustomers = await _context.Transactions
+                .Where(t => t.BranchId == id && t.TransactionDate >= startOfMonth && t.TransactionDate <= endOfMonth && t.CustomerId.HasValue)
+                .Select(t => t.CustomerId)
+                .Distinct()
+                .CountAsync();
+
+            // Recent transactions (last 10)
+            var recentTransactions = await _context.Transactions
+                .Include(t => t.Customer)
+                .Include(t => t.CreatedByUser)
+                .Where(t => t.BranchId == id)
+                .OrderByDescending(t => t.TransactionDate)
+                .Take(10)
+                .Select(t => new BranchTransactionDto
+                {
+                    TransactionId = t.Id,
+                    TransactionNumber = t.TransactionNumber,
+                    TransactionDate = t.TransactionDate,
+                    TransactionType = t.TransactionType.ToString(),
+                    TotalAmount = t.TotalAmount,
+                    CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
+                    CashierName = t.CreatedByUser.FullName
+                })
+                .ToListAsync();
+
+            var performance = new BranchPerformanceDto
+            {
+                BranchId = branch.Id,
+                BranchName = branch.Name,
+                BranchCode = branch.Code,
+                ReportDate = reportDate,
+                DailySales = dailySales,
+                DailyTransactions = dailyTransactionCount,
+                MonthlySales = monthlySales,
+                MonthlyTransactions = monthlyTransactionCount,
+                AverageTransactionValue = averageTransactionValue,
+                ActiveCustomers = activeCustomers,
+                InventoryTurnover = 0, // This would require more complex calculation
+                RecentTransactions = recentTransactions
+            };
+
+            return Ok(ApiResponse<BranchPerformanceDto>.SuccessResponse(performance));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving performance metrics for branch {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving branch performance"));
+        }
+    }
+
+    /// <summary>
+    /// Get branch transactions
+    /// </summary>
+    /// <param name="id">Branch ID</param>
+    /// <param name="fromDate">From date (optional)</param>
+    /// <param name="toDate">To date (optional)</param>
+    /// <param name="pageNumber">Page number</param>
+    /// <param name="pageSize">Page size</param>
+    /// <returns>Branch transactions</returns>
+    [HttpGet("{id}/transactions")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<BranchTransactionDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBranchTransactions(
+        int id,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        try
+        {
+            var branch = await _context.Branches.FindAsync(id);
+            if (branch == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Branch not found"));
+            }
+
+            var query = _context.Transactions
+                .Include(t => t.Customer)
+                .Include(t => t.CreatedByUser)
+                .Where(t => t.BranchId == id);
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(t => t.TransactionDate >= fromDate.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(t => t.TransactionDate <= toDate.Value);
+            }
+
+            query = query.OrderByDescending(t => t.TransactionDate);
+
+            var totalCount = await query.CountAsync();
+
+            var transactions = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(t => new BranchTransactionDto
+                {
+                    TransactionId = t.Id,
+                    TransactionNumber = t.TransactionNumber,
+                    TransactionDate = t.TransactionDate,
+                    TransactionType = t.TransactionType.ToString(),
+                    TotalAmount = t.TotalAmount,
+                    CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
+                    CashierName = t.CreatedByUser.FullName
+                })
+                .ToListAsync();
+
+            var result = new PagedResult<BranchTransactionDto>
+            {
+                Items = transactions,
+                TotalCount = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+            };
+
+            return Ok(ApiResponse<PagedResult<BranchTransactionDto>>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving transactions for branch {BranchId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving branch transactions"));
+        }
+    }
+}

@@ -160,7 +160,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(t => t.OriginalTransaction)
                   .WithMany(t => t.ReturnTransactions)
                   .HasForeignKey(t => t.OriginalTransactionId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .OnDelete(DeleteBehavior.NoAction);
         });
 
         // Configure TransactionItem
@@ -179,7 +179,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(ti => ti.Transaction)
                   .WithMany(t => t.TransactionItems)
                   .HasForeignKey(ti => ti.TransactionId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(ti => ti.Product)
                   .WithMany(p => p.TransactionItems)
@@ -202,7 +202,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(tt => tt.Transaction)
                   .WithMany(t => t.TransactionTaxes)
                   .HasForeignKey(tt => tt.TransactionId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(tt => tt.TaxConfiguration)
                   .WithMany(tc => tc.TransactionTaxes)
@@ -224,12 +224,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(i => i.Product)
                   .WithMany(p => p.InventoryRecords)
                   .HasForeignKey(i => i.ProductId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(i => i.Branch)
                   .WithMany(b => b.InventoryItems)
                   .HasForeignKey(i => i.BranchId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Configure InventoryMovement
@@ -244,7 +244,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(im => im.Inventory)
                   .WithMany(i => i.InventoryMovements)
                   .HasForeignKey(im => im.InventoryId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Configure PurchaseOrder

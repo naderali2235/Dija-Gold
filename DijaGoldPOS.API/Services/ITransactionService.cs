@@ -66,6 +66,39 @@ public interface ITransactionService
     Task<bool> CancelTransactionAsync(int transactionId, string reason, string userId, string managerId);
 
     /// <summary>
+    /// Void a pending transaction
+    /// </summary>
+    /// <param name="transactionId">Transaction ID to void</param>
+    /// <param name="reason">Reason for voiding</param>
+    /// <param name="userId">User performing void</param>
+    /// <returns>Void result</returns>
+    Task<TransactionResult> VoidTransactionAsync(int transactionId, string reason, string userId);
+
+    /// <summary>
+    /// Create a reverse transaction for full transaction reversal
+    /// </summary>
+    /// <param name="originalTransactionId">Original transaction to reverse</param>
+    /// <param name="reason">Reason for reversal</param>
+    /// <param name="userId">User performing reversal</param>
+    /// <param name="managerId">Manager approving reversal</param>
+    /// <returns>Reverse transaction result</returns>
+    Task<TransactionResult> CreateReverseTransactionAsync(int originalTransactionId, string reason, string userId, string managerId);
+
+    /// <summary>
+    /// Validate if a transaction can be voided
+    /// </summary>
+    /// <param name="transactionId">Transaction ID to check</param>
+    /// <returns>Validation result</returns>
+    Task<(bool CanVoid, string? ErrorMessage)> CanVoidTransactionAsync(int transactionId);
+
+    /// <summary>
+    /// Validate if a transaction can be reversed
+    /// </summary>
+    /// <param name="transactionId">Transaction ID to check</param>
+    /// <returns>Validation result</returns>
+    Task<(bool CanReverse, string? ErrorMessage)> CanReverseTransactionAsync(int transactionId);
+
+    /// <summary>
     /// Generate next transaction number for branch
     /// </summary>
     /// <param name="branchId">Branch ID</param>

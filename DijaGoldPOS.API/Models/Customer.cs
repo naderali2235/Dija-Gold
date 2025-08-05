@@ -79,6 +79,16 @@ public class Customer : BaseEntity
     public string? Notes { get; set; }
     
     /// <summary>
+    /// Date of last purchase (nullable)
+    /// </summary>
+    public DateTime? LastPurchaseDate { get; set; }
+    
+    /// <summary>
+    /// Total number of transactions for this customer
+    /// </summary>
+    public int TotalTransactions { get; set; } = 0;
+    
+    /// <summary>
     /// Navigation property to customer transactions
     /// </summary>
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();

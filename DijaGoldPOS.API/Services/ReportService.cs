@@ -61,7 +61,7 @@ public class ReportService : IReportService
                 .Select(g => new CategorySalesBreakdown
                 {
                     Category = g.Key,
-                    TotalSales = g.Sum(ti => ti.LineTotal + (ti.MakingChargesAmount ?? 0)),
+                    TotalSales = g.Sum(ti => ti.LineTotal + ti.MakingChargesAmount),
                     TotalWeight = g.Sum(ti => ti.TotalWeight),
                     TransactionCount = g.Select(ti => ti.TransactionId).Distinct().Count()
                 })
@@ -200,7 +200,7 @@ public class ReportService : IReportService
                 // Opening = Closing - Net Movement
                 var netMovement = movement.Purchases - movement.Sales + movement.Returns + movement.Adjustments + movement.Transfers;
                 movement.OpeningQuantity = movement.ClosingQuantity - netMovement;
-                movement.OpeningWeight = movement.ClosingWeight - (netMovement * currentInventory?.Product.Weight ?? 0);
+                movement.OpeningWeight = movement.ClosingWeight - (netMovement * (currentInventory?.Product.Weight ?? 0m));
             }
 
             return new InventoryMovementReport
@@ -262,7 +262,7 @@ public class ReportService : IReportService
                     ProductId = g.Key,
                     ProductName = g.First().Product!.Name,
                     Category = g.First().Product!.CategoryType,
-                    Revenue = g.Sum(ti => ti.LineTotal + (ti.MakingChargesAmount ?? 0)),
+                    Revenue = g.Sum(ti => ti.LineTotal + ti.MakingChargesAmount),
                     CostOfGoodsSold = g.Sum(ti => ti.TotalWeight * (ti.GoldRatePerGram * 0.85m)),
                     QuantitySold = g.Sum(ti => ti.Quantity)
                 })

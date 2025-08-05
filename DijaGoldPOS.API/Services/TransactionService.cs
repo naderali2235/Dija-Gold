@@ -791,4 +791,303 @@ public class TransactionService : ITransactionService
     }
 
     #endregion
+
+    #region Void and Reverse Operations
+
+    /// <summary>
+    /// Void a pending transaction
+    /// </summary>
+    public async Task<TransactionResult> VoidTransactionAsync(int transactionId, string reason, string userId)
+    {
+        try
+        {
+            var transaction = await _context.Transactions
+                .Include(t => t.TransactionItems)
+                .ThenInclude(ti => ti.Product)
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+
+            if (transaction == null)
+            {
+                return new TransactionResult
+                {
+                    Success = false,
+                    Message = "Transaction not found"
+                };
+            }
+
+            // Can only void pending transactions
+            if (transaction.Status != TransactionStatus.Pending)
+            {
+                return new TransactionResult
+                {
+                    Success = false,
+                    Message = "Only pending transactions can be voided"
+                };
+            }
+
+            // Update transaction status
+            transaction.Status = TransactionStatus.Voided;
+            transaction.Notes = string.IsNullOrEmpty(transaction.Notes) 
+                ? $"VOIDED: {reason}" 
+                : $"{transaction.Notes} | VOIDED: {reason}";
+
+            // Release inventory for each item
+            foreach (var item in transaction.TransactionItems)
+            {
+                await _inventoryService.AddInventoryAsync(
+                    item.ProductId,
+                    transaction.BranchId,
+                    item.Quantity,
+                    item.Weight,
+                    $"Voided transaction {transaction.TransactionNumber}",
+                    userId
+                );
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Log audit
+            await _auditService.LogAsync(
+                userId,
+                "VOID",
+                "Transaction",
+                transaction.Id.ToString(),
+                $"Voided transaction {transaction.TransactionNumber}: {reason}",
+                branchId: transaction.BranchId
+            );
+
+            return new TransactionResult
+            {
+                Success = true,
+                Message = "Transaction voided successfully",
+                TransactionId = transaction.Id,
+                TransactionNumber = transaction.TransactionNumber
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error voiding transaction {TransactionId}", transactionId);
+            return new TransactionResult
+            {
+                Success = false,
+                Message = "An error occurred while voiding the transaction"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Create a reverse transaction
+    /// </summary>
+    public async Task<TransactionResult> CreateReverseTransactionAsync(int originalTransactionId, string reason, string userId, string managerId)
+    {
+        try
+        {
+            var originalTransaction = await _context.Transactions
+                .Include(t => t.TransactionItems)
+                .ThenInclude(ti => ti.Product)
+                .Include(t => t.Customer)
+                .FirstOrDefaultAsync(t => t.Id == originalTransactionId);
+
+            if (originalTransaction == null)
+            {
+                return new TransactionResult
+                {
+                    Success = false,
+                    Message = "Original transaction not found"
+                };
+            }
+
+            // Can only reverse completed sales
+            if (originalTransaction.Status != TransactionStatus.Completed || originalTransaction.TransactionType != TransactionType.Sale)
+            {
+                return new TransactionResult
+                {
+                    Success = false,
+                    Message = "Only completed sales can be reversed"
+                };
+            }
+
+            // Create reverse transaction
+            var reverseTransaction = new Transaction
+            {
+                TransactionNumber = await GenerateTransactionNumberAsync(),
+                TransactionType = TransactionType.Return,
+                Status = TransactionStatus.Completed,
+                TransactionDate = DateTime.UtcNow,
+                BranchId = originalTransaction.BranchId,
+                CustomerId = originalTransaction.CustomerId,
+                CreatedByUserId = userId,
+                ApprovedByUserId = managerId,
+                OriginalTransactionId = originalTransactionId,
+                SubtotalAmount = -originalTransaction.SubtotalAmount,
+                TaxAmount = -originalTransaction.TaxAmount,
+                DiscountAmount = -originalTransaction.DiscountAmount,
+                TotalAmount = -originalTransaction.TotalAmount,
+                PaymentMethod = originalTransaction.PaymentMethod,
+                Notes = $"REVERSE of {originalTransaction.TransactionNumber}: {reason}",
+                IsActive = true
+            };
+
+            _context.Transactions.Add(reverseTransaction);
+            await _context.SaveChangesAsync();
+
+            // Create reverse transaction items
+            foreach (var originalItem in originalTransaction.TransactionItems)
+            {
+                var reverseItem = new TransactionItem
+                {
+                    TransactionId = reverseTransaction.Id,
+                    ProductId = originalItem.ProductId,
+                    Quantity = originalItem.Quantity,
+                    Weight = originalItem.Weight,
+                    UnitPrice = originalItem.UnitPrice,
+                    MakingChargesAmount = -originalItem.MakingChargesAmount,
+                    TotalPrice = -originalItem.TotalPrice,
+                    IsActive = true
+                };
+
+                _context.TransactionItems.Add(reverseItem);
+
+                // Restore inventory
+                await _inventoryService.AddInventoryAsync(
+                    originalItem.ProductId,
+                    originalTransaction.BranchId,
+                    originalItem.Quantity,
+                    originalItem.Weight,
+                    $"Reverse transaction {reverseTransaction.TransactionNumber}",
+                    userId
+                );
+            }
+
+            // Update customer loyalty (reduce points and purchase amount)
+            if (originalTransaction.Customer != null)
+            {
+                var customer = originalTransaction.Customer;
+                customer.TotalPurchaseAmount -= originalTransaction.TotalAmount;
+                customer.TotalTransactions += 1; // Increment for the return transaction
+                
+                // Recalculate loyalty tier
+                customer.LoyaltyTier = customer.TotalPurchaseAmount switch
+                {
+                    >= 100000 => 5,
+                    >= 50000 => 4,
+                    >= 25000 => 3,
+                    >= 10000 => 2,
+                    _ => 1
+                };
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Log audit
+            await _auditService.LogAsync(
+                userId,
+                "REVERSE",
+                "Transaction",
+                reverseTransaction.Id.ToString(),
+                $"Created reverse transaction {reverseTransaction.TransactionNumber} for original {originalTransaction.TransactionNumber}: {reason}",
+                branchId: originalTransaction.BranchId
+            );
+
+            return new TransactionResult
+            {
+                Success = true,
+                Message = "Reverse transaction created successfully",
+                TransactionId = reverseTransaction.Id,
+                TransactionNumber = reverseTransaction.TransactionNumber
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating reverse transaction for {OriginalTransactionId}", originalTransactionId);
+            return new TransactionResult
+            {
+                Success = false,
+                Message = "An error occurred while creating the reverse transaction"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Check if transaction can be voided
+    /// </summary>
+    public async Task<(bool CanVoid, string? ErrorMessage)> CanVoidTransactionAsync(int transactionId)
+    {
+        try
+        {
+            var transaction = await _context.Transactions.FindAsync(transactionId);
+            
+            if (transaction == null)
+            {
+                return (false, "Transaction not found");
+            }
+
+            if (transaction.Status != TransactionStatus.Pending)
+            {
+                return (false, "Only pending transactions can be voided");
+            }
+
+            if (!transaction.IsActive)
+            {
+                return (false, "Transaction is already inactive");
+            }
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking void eligibility for transaction {TransactionId}", transactionId);
+            return (false, "An error occurred while checking void eligibility");
+        }
+    }
+
+    /// <summary>
+    /// Check if transaction can be reversed
+    /// </summary>
+    public async Task<(bool CanReverse, string? ErrorMessage)> CanReverseTransactionAsync(int transactionId)
+    {
+        try
+        {
+            var transaction = await _context.Transactions
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+            
+            if (transaction == null)
+            {
+                return (false, "Transaction not found");
+            }
+
+            if (transaction.Status != TransactionStatus.Completed)
+            {
+                return (false, "Only completed transactions can be reversed");
+            }
+
+            if (transaction.TransactionType != TransactionType.Sale)
+            {
+                return (false, "Only sales transactions can be reversed");
+            }
+
+            if (!transaction.IsActive)
+            {
+                return (false, "Transaction is already inactive");
+            }
+
+            // Check if already reversed
+            var existingReverse = await _context.Transactions
+                .AnyAsync(t => t.OriginalTransactionId == transactionId && t.TransactionType == TransactionType.Return);
+            
+            if (existingReverse)
+            {
+                return (false, "Transaction has already been reversed");
+            }
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking reverse eligibility for transaction {TransactionId}", transactionId);
+            return (false, "An error occurred while checking reverse eligibility");
+        }
+    }
+
+    #endregion
 }
