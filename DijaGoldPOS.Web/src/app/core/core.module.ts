@@ -28,6 +28,7 @@ function throwIfAlreadyLoaded(parentModule: any, moduleName: string) {
     ApiService,
     ApiHelperService,
     NotificationService,
+    // Label printing service is providedIn: 'root' but keep here for clarity in DI graph
     
     // Guards
     AuthGuard,

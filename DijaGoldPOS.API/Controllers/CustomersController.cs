@@ -2,6 +2,8 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,15 +22,18 @@ public class CustomersController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IAuditService _auditService;
     private readonly ILogger<CustomersController> _logger;
+    private readonly IMapper _mapper;
 
     public CustomersController(
         ApplicationDbContext context,
         IAuditService auditService,
-        ILogger<CustomersController> logger)
+        ILogger<CustomersController> logger,
+        IMapper mapper)
     {
         _context = context;
         _auditService = auditService;
         _logger = logger;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -92,26 +97,7 @@ public class CustomersController : ControllerBase
             var customers = await query
                 .Skip((searchRequest.PageNumber - 1) * searchRequest.PageSize)
                 .Take(searchRequest.PageSize)
-                .Select(c => new CustomerDto
-                {
-                    Id = c.Id,
-                    FullName = c.FullName,
-                    NationalId = c.NationalId,
-                    MobileNumber = c.MobileNumber,
-                    Email = c.Email,
-                    Address = c.Address,
-                    RegistrationDate = c.RegistrationDate,
-                    LoyaltyTier = c.LoyaltyTier,
-                    LoyaltyPoints = c.LoyaltyPoints,
-                    TotalPurchaseAmount = c.TotalPurchaseAmount,
-                    DefaultDiscountPercentage = c.DefaultDiscountPercentage,
-                    MakingChargesWaived = c.MakingChargesWaived,
-                    Notes = c.Notes,
-                    LastPurchaseDate = c.LastPurchaseDate,
-                    TotalTransactions = c.TotalTransactions,
-                    CreatedAt = c.CreatedAt,
-                    IsActive = c.IsActive
-                })
+                .ProjectTo<CustomerDto>(_mapper.ConfigurationProvider)
                 .ToListAsync();
 
             var result = new PagedResult<CustomerDto>
@@ -145,34 +131,15 @@ public class CustomersController : ControllerBase
     {
         try
         {
-            var customer = await _context.Customers
-                .FirstOrDefaultAsync(c => c.Id == id);
+            var customerDto = await _context.Customers
+                .Where(c => c.Id == id)
+                .ProjectTo<CustomerDto>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-            if (customer == null)
+            if (customerDto == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Customer not found"));
             }
-
-            var customerDto = new CustomerDto
-            {
-                Id = customer.Id,
-                FullName = customer.FullName,
-                NationalId = customer.NationalId,
-                MobileNumber = customer.MobileNumber,
-                Email = customer.Email,
-                Address = customer.Address,
-                RegistrationDate = customer.RegistrationDate,
-                LoyaltyTier = customer.LoyaltyTier,
-                LoyaltyPoints = customer.LoyaltyPoints,
-                TotalPurchaseAmount = customer.TotalPurchaseAmount,
-                DefaultDiscountPercentage = customer.DefaultDiscountPercentage,
-                MakingChargesWaived = customer.MakingChargesWaived,
-                Notes = customer.Notes,
-                LastPurchaseDate = customer.LastPurchaseDate,
-                TotalTransactions = customer.TotalTransactions,
-                CreatedAt = customer.CreatedAt,
-                IsActive = customer.IsActive
-            };
 
             return Ok(ApiResponse<CustomerDto>.SuccessResponse(customerDto));
         }
@@ -234,24 +201,8 @@ public class CustomersController : ControllerBase
                 }
             }
 
-            var customer = new Customer
-            {
-                FullName = request.FullName,
-                NationalId = request.NationalId,
-                MobileNumber = request.MobileNumber,
-                Email = request.Email,
-                Address = request.Address,
-                RegistrationDate = DateTime.UtcNow,
-                LoyaltyTier = request.LoyaltyTier,
-                LoyaltyPoints = 0,
-                TotalPurchaseAmount = 0,
-                DefaultDiscountPercentage = request.DefaultDiscountPercentage,
-                MakingChargesWaived = request.MakingChargesWaived,
-                Notes = request.Notes,
-                LastPurchaseDate = null,
-                TotalTransactions = 0,
-                IsActive = true
-            };
+            var customer = _mapper.Map<Customer>(request);
+            customer.RegistrationDate = DateTime.UtcNow;
 
             _context.Customers.Add(customer);
             await _context.SaveChangesAsync();
@@ -265,26 +216,7 @@ public class CustomersController : ControllerBase
                 $"Created customer: {customer.FullName}"
             );
 
-            var customerDto = new CustomerDto
-            {
-                Id = customer.Id,
-                FullName = customer.FullName,
-                NationalId = customer.NationalId,
-                MobileNumber = customer.MobileNumber,
-                Email = customer.Email,
-                Address = customer.Address,
-                RegistrationDate = customer.RegistrationDate,
-                LoyaltyTier = customer.LoyaltyTier,
-                LoyaltyPoints = customer.LoyaltyPoints,
-                TotalPurchaseAmount = customer.TotalPurchaseAmount,
-                DefaultDiscountPercentage = customer.DefaultDiscountPercentage,
-                MakingChargesWaived = customer.MakingChargesWaived,
-                Notes = customer.Notes,
-                LastPurchaseDate = customer.LastPurchaseDate,
-                TotalTransactions = customer.TotalTransactions,
-                CreatedAt = customer.CreatedAt,
-                IsActive = customer.IsActive
-            };
+            var customerDto = _mapper.Map<CustomerDto>(customer);
 
             return CreatedAtAction(nameof(GetCustomer), new { id = customer.Id }, 
                 ApiResponse<CustomerDto>.SuccessResponse(customerDto));
@@ -355,16 +287,8 @@ public class CustomersController : ControllerBase
                 }
             }
 
-            // Update customer properties
-            customer.FullName = request.FullName;
-            customer.NationalId = request.NationalId;
-            customer.MobileNumber = request.MobileNumber;
-            customer.Email = request.Email;
-            customer.Address = request.Address;
-            customer.LoyaltyTier = request.LoyaltyTier;
-            customer.DefaultDiscountPercentage = request.DefaultDiscountPercentage;
-            customer.MakingChargesWaived = request.MakingChargesWaived;
-            customer.Notes = request.Notes;
+            // Update customer properties via AutoMapper
+            _mapper.Map(request, customer);
             customer.ModifiedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -378,26 +302,7 @@ public class CustomersController : ControllerBase
                 $"Updated customer: {customer.FullName}"
             );
 
-            var customerDto = new CustomerDto
-            {
-                Id = customer.Id,
-                FullName = customer.FullName,
-                NationalId = customer.NationalId,
-                MobileNumber = customer.MobileNumber,
-                Email = customer.Email,
-                Address = customer.Address,
-                RegistrationDate = customer.RegistrationDate,
-                LoyaltyTier = customer.LoyaltyTier,
-                LoyaltyPoints = customer.LoyaltyPoints,
-                TotalPurchaseAmount = customer.TotalPurchaseAmount,
-                DefaultDiscountPercentage = customer.DefaultDiscountPercentage,
-                MakingChargesWaived = customer.MakingChargesWaived,
-                Notes = customer.Notes,
-                LastPurchaseDate = customer.LastPurchaseDate,
-                TotalTransactions = customer.TotalTransactions,
-                CreatedAt = customer.CreatedAt,
-                IsActive = customer.IsActive
-            };
+            var customerDto = _mapper.Map<CustomerDto>(customer);
 
             return Ok(ApiResponse<CustomerDto>.SuccessResponse(customerDto));
         }
@@ -508,8 +413,8 @@ public class CustomersController : ControllerBase
                     TransactionDate = t.TransactionDate,
                     TransactionType = t.TransactionType.ToString(),
                     TotalAmount = t.TotalAmount,
-                    BranchName = t.Branch.Name,
-                    CashierName = t.CreatedByUser.FullName
+                    BranchName = t.Branch != null ? t.Branch.Name : string.Empty,
+                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
                 })
                 .ToListAsync();
 

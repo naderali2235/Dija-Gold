@@ -1,0 +1,24 @@
+<header class="dija-header py-2 shadow-sm">
+  <div class="container-fluid d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-3">
+      <img src="assets/brand/dija-gold-logo.svg" alt="Dija Gold" height="44" />
+      <div class="brand-name h5 mb-0">{{ appName }}</div>
+    </div>
+
+    <div class="d-none d-md-flex align-items-center gap-4">
+      <div class="contact-item d-flex align-items-center gap-2">
+        <i class="bi bi-telephone-outbound brand-text"></i>
+        <div class="d-flex flex-column lh-1">
+          <a *ngIf="contact?.phone1" [href]="'tel:' + contact.phone1">{{ contact?.phone1 }}</a>
+          <a *ngIf="contact?.phone2" [href]="'tel:' + contact.phone2">{{ contact?.phone2 }}</a>
+        </div>
+      </div>
+      <div class="contact-item d-flex align-items-center gap-2" *ngIf="contact?.address">
+        <i class="bi bi-geo-alt brand-text"></i>
+        <span class="text-truncate" style="max-width: 360px" [title]="contact?.address">{{ contact?.address }}</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+

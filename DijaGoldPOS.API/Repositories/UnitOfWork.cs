@@ -21,6 +21,7 @@ public class UnitOfWork : IUnitOfWork
     private ICustomerRepository? _customers;
     private IBranchRepository? _branches;
     private ISupplierRepository? _suppliers;
+    private IPurchaseOrderRepository? _purchaseOrders;
 
     public UnitOfWork(ApplicationDbContext context)
     {
@@ -51,6 +52,9 @@ public class UnitOfWork : IUnitOfWork
 
     public ISupplierRepository Suppliers =>
         _suppliers ??= new SupplierRepository(_context);
+
+    public IPurchaseOrderRepository PurchaseOrders =>
+        _purchaseOrders ??= new PurchaseOrderRepository(_context);
 
     /// <summary>
     /// Check if the unit of work has been disposed

@@ -14,6 +14,7 @@ public interface IUnitOfWork : IDisposable
     ICustomerRepository Customers { get; }
     IBranchRepository Branches { get; }
     ISupplierRepository Suppliers { get; }
+    IPurchaseOrderRepository PurchaseOrders { get; }
 
     /// <summary>
     /// Save all changes to the database

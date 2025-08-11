@@ -3,6 +3,16 @@ export const environment = {
   apiUrl: '/api',
   appName: 'Dija Gold POS',
   version: '1.0.0',
+  brand: {
+    logoPath: 'assets/brand/dija-gold-logo.svg',
+    primaryColor: '#d4af37',
+    contact: {
+      // Arabic address from provided image
+      address: 'المقطم الهضبه الوسطى الحي الثامن قطعه ٩٠٧٧ بجانب بنزينه وطنية امام كارفور المعادي ع الدائري',
+      phone1: '01515293929',
+      phone2: '01558588947'
+    }
+  },
   
   // Application settings
   settings: {

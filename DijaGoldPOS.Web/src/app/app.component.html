@@ -22,6 +22,15 @@
       <main class="app-main">
         <div class="container-fluid py-3">
           <router-outlet></router-outlet>
+          <footer class="dija-footer mt-4 p-3 rounded">
+            <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between gap-2">
+              <div class="small">© {{ (new Date()).getFullYear() }} Dija Gold</div>
+              <div class="small rtl text-end">
+                <span class="me-2">العنوان:</span>
+                <span>{{ (environment as any).brand?.contact?.address }}</span>
+              </div>
+            </div>
+          </footer>
         </div>
       </main>
     </div>

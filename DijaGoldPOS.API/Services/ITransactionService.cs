@@ -191,4 +191,32 @@ public class TransactionResult
     public string? ErrorMessage { get; set; }
     public Transaction? Transaction { get; set; }
     public string? ReceiptContent { get; set; }
+    
+    /// <summary>
+    /// Success status (alias for IsSuccess)
+    /// </summary>
+    public bool Success 
+    { 
+        get => IsSuccess; 
+        set => IsSuccess = value; 
+    }
+    
+    /// <summary>
+    /// Result message (alias for ErrorMessage)
+    /// </summary>
+    public string? Message 
+    { 
+        get => ErrorMessage; 
+        set => ErrorMessage = value; 
+    }
+    
+    /// <summary>
+    /// Transaction ID
+    /// </summary>
+    public int? TransactionId { get; set; }
+    
+    /// <summary>
+    /// Transaction number
+    /// </summary>
+    public string? TransactionNumber { get; set; }
 }

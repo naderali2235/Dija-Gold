@@ -184,7 +184,7 @@ public class UsersController : ControllerBase
                 LastLoginAt = user.LastLoginAt,
                 EmailConfirmed = user.EmailConfirmed,
                 LockoutEnabled = user.LockoutEnabled,
-                LockoutEnd = user.LockoutEnd
+                LockoutEnd = user.LockoutEnd?.DateTime
             };
 
             return Ok(ApiResponse<UserDto>.SuccessResponse(userDto));
@@ -315,7 +315,7 @@ public class UsersController : ControllerBase
                 LastLoginAt = user.LastLoginAt,
                 EmailConfirmed = user.EmailConfirmed,
                 LockoutEnabled = user.LockoutEnabled,
-                LockoutEnd = user.LockoutEnd
+                LockoutEnd = user.LockoutEnd?.DateTime
             };
 
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, 
@@ -427,7 +427,7 @@ public class UsersController : ControllerBase
                 LastLoginAt = user.LastLoginAt,
                 EmailConfirmed = user.EmailConfirmed,
                 LockoutEnabled = user.LockoutEnabled,
-                LockoutEnd = user.LockoutEnd
+                LockoutEnd = user.LockoutEnd?.DateTime
             };
 
             return Ok(ApiResponse<UserDto>.SuccessResponse(userDto));
@@ -634,8 +634,8 @@ public class UsersController : ControllerBase
                     Id = (int)a.Id,
                     Timestamp = a.Timestamp,
                     Action = a.Action,
-                    EntityType = a.EntityType,
-                    EntityId = a.EntityId,
+                    EntityType = a.EntityType ?? string.Empty,
+                    EntityId = a.EntityId ?? string.Empty,
                     Details = a.Description,
                     BranchName = a.Branch != null ? a.Branch.Name : null,
                     IpAddress = a.IpAddress ?? ""

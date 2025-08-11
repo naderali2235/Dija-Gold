@@ -79,8 +79,7 @@ public class TransactionService : ITransactionService
                 PaymentMethod = saleRequest.PaymentMethod,
                 AmountPaid = saleRequest.AmountPaid,
                 Status = TransactionStatus.Pending,
-                CreatedBy = userId,
-                CreatedAt = DateTime.UtcNow
+                CreatedByUserId = userId
             };
 
             await _context.Transactions.AddAsync(transaction);
@@ -751,21 +750,21 @@ public class TransactionService : ITransactionService
         return (true, null);
     }
 
-    private async Task<(bool IsValid, string? ErrorMessage)> ValidateReturnRequestAsync(
+    private Task<(bool IsValid, string? ErrorMessage)> ValidateReturnRequestAsync(
         ReturnTransactionRequest request, Transaction originalTransaction)
     {
         if (originalTransaction.TransactionType != TransactionType.Sale)
-            return (false, "Can only return from sale transactions");
+            return Task.FromResult<(bool IsValid, string? ErrorMessage)>((false, "Can only return from sale transactions"));
 
         if (originalTransaction.Status != TransactionStatus.Completed)
-            return (false, "Original transaction is not completed");
+            return Task.FromResult<(bool IsValid, string? ErrorMessage)>((false, "Original transaction is not completed"));
 
         // Check return policy timeframe (configurable)
         var maxReturnDays = 7; // Should come from configuration
         if ((DateTime.UtcNow - originalTransaction.TransactionDate).TotalDays > maxReturnDays)
-            return (false, $"Return period of {maxReturnDays} days has expired");
+            return Task.FromResult<(bool IsValid, string? ErrorMessage)>((false, $"Return period of {maxReturnDays} days has expired"));
 
-        return (true, null);
+        return Task.FromResult<(bool IsValid, string? ErrorMessage)>((true, (string?)null));
     }
 
     private async Task UpdateCustomerLoyaltyAsync(int customerId, decimal transactionAmount)
@@ -840,6 +839,8 @@ public class TransactionService : ITransactionService
                     item.Quantity,
                     item.Weight,
                     $"Voided transaction {transaction.TransactionNumber}",
+                    transaction.TransactionNumber,
+                    null, // unitCost - not applicable for void
                     userId
                 );
             }
@@ -910,7 +911,7 @@ public class TransactionService : ITransactionService
             // Create reverse transaction
             var reverseTransaction = new Transaction
             {
-                TransactionNumber = await GenerateTransactionNumberAsync(),
+                TransactionNumber = await GenerateTransactionNumberAsync(originalTransaction.BranchId, TransactionType.Return),
                 TransactionType = TransactionType.Return,
                 Status = TransactionStatus.Completed,
                 TransactionDate = DateTime.UtcNow,
@@ -955,6 +956,8 @@ public class TransactionService : ITransactionService
                     originalItem.Quantity,
                     originalItem.Weight,
                     $"Reverse transaction {reverseTransaction.TransactionNumber}",
+                    reverseTransaction.TransactionNumber,
+                    null, // unitCost - not applicable for reverse
                     userId
                 );
             }

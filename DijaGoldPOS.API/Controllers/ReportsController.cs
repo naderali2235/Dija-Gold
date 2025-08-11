@@ -358,8 +358,7 @@ public class ReportsController : ControllerBase
     /// <summary>
     /// Export report to Excel
     /// </summary>
-    /// <param name="reportType">Type of report to export</param>
-    /// <param name="reportData">Report data (JSON)</param>
+    /// <param name="request">Export request containing report type, report name, and JSON report data</param>
     /// <returns>Excel file</returns>
     [HttpPost("export/excel")]
     [Authorize(Policy = "CashierOrManager")]
@@ -404,7 +403,7 @@ public class ReportsController : ControllerBase
     /// <summary>
     /// Export report to PDF
     /// </summary>
-    /// <param name="request">Export request</param>
+    /// <param name="request">Export request containing report type, report name, and JSON report data</param>
     /// <returns>PDF file</returns>
     [HttpPost("export/pdf")]
     [Authorize(Policy = "CashierOrManager")]

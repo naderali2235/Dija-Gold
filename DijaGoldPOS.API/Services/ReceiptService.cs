@@ -2,8 +2,11 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Models.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.Drawing.Printing;
+using System.Runtime.InteropServices;
 using System.Text;
+#if WINDOWS
+using System.Drawing.Printing;
+#endif
 
 namespace DijaGoldPOS.API.Services;
 
@@ -106,42 +109,89 @@ public class ReceiptService : IReceiptService
     {
         try
         {
-            await Task.Run(() =>
+            // Check if running on Windows before using Windows-specific printing
+            if (OperatingSystem.IsWindows())
             {
-                for (int i = 0; i < copies; i++)
-                {
-                    var printDocument = new PrintDocument();
-                    printDocument.PrinterSettings.PrinterName = printerName;
-                    
-                    printDocument.PrintPage += (sender, e) =>
-                    {
-                        if (e.Graphics != null)
-                        {
-                            var font = new System.Drawing.Font("Courier New", 8);
-                            var brush = System.Drawing.Brushes.Black;
-                            var lines = receiptContent.Split('\n');
-                            
-                            float yPosition = 0;
-                            float lineHeight = font.GetHeight(e.Graphics);
-                            
-                            foreach (var line in lines)
-                            {
-                                e.Graphics.DrawString(line, font, brush, 0, yPosition);
-                                yPosition += lineHeight;
-                            }
-                        }
-                    };
-                    
-                    printDocument.Print();
-                }
-            });
-
-            _logger.LogInformation("Receipt printed successfully to {PrinterName}, {Copies} copies", printerName, copies);
-            return true;
+                return await PrintReceiptWindowsAsync(receiptContent, printerName, copies);
+            }
+            else
+            {
+                // For non-Windows platforms, use alternative printing method
+                return await PrintReceiptCrossPlatformAsync(receiptContent, printerName, copies);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error printing receipt to {PrinterName}", printerName);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Windows-specific printing implementation
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private async Task<bool> PrintReceiptWindowsAsync(string receiptContent, string printerName, int copies)
+    {
+        await Task.Run(() =>
+        {
+            for (int i = 0; i < copies; i++)
+            {
+                var printDocument = new System.Drawing.Printing.PrintDocument();
+                printDocument.PrinterSettings.PrinterName = printerName;
+                
+                printDocument.PrintPage += (sender, e) =>
+                {
+                    if (e?.Graphics != null)
+                    {
+                        var font = new System.Drawing.Font("Courier New", 8);
+                        var brush = System.Drawing.Brushes.Black;
+                        var lines = receiptContent.Split('\n');
+                        
+                        float yPosition = 0;
+                        float lineHeight = font.GetHeight(e.Graphics);
+                        
+                        foreach (var line in lines)
+                        {
+                            e.Graphics.DrawString(line, font, brush, 0, yPosition);
+                            yPosition += lineHeight;
+                        }
+                    }
+                };
+                
+                printDocument.Print();
+            }
+        });
+
+        _logger.LogInformation("Receipt printed successfully to {PrinterName}, {Copies} copies (Windows)", printerName, copies);
+        return true;
+    }
+
+    /// <summary>
+    /// Cross-platform printing implementation (saves to file or uses system print command)
+    /// </summary>
+    private async Task<bool> PrintReceiptCrossPlatformAsync(string receiptContent, string printerName, int copies)
+    {
+        try
+        {
+            // For non-Windows platforms, save to file and optionally use system print commands
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var fileName = $"receipt_{timestamp}.txt";
+            var filePath = Path.Combine(Path.GetTempPath(), fileName);
+            
+            await File.WriteAllTextAsync(filePath, receiptContent);
+            
+            _logger.LogInformation("Receipt saved to file {FilePath} for printing on {PrinterName}, {Copies} copies", 
+                filePath, printerName, copies);
+            
+            // TODO: Implement actual cross-platform printing using system commands
+            // This could use lp command on Linux/Mac or other platform-specific solutions
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in cross-platform printing");
             return false;
         }
     }
@@ -171,7 +221,7 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Get receipt template by transaction type
     /// </summary>
-    public async Task<ReceiptTemplate> GetReceiptTemplateAsync(TransactionType transactionType)
+    public Task<ReceiptTemplate> GetReceiptTemplateAsync(TransactionType transactionType)
     {
         // In a full implementation, this would come from database
         // For now, return default templates
@@ -179,7 +229,7 @@ public class ReceiptService : IReceiptService
         var companyInfo = _configuration.GetSection("CompanyInfo");
         var receiptSettings = _configuration.GetSection("ReceiptSettings");
         
-        return new ReceiptTemplate
+        var template = new ReceiptTemplate
         {
             Id = (int)transactionType,
             TransactionType = transactionType,
@@ -200,6 +250,8 @@ public class ReceiptService : IReceiptService
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "system"
         };
+
+        return Task.FromResult(template);
     }
 
     /// <summary>
@@ -289,7 +341,7 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Build receipt data from transaction
     /// </summary>
-    private async Task<ReceiptData> BuildReceiptDataAsync(Transaction transaction)
+    private Task<ReceiptData> BuildReceiptDataAsync(Transaction transaction)
     {
         var companyInfo = _configuration.GetSection("CompanyInfo");
         
@@ -372,7 +424,7 @@ public class ReceiptService : IReceiptService
                 break;
         }
 
-        return receiptData;
+        return Task.FromResult(receiptData);
     }
 
     /// <summary>

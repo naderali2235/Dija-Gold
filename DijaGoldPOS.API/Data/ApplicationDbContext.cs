@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.Services;
 
 namespace DijaGoldPOS.API.Data;
 
@@ -9,8 +10,11 @@ namespace DijaGoldPOS.API.Data;
 /// </summary>
 public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
+    private readonly ICurrentUserService _currentUserService;
+
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentUserService currentUserService) : base(options)
     {
+        _currentUserService = currentUserService;
     }
 
     // Core business entities
@@ -357,7 +361,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     private void UpdateAuditFields()
     {
         var entries = ChangeTracker.Entries<BaseEntity>();
-        var currentUserId = "system"; // This should be injected from current user context
+        var currentUserId = _currentUserService?.UserId ?? "system";
 
         foreach (var entry in entries)
         {

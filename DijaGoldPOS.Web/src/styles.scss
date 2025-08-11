@@ -1,0 +1,77 @@
+/* Global styles and Dija Gold branding theme */
+
+:root {
+  /* Gold palette */
+  --gold-50: #fff8e1;
+  --gold-100: #ffecb3;
+  --gold-200: #ffe082;
+  --gold-300: #ffd54f;
+  --gold-400: #ffca28;
+  --gold-500: #d4af37; /* primary brand */
+  --gold-600: #c39b2a;
+  --gold-700: #b2871d;
+  --gold-800: #a17310;
+  --gold-900: #8f5f03;
+
+  --brand-gold: var(--gold-500);
+  --brand-dark: #111111;
+  --brand-light: #faf7ef;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--brand-light);
+  color: #222;
+}
+
+.brand-text {
+  color: var(--brand-gold) !important;
+}
+
+.brand-bg {
+  background: linear-gradient(135deg, #e2c766, var(--brand-gold));
+}
+
+.brand-border {
+  border-color: var(--brand-gold) !important;
+}
+
+/* Utility */
+.rtl { direction: rtl; }
+.ltr { direction: ltr; }
+
+/* Header styling */
+.dija-header {
+  background-color: #0f0f0f;
+  background-image: radial-gradient(ellipse at top left, rgba(212,175,55,0.15), transparent 60%),
+                    radial-gradient(ellipse at bottom right, rgba(212,175,55,0.12), transparent 60%);
+  color: #fff;
+  border-bottom: 2px solid var(--brand-gold);
+}
+
+.dija-header .brand-name {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.dija-footer {
+  background-color: #111;
+  color: #ddd;
+  border-top: 2px solid var(--brand-gold);
+}
+
+.contact-item a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.contact-item a:hover {
+  color: var(--brand-gold);
+}
+
+

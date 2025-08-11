@@ -2,6 +2,8 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,17 +23,23 @@ public class ProductsController : ControllerBase
     private readonly IPricingService _pricingService;
     private readonly IAuditService _auditService;
     private readonly ILogger<ProductsController> _logger;
+    private readonly IMapper _mapper;
+    private readonly ILabelPrintingService _labelPrintingService;
 
     public ProductsController(
         ApplicationDbContext context,
         IPricingService pricingService,
         IAuditService auditService,
-        ILogger<ProductsController> logger)
+        ILogger<ProductsController> logger,
+        IMapper mapper,
+        ILabelPrintingService labelPrintingService)
     {
         _context = context;
         _pricingService = pricingService;
         _auditService = auditService;
         _logger = logger;
+        _mapper = mapper;
+        _labelPrintingService = labelPrintingService;
     }
 
     /// <summary>
@@ -83,29 +91,7 @@ public class ProductsController : ControllerBase
                 .ThenBy(p => p.Name)
                 .Skip((searchRequest.PageNumber - 1) * searchRequest.PageSize)
                 .Take(searchRequest.PageSize)
-                .Select(p => new ProductDto
-                {
-                    Id = p.Id,
-                    ProductCode = p.ProductCode,
-                    Name = p.Name,
-                    CategoryType = p.CategoryType,
-                    KaratType = p.KaratType,
-                    Weight = p.Weight,
-                    Brand = p.Brand,
-                    DesignStyle = p.DesignStyle,
-                    SubCategory = p.SubCategory,
-                    Shape = p.Shape,
-                    PurityCertificateNumber = p.PurityCertificateNumber,
-                    CountryOfOrigin = p.CountryOfOrigin,
-                    YearOfMinting = p.YearOfMinting,
-                    FaceValue = p.FaceValue,
-                    HasNumismaticValue = p.HasNumismaticValue,
-                    MakingChargesApplicable = p.MakingChargesApplicable,
-                    SupplierId = p.SupplierId,
-                    SupplierName = p.Supplier != null ? p.Supplier.CompanyName : null,
-                    CreatedAt = p.CreatedAt,
-                    IsActive = p.IsActive
-                })
+                .ProjectTo<ProductDto>(_mapper.ConfigurationProvider)
                 .ToListAsync();
 
             var result = new PagedResult<ProductDto>
@@ -139,38 +125,15 @@ public class ProductsController : ControllerBase
     {
         try
         {
-            var product = await _context.Products
-                .Include(p => p.Supplier)
-                .FirstOrDefaultAsync(p => p.Id == id);
+            var productDto = await _context.Products
+                .Where(p => p.Id == id)
+                .ProjectTo<ProductDto>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-            if (product == null)
+            if (productDto == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Product not found"));
             }
-
-            var productDto = new ProductDto
-            {
-                Id = product.Id,
-                ProductCode = product.ProductCode,
-                Name = product.Name,
-                CategoryType = product.CategoryType,
-                KaratType = product.KaratType,
-                Weight = product.Weight,
-                Brand = product.Brand,
-                DesignStyle = product.DesignStyle,
-                SubCategory = product.SubCategory,
-                Shape = product.Shape,
-                PurityCertificateNumber = product.PurityCertificateNumber,
-                CountryOfOrigin = product.CountryOfOrigin,
-                YearOfMinting = product.YearOfMinting,
-                FaceValue = product.FaceValue,
-                HasNumismaticValue = product.HasNumismaticValue,
-                MakingChargesApplicable = product.MakingChargesApplicable,
-                SupplierId = product.SupplierId,
-                SupplierName = product.Supplier?.CompanyName,
-                CreatedAt = product.CreatedAt,
-                IsActive = product.IsActive
-            };
 
             return Ok(ApiResponse<ProductDto>.SuccessResponse(productDto));
         }
@@ -194,51 +157,15 @@ public class ProductsController : ControllerBase
     {
         try
         {
-            var product = await _context.Products
-                .Include(p => p.Supplier)
-                .Include(p => p.InventoryRecords)
-                .ThenInclude(i => i.Branch)
-                .FirstOrDefaultAsync(p => p.Id == id);
+            var productDto = await _context.Products
+                .Where(p => p.Id == id)
+                .ProjectTo<ProductWithInventoryDto>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-            if (product == null)
+            if (productDto == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Product not found"));
             }
-
-            var productDto = new ProductWithInventoryDto
-            {
-                Id = product.Id,
-                ProductCode = product.ProductCode,
-                Name = product.Name,
-                CategoryType = product.CategoryType,
-                KaratType = product.KaratType,
-                Weight = product.Weight,
-                Brand = product.Brand,
-                DesignStyle = product.DesignStyle,
-                SubCategory = product.SubCategory,
-                Shape = product.Shape,
-                PurityCertificateNumber = product.PurityCertificateNumber,
-                CountryOfOrigin = product.CountryOfOrigin,
-                YearOfMinting = product.YearOfMinting,
-                FaceValue = product.FaceValue,
-                HasNumismaticValue = product.HasNumismaticValue,
-                MakingChargesApplicable = product.MakingChargesApplicable,
-                SupplierId = product.SupplierId,
-                SupplierName = product.Supplier?.CompanyName,
-                CreatedAt = product.CreatedAt,
-                IsActive = product.IsActive,
-                TotalQuantityOnHand = product.InventoryRecords.Sum(i => i.QuantityOnHand),
-                TotalWeightOnHand = product.InventoryRecords.Sum(i => i.WeightOnHand),
-                Inventory = product.InventoryRecords.Select(i => new ProductInventoryDto
-                {
-                    BranchId = i.BranchId,
-                    BranchName = i.Branch.Name,
-                    QuantityOnHand = i.QuantityOnHand,
-                    WeightOnHand = i.WeightOnHand,
-                    MinimumStockLevel = i.MinimumStockLevel,
-                    IsLowStock = i.QuantityOnHand <= i.ReorderPoint
-                }).ToList()
-            };
 
             return Ok(ApiResponse<ProductWithInventoryDto>.SuccessResponse(productDto));
         }
@@ -288,27 +215,9 @@ public class ProductsController : ControllerBase
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
-            var product = new Product
-            {
-                ProductCode = request.ProductCode,
-                Name = request.Name,
-                CategoryType = request.CategoryType,
-                KaratType = request.KaratType,
-                Weight = request.Weight,
-                Brand = request.Brand,
-                DesignStyle = request.DesignStyle,
-                SubCategory = request.SubCategory,
-                Shape = request.Shape,
-                PurityCertificateNumber = request.PurityCertificateNumber,
-                CountryOfOrigin = request.CountryOfOrigin,
-                YearOfMinting = request.YearOfMinting,
-                FaceValue = request.FaceValue,
-                HasNumismaticValue = request.HasNumismaticValue,
-                MakingChargesApplicable = request.MakingChargesApplicable,
-                SupplierId = request.SupplierId,
-                CreatedBy = userId,
-                CreatedAt = DateTime.UtcNow
-            };
+            var product = _mapper.Map<Product>(request);
+            product.CreatedBy = userId;
+            product.CreatedAt = DateTime.UtcNow;
 
             await _context.Products.AddAsync(product);
             await _context.SaveChangesAsync();
@@ -323,28 +232,7 @@ public class ProductsController : ControllerBase
                 newValues: System.Text.Json.JsonSerializer.Serialize(request)
             );
 
-            var productDto = new ProductDto
-            {
-                Id = product.Id,
-                ProductCode = product.ProductCode,
-                Name = product.Name,
-                CategoryType = product.CategoryType,
-                KaratType = product.KaratType,
-                Weight = product.Weight,
-                Brand = product.Brand,
-                DesignStyle = product.DesignStyle,
-                SubCategory = product.SubCategory,
-                Shape = product.Shape,
-                PurityCertificateNumber = product.PurityCertificateNumber,
-                CountryOfOrigin = product.CountryOfOrigin,
-                YearOfMinting = product.YearOfMinting,
-                FaceValue = product.FaceValue,
-                HasNumismaticValue = product.HasNumismaticValue,
-                MakingChargesApplicable = product.MakingChargesApplicable,
-                SupplierId = product.SupplierId,
-                CreatedAt = product.CreatedAt,
-                IsActive = product.IsActive
-            };
+            var productDto = _mapper.Map<ProductDto>(product);
 
             _logger.LogInformation("Product created: {ProductId} by user {UserId}", product.Id, userId);
 

@@ -1,5 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Services;
+using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -18,17 +19,20 @@ public class TransactionsController : ControllerBase
     private readonly IReceiptService _receiptService;
     private readonly IAuditService _auditService;
     private readonly ILogger<TransactionsController> _logger;
+    private readonly IMapper _mapper;
 
     public TransactionsController(
         ITransactionService transactionService,
         IReceiptService receiptService,
         IAuditService auditService,
-        ILogger<TransactionsController> logger)
+        ILogger<TransactionsController> logger,
+        IMapper mapper)
     {
         _transactionService = transactionService;
         _receiptService = receiptService;
         _auditService = auditService;
         _logger = logger;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -78,7 +82,7 @@ public class TransactionsController : ControllerBase
                 return BadRequest(ApiResponse.ErrorResponse("Transaction processing failed"));
             }
 
-            var transactionDto = MapTransactionToDto(result.Transaction);
+            var transactionDto = _mapper.Map<TransactionDto>(result.Transaction);
 
             _logger.LogInformation("Sale transaction {TransactionNumber} processed successfully by user {UserId}", 
                 result.Transaction.TransactionNumber, userId);
@@ -139,7 +143,7 @@ public class TransactionsController : ControllerBase
                 return BadRequest(ApiResponse.ErrorResponse("Return transaction processing failed"));
             }
 
-            var transactionDto = MapTransactionToDto(result.Transaction);
+            var transactionDto = _mapper.Map<TransactionDto>(result.Transaction);
 
             _logger.LogInformation("Return transaction {TransactionNumber} processed successfully by user {UserId}", 
                 result.Transaction.TransactionNumber, userId);
@@ -198,7 +202,7 @@ public class TransactionsController : ControllerBase
                 return BadRequest(ApiResponse.ErrorResponse("Repair transaction processing failed"));
             }
 
-            var transactionDto = MapTransactionToDto(result.Transaction);
+            var transactionDto = _mapper.Map<TransactionDto>(result.Transaction);
 
             _logger.LogInformation("Repair transaction {TransactionNumber} processed successfully by user {UserId}", 
                 result.Transaction.TransactionNumber, userId);
@@ -233,7 +237,7 @@ public class TransactionsController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Transaction not found"));
             }
 
-            var transactionDto = MapTransactionToDto(transaction);
+            var transactionDto = _mapper.Map<TransactionDto>(transaction);
 
             return Ok(ApiResponse<TransactionDto>.SuccessResponse(transactionDto));
         }
@@ -265,7 +269,7 @@ public class TransactionsController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Transaction not found"));
             }
 
-            var transactionDto = MapTransactionToDto(transaction);
+            var transactionDto = _mapper.Map<TransactionDto>(transaction);
 
             return Ok(ApiResponse<TransactionDto>.SuccessResponse(transactionDto));
         }
@@ -307,7 +311,7 @@ public class TransactionsController : ControllerBase
 
             var (transactions, totalCount) = await _transactionService.SearchTransactionsAsync(serviceSearchRequest);
 
-            var transactionDtos = transactions.Select(MapTransactionToDto).ToList();
+            var transactionDtos = transactions.Select(t => _mapper.Map<TransactionDto>(t)).ToList();
 
             var result = new PagedResult<TransactionDto>
             {
@@ -467,64 +471,7 @@ public class TransactionsController : ControllerBase
 
     #region Private Helper Methods
 
-    /// <summary>
-    /// Map Transaction entity to DTO
-    /// </summary>
-    private static TransactionDto MapTransactionToDto(Models.Transaction transaction)
-    {
-        return new TransactionDto
-        {
-            Id = transaction.Id,
-            TransactionNumber = transaction.TransactionNumber,
-            TransactionType = transaction.TransactionType,
-            TransactionDate = transaction.TransactionDate,
-            BranchId = transaction.BranchId,
-            BranchName = transaction.Branch?.Name ?? "",
-            CustomerId = transaction.CustomerId,
-            CustomerName = transaction.Customer?.FullName,
-            CashierName = transaction.Cashier?.FullName ?? "",
-            ApprovedByName = transaction.ApprovedByUser?.FullName,
-            Subtotal = transaction.Subtotal,
-            TotalMakingCharges = transaction.TotalMakingCharges,
-            TotalTaxAmount = transaction.TotalTaxAmount,
-            DiscountAmount = transaction.DiscountAmount,
-            TotalAmount = transaction.TotalAmount,
-            AmountPaid = transaction.AmountPaid,
-            ChangeGiven = transaction.ChangeGiven,
-            PaymentMethod = transaction.PaymentMethod,
-            Status = transaction.Status,
-            ReturnReason = transaction.ReturnReason,
-            RepairDescription = transaction.RepairDescription,
-            EstimatedCompletionDate = transaction.EstimatedCompletionDate,
-            ReceiptPrinted = transaction.ReceiptPrinted,
-            Items = transaction.TransactionItems?.Select(ti => new TransactionItemDto
-            {
-                Id = ti.Id,
-                ProductId = ti.ProductId,
-                ProductName = ti.Product?.Name ?? "",
-                ProductCode = ti.Product?.ProductCode ?? "",
-                KaratType = ti.Product?.KaratType ?? Models.Enums.KaratType.K18,
-                Quantity = ti.Quantity,
-                UnitWeight = ti.UnitWeight,
-                TotalWeight = ti.TotalWeight,
-                GoldRatePerGram = ti.GoldRatePerGram,
-                UnitPrice = ti.UnitPrice,
-                MakingChargesAmount = ti.MakingChargesAmount,
-                DiscountPercentage = ti.DiscountPercentage,
-                DiscountAmount = ti.DiscountAmount,
-                LineTotal = ti.LineTotal
-            }).ToList() ?? new List<TransactionItemDto>(),
-            Taxes = transaction.TransactionTaxes?.Select(tt => new TransactionTaxDto
-            {
-                Id = tt.Id,
-                TaxName = tt.TaxConfiguration?.TaxName ?? "",
-                TaxCode = tt.TaxConfiguration?.TaxCode ?? "",
-                TaxRate = tt.TaxRate,
-                TaxableAmount = tt.TaxableAmount,
-                TaxAmount = tt.TaxAmount
-            }).ToList() ?? new List<TransactionTaxDto>()
-        };
-    }
+    // AutoMapper now handles entity-to-DTO mapping
 
     #endregion
 }

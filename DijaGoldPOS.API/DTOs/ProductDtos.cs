@@ -155,3 +155,12 @@ public class ProductPricingDto
     public decimal EstimatedTotalPrice { get; set; }
     public DateTime PriceCalculatedAt { get; set; }
 }
+
+/// <summary>
+/// Request to decode a scanned QR payload
+/// </summary>
+public class DecodeQrRequestDto
+{
+    [Required]
+    public string Payload { get; set; } = string.Empty;
+}

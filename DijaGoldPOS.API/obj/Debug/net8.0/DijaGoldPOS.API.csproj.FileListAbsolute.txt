@@ -1,9 +1,0 @@
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.csproj.AssemblyReference.cache
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\rpswa.dswa.cache.json
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.AssemblyInfoInputs.cache
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.AssemblyInfo.cs
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.csproj.CoreCompileInputs.cache
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.MvcApplicationPartsAssemblyInfo.cs
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.MvcApplicationPartsAssemblyInfo.cache
-C:\Users\nmohamedalii\Dija-Gold\Dija-Gold\DijaGoldPOS.API\obj\Debug\net8.0\DijaGoldPOS.API.sourcelink.json

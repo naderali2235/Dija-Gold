@@ -45,4 +45,9 @@ public class ApplicationUser : IdentityUser
     /// Last login date time
     /// </summary>
     public DateTime? LastLoginAt { get; set; }
+    
+    /// <summary>
+    /// Navigation property to user roles
+    /// </summary>
+    public virtual ICollection<IdentityUserRole<string>> UserRoles { get; set; } = new List<IdentityUserRole<string>>();
 }

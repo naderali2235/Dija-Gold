@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 import { takeUntil, filter } from 'rxjs/operators';
 
 import { AuthService } from '@core/services/auth.service';
+import { environment } from '@environments/environment';
 import { NotificationService } from '@core/services/notification.service';
 
 @Component({
@@ -23,6 +24,8 @@ export class AppComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private router: Router
   ) {}
+
+  environment = environment;
 
   ngOnInit(): void {
     this.initializeApp();
@@ -63,5 +66,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private isAuthRoute(url: string): boolean {
     return url.startsWith('/auth');
+  }
+
+  // Helper to detect POS full-screen routes
+  isPosRoute(): boolean {
+    const url = this.router.url || '';
+    return url.startsWith('/pos');
   }
 }

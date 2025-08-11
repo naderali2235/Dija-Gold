@@ -1,0 +1,40 @@
+﻿# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build artifacts
+[Bb]in/
+[Oo]bj/
+**/[Bb]in/**
+**/[Oo]bj/**
+
+# Logs
+logs/
+*.log
+DijaGoldPOS.API/logs/
+
+# .NET build outputs
+**/*.dll
+**/*.pdb
+**/*.exe
+**/*.cache
+**/*.assets.json
+
+# Angular
+DijaGoldPOS.Web/node_modules/
+DijaGoldPOS.Web/dist/
+.node_modules/
+dist/
+coverage/
+.angular/
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Environment-specific
+DijaGoldPOS.API/appsettings.Development.json
+DijaGoldPOS.API/Properties/launchSettings.json

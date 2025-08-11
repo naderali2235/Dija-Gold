@@ -40,7 +40,10 @@ public enum TransactionStatus
     Cancelled = 3,
     
     /// <summary>Transaction is refunded</summary>
-    Refunded = 4
+    Refunded = 4,
+    
+    /// <summary>Transaction is voided</summary>
+    Voided = 5
 }
 
 /// <summary>

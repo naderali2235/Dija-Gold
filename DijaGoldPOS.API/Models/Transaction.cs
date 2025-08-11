@@ -53,6 +53,18 @@ public class Transaction : BaseEntity
     public string? ApprovedBy { get; set; }
     
     /// <summary>
+    /// Manager who approved (for returns) - User ID
+    /// </summary>
+    [MaxLength(450)]
+    public string? ApprovedByUserId { get; set; }
+    
+    /// <summary>
+    /// User who created this transaction
+    /// </summary>
+    [MaxLength(450)]
+    public string? CreatedByUserId { get; set; }
+    
+    /// <summary>
     /// Subtotal before taxes and discounts
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
@@ -69,6 +81,26 @@ public class Transaction : BaseEntity
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalTaxAmount { get; set; }
+    
+    /// <summary>
+    /// Subtotal amount (alias for Subtotal)
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal SubtotalAmount 
+    { 
+        get => Subtotal; 
+        set => Subtotal = value; 
+    }
+    
+    /// <summary>
+    /// Tax amount (alias for TotalTaxAmount)
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TaxAmount 
+    { 
+        get => TotalTaxAmount; 
+        set => TotalTaxAmount = value; 
+    }
     
     /// <summary>
     /// Discount amount applied
@@ -124,6 +156,12 @@ public class Transaction : BaseEntity
     public string? RepairDescription { get; set; }
     
     /// <summary>
+    /// Additional notes for the transaction
+    /// </summary>
+    [MaxLength(2000)]
+    public string? Notes { get; set; }
+    
+    /// <summary>
     /// Estimated completion date (for repairs)
     /// </summary>
     public DateTime? EstimatedCompletionDate { get; set; }
@@ -162,6 +200,11 @@ public class Transaction : BaseEntity
     /// Navigation property to approving manager
     /// </summary>
     public virtual ApplicationUser? ApprovedByUser { get; set; }
+    
+    /// <summary>
+    /// Navigation property to user who created this transaction
+    /// </summary>
+    public virtual ApplicationUser? CreatedByUser { get; set; }
     
     /// <summary>
     /// Navigation property to gold rate used

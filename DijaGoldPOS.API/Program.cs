@@ -7,16 +7,34 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Serilog.Context;
+using Serilog.Events;
 using System.Text;
 using FluentValidation;
+using Microsoft.OpenApi.Models;
+using System.Reflection;
 using AutoMapper;
+using DijaGoldPOS.API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Configure Serilog with enrichment and request logging support
+// Retention: if audits are sufficient, keep only today's log and erase prior days
+var eraseDailyIfAuditsSufficient = builder.Configuration.GetValue<bool>("Logging:EraseDailyIfAuditsSufficient");
+var configuredRetainedFiles = builder.Configuration.GetValue<int?>("Logging:RetainedFileCountLimit");
+var retainedFiles = eraseDailyIfAuditsSufficient ? 1 : (configuredRetainedFiles ?? 10);
+
 Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithEnvironmentUserName()
     .WriteTo.Console()
-    .WriteTo.File("logs/dijaGoldPOS-.txt", rollingInterval: RollingInterval.Day)
+    .WriteTo.File(
+        path: "logs/dijaGoldPOS-.txt",
+        rollingInterval: RollingInterval.Day,
+        restrictedToMinimumLevel: LogEventLevel.Information,
+        retainedFileCountLimit: retainedFiles)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -79,6 +97,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // Add HTTP context accessor for audit service
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // Add Repository Pattern and Unit of Work
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
@@ -90,6 +109,7 @@ builder.Services.AddScoped<IGoldRateRepository, GoldRateRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IBranchRepository, BranchRepository>();
 builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
+builder.Services.AddScoped<IPurchaseOrderRepository, PurchaseOrderRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Add business services
@@ -100,18 +120,36 @@ builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+builder.Services.AddScoped<ILabelPrintingService, LabelPrintingService>();
 
 builder.Services.AddControllers();
 
-// Add CORS
+// Add CORS via configuration
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+var exposedHeaders = builder.Configuration.GetSection("Cors:ExposedHeaders").Get<string[]>() ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAngular", policy =>
+    options.AddPolicy("ConfiguredCors", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        if (corsOrigins.Length > 0)
+        {
+            policy.WithOrigins(corsOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+        else
+        {
+            // If no origins configured, allow none explicitly to avoid accidental wide-open CORS
+            policy.DisallowCredentials();
+        }
+
+        if (exposedHeaders.Length > 0)
+        {
+            policy.WithExposedHeaders(exposedHeaders);
+        }
     });
 });
 
@@ -119,27 +157,36 @@ builder.Services.AddCors(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "Dija Gold POS API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new()
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Dija Gold POS API", Version = "v1" });
+
+    // Include XML comments
+    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme.",
         Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    c.AddSecurityRequirement(new()
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new()
+            new OpenApiSecurityScheme
             {
-                Reference = new()
+                Reference = new OpenApiReference
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 });
@@ -150,10 +197,54 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Dija Gold POS API v1");
+        c.RoutePrefix = string.Empty; // Serve Swagger UI at application root
+    });
 }
 
-app.UseCors("AllowAngular");
+// Global exception handling - must be early in the pipeline
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+// Correlation Id and Serilog request logging
+app.Use(async (context, next) =>
+{
+    var traceId = System.Diagnostics.Activity.Current?.Id ?? context.TraceIdentifier;
+    // propagate correlation id header
+    const string headerName = "X-Correlation-Id";
+    if (!context.Request.Headers.TryGetValue(headerName, out var existing))
+    {
+        context.Request.Headers[headerName] = traceId;
+    }
+    context.Response.Headers[headerName] = context.Request.Headers[headerName].ToString();
+
+    using (LogContext.PushProperty("CorrelationId", traceId))
+    using (LogContext.PushProperty("UserName", context.User?.Identity?.IsAuthenticated == true ? context.User.Identity?.Name : "anonymous"))
+    using (LogContext.PushProperty("ClientIP", context.Connection.RemoteIpAddress?.ToString()))
+    using (LogContext.PushProperty("UserAgent", context.Request.Headers["User-Agent"].ToString()))
+    {
+        await next();
+    }
+});
+
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagCtx, httpContext) =>
+    {
+        diagCtx.Set("CorrelationId", System.Diagnostics.Activity.Current?.Id ?? httpContext.TraceIdentifier);
+        diagCtx.Set("UserName", httpContext.User?.Identity?.IsAuthenticated == true ? httpContext.User.Identity?.Name : "anonymous");
+        diagCtx.Set("ClientIP", httpContext.Connection.RemoteIpAddress?.ToString());
+        diagCtx.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+        diagCtx.Set("RequestHost", httpContext.Request.Host.Value);
+        diagCtx.Set("RequestScheme", httpContext.Request.Scheme);
+        diagCtx.Set("RequestPath", httpContext.Request.Path);
+        diagCtx.Set("RequestMethod", httpContext.Request.Method);
+        diagCtx.Set("ResponseStatusCode", httpContext.Response.StatusCode);
+    };
+});
+
+app.UseCors("ConfiguredCors");
 
 app.UseHttpsRedirection();
 

@@ -430,12 +430,9 @@ public class BranchesController : ControllerBase
                 try
                 {
                     var pricing = await _pricingService.CalculatePriceAsync(
-                        item.Product.CategoryType,
-                        item.Product.KaratType,
-                        item.WeightOnHand,
-                        item.Product.MakingChargesApplicable
-                    );
-                    totalValue += pricing.FinalPrice;
+                        item.Product, 
+                        item.WeightOnHand);
+                    totalValue += pricing.FinalTotal;
                 }
                 catch
                 {
@@ -510,7 +507,7 @@ public class BranchesController : ControllerBase
                     UserName = u.UserName ?? "",
                     FullName = u.FullName,
                     Email = u.Email ?? "",
-                    Role = string.Join(", ", u.UserRoles.Select(ur => ur.Role.Name ?? "")),
+                    Role = "User", // TODO: Implement proper role retrieval
                     AssignedDate = u.CreatedAt,
                     IsActive = u.IsActive
                 })
@@ -601,7 +598,7 @@ public class BranchesController : ControllerBase
                     TransactionType = t.TransactionType.ToString(),
                     TotalAmount = t.TotalAmount,
                     CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
-                    CashierName = t.CreatedByUser.FullName
+                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
                 })
                 .ToListAsync();
 
@@ -688,7 +685,7 @@ public class BranchesController : ControllerBase
                     TransactionType = t.TransactionType.ToString(),
                     TotalAmount = t.TotalAmount,
                     CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
-                    CashierName = t.CreatedByUser.FullName
+                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
                 })
                 .ToListAsync();
 

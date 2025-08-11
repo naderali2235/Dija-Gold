@@ -80,6 +80,26 @@ public class TransactionItem : BaseEntity
     public decimal LineTotal { get; set; }
     
     /// <summary>
+    /// Weight (alias for TotalWeight)
+    /// </summary>
+    [Column(TypeName = "decimal(10,3)")]
+    public decimal Weight 
+    { 
+        get => TotalWeight; 
+        set => TotalWeight = value; 
+    }
+    
+    /// <summary>
+    /// Total price (alias for LineTotal)
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TotalPrice 
+    { 
+        get => LineTotal; 
+        set => LineTotal = value; 
+    }
+    
+    /// <summary>
     /// Navigation property to transaction
     /// </summary>
     public virtual Transaction Transaction { get; set; } = null!;

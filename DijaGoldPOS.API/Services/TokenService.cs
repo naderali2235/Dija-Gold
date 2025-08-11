@@ -23,7 +23,7 @@ public class TokenService : ITokenService
     /// <summary>
     /// Generate JWT token for user
     /// </summary>
-    public async Task<string> GenerateTokenAsync(ApplicationUser user, IList<string> roles)
+    public Task<string> GenerateTokenAsync(ApplicationUser user, IList<string> roles)
     {
         try
         {
@@ -74,7 +74,7 @@ public class TokenService : ITokenService
 
             _logger.LogInformation("JWT token generated for user {UserId}", user.Id);
             
-            return tokenString;
+            return Task.FromResult(tokenString);
         }
         catch (Exception ex)
         {

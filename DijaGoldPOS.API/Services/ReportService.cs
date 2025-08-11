@@ -570,14 +570,14 @@ public class ReportService : IReportService
     /// <summary>
     /// Export report to Excel
     /// </summary>
-    public async Task<byte[]> ExportToExcelAsync(object reportData, string reportName)
+    public Task<byte[]> ExportToExcelAsync(object reportData, string reportName)
     {
         try
         {
             // In a full implementation, would use a library like EPPlus or ClosedXML
             // For now, return CSV-like content as bytes
             var csvContent = ConvertToCsv(reportData, reportName);
-            return Encoding.UTF8.GetBytes(csvContent);
+            return Task.FromResult(Encoding.UTF8.GetBytes(csvContent));
         }
         catch (Exception ex)
         {
@@ -589,14 +589,14 @@ public class ReportService : IReportService
     /// <summary>
     /// Export report to PDF
     /// </summary>
-    public async Task<byte[]> ExportToPdfAsync(object reportData, string reportName)
+    public Task<byte[]> ExportToPdfAsync(object reportData, string reportName)
     {
         try
         {
             // In a full implementation, would use a library like iTextSharp or QuestPDF
             // For now, return formatted text as bytes
             var pdfContent = $"PDF Report: {reportName}\n\nGenerated on: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}\n\n{System.Text.Json.JsonSerializer.Serialize(reportData, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })}";
-            return Encoding.UTF8.GetBytes(pdfContent);
+            return Task.FromResult(Encoding.UTF8.GetBytes(pdfContent));
         }
         catch (Exception ex)
         {

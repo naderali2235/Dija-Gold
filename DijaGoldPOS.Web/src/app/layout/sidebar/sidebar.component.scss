@@ -1,0 +1,15 @@
+.sidebar {
+  width: 240px;
+  min-height: calc(100vh - 64px);
+}
+
+.nav-link {
+  color: #333;
+}
+
+.nav-link.active {
+  color: var(--brand-gold);
+  font-weight: 600;
+}
+
+
