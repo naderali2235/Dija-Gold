@@ -1,0 +1,178 @@
+<div class="login-container">
+  <div class="login-background">
+    <!-- Background pattern -->
+    <div class="pattern-overlay"></div>
+  </div>
+  
+  <div class="login-content">
+    <div class="container-fluid h-100">
+      <div class="row h-100 align-items-center justify-content-center">
+        
+        <!-- Login Card -->
+        <div class="col-11 col-sm-10 col-md-8 col-lg-6 col-xl-5 col-xxl-4">
+          <div class="login-card card shadow-lg border-0">
+            <div class="card-body p-4 p-md-5">
+              
+              <!-- Header -->
+              <div class="text-center mb-4">
+                <div class="brand-logo mb-3">
+                  <img [src]="brandLogo" [alt]="appName" class="logo-image">
+                </div>
+                <h2 class="brand-title mb-2">{{ appName }}</h2>
+                <p class="text-muted mb-0">Sign in to your account</p>
+              </div>
+
+              <!-- Login Form -->
+              <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" novalidate>
+                
+                <!-- Username Field -->
+                <div class="mb-3">
+                  <label for="username" class="form-label">
+                    <i class="bi bi-person me-2"></i>Username or Email
+                  </label>
+                  <input
+                    type="text"
+                    id="username"
+                    class="form-control form-control-lg"
+                    [class.is-invalid]="isFieldInvalid('username')"
+                    formControlName="username"
+                    placeholder="Enter your username or email"
+                    autocomplete="username"
+                    [disabled]="isLoading">
+                  
+                  <div *ngIf="isFieldInvalid('username')" class="invalid-feedback">
+                    {{ getFieldError('username') }}
+                  </div>
+                </div>
+
+                <!-- Password Field -->
+                <div class="mb-3">
+                  <label for="password" class="form-label">
+                    <i class="bi bi-lock me-2"></i>Password
+                  </label>
+                  <div class="input-group">
+                    <input
+                      [type]="hidePassword ? 'password' : 'text'"
+                      id="password"
+                      class="form-control form-control-lg"
+                      [class.is-invalid]="isFieldInvalid('password')"
+                      formControlName="password"
+                      placeholder="Enter your password"
+                      autocomplete="current-password"
+                      [disabled]="isLoading">
+                    
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      [disabled]="isLoading"
+                      (click)="togglePasswordVisibility()"
+                      [attr.aria-label]="hidePassword ? 'Show password' : 'Hide password'">
+                      <i [class]="hidePassword ? 'bi bi-eye' : 'bi bi-eye-slash'"></i>
+                    </button>
+                  </div>
+                  
+                  <div *ngIf="isFieldInvalid('password')" class="invalid-feedback d-block">
+                    {{ getFieldError('password') }}
+                  </div>
+                </div>
+
+                <!-- Remember Me -->
+                <div class="mb-4">
+                  <div class="form-check">
+                    <input
+                      type="checkbox"
+                      id="rememberMe"
+                      class="form-check-input"
+                      formControlName="rememberMe"
+                      [disabled]="isLoading">
+                    <label for="rememberMe" class="form-check-label">
+                      Remember me for 30 days
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="d-grid mb-3">
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-lg brand-button"
+                    [disabled]="loginForm.invalid || isLoading">
+                    
+                    <span *ngIf="!isLoading" class="d-flex align-items-center justify-content-center">
+                      <i class="bi bi-box-arrow-in-right me-2"></i>
+                      Sign In
+                    </span>
+                    
+                    <span *ngIf="isLoading" class="d-flex align-items-center justify-content-center">
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Signing in...
+                    </span>
+                  </button>
+                </div>
+
+                <!-- Development Quick Login (only in dev mode) -->
+                <div *ngIf="!environment.production" class="dev-login-section">
+                  <hr class="my-3">
+                  <p class="text-center text-muted small mb-2">Development Quick Login</p>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm w-100"
+                        (click)="loginAsManager()"
+                        [disabled]="isLoading">
+                        <i class="bi bi-person-gear me-1"></i>
+                        Manager
+                      </button>
+                    </div>
+                    <div class="col-6">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm w-100"
+                        (click)="loginAsCashier()"
+                        [disabled]="isLoading">
+                        <i class="bi bi-cash-register me-1"></i>
+                        Cashier
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="col-12 mt-4" *ngIf="contactInfo">
+          <div class="contact-info text-center">
+            <div class="row justify-content-center">
+              <div class="col-auto">
+                <div class="contact-item">
+                  <i class="bi bi-telephone text-white-50 me-2"></i>
+                  <a [href]="'tel:' + contactInfo.phone1" class="text-white text-decoration-none">
+                    {{ contactInfo.phone1 }}
+                  </a>
+                  <span *ngIf="contactInfo.phone2" class="mx-2 text-white-50">•</span>
+                  <a *ngIf="contactInfo.phone2" [href]="'tel:' + contactInfo.phone2" class="text-white text-decoration-none">
+                    {{ contactInfo.phone2 }}
+                  </a>
+                </div>
+              </div>
+            </div>
+            <div class="row justify-content-center mt-2" *ngIf="contactInfo.address">
+              <div class="col-auto">
+                <div class="contact-item">
+                  <i class="bi bi-geo-alt text-white-50 me-2"></i>
+                  <span class="text-white-50 small">{{ contactInfo.address }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,29 +1,33 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 240" role="img" aria-label="Dija Gold logo">
+<svg width="120" height="60" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gold gradient definition -->
   <defs>
-    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fff3c4"/>
-      <stop offset="40%" stop-color="#e6c767"/>
-      <stop offset="100%" stop-color="#d4af37"/>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#DAA520;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="darkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2C2C2C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A1A1A;stop-opacity:1" />
     </linearGradient>
   </defs>
-  <rect width="100%" height="100%" fill="transparent"/>
-  <!-- Stylized D with diamond -->
-  <g transform="translate(20,10)">
-    <path d="M80,30 L80,180 C160,180 220,140 220,105 C220,70 160,30 80,30 Z" fill="url(#gold)"/>
-    <!-- diamond -->
-    <g transform="translate(70,28) scale(0.9)">
-      <polygon points="40,10 70,10 85,35 25,35" fill="#fffdf2" stroke="#b18f2d" stroke-width="2"/>
-      <polyline points="40,10 55,35 70,10" fill="none" stroke="#b18f2d" stroke-width="2"/>
-      <line x1="25" y1="35" x2="85" y2="35" stroke="#b18f2d" stroke-width="2"/>
-    </g>
-  </g>
-  <!-- Dija text -->
-  <g fill="url(#gold)" font-family="Georgia, 'Times New Roman', serif">
-    <text x="250" y="120" font-size="96" font-weight="600">Dija</text>
-    <rect x="240" y="140" width="310" height="6" rx="3" fill="url(#gold)"/>
-    <text x="430" y="190" font-size="48" font-weight="600">Gold</text>
-  </g>
+  
+  <!-- Background circle -->
+  <circle cx="30" cy="30" r="25" fill="url(#darkGradient)" stroke="url(#goldGradient)" stroke-width="2"/>
+  
+  <!-- Diamond/Gem shape in center -->
+  <polygon points="30,15 40,25 30,35 20,25" fill="url(#goldGradient)" stroke="#FFF" stroke-width="1"/>
+  
+  <!-- Inner diamond detail -->
+  <polygon points="30,20 35,25 30,30 25,25" fill="#FFF" opacity="0.3"/>
+  
+  <!-- Company name -->
+  <text x="65" y="25" font-family="serif" font-size="16" font-weight="bold" fill="url(#goldGradient)">DIJA</text>
+  <text x="65" y="42" font-family="serif" font-size="14" font-weight="normal" fill="url(#darkGradient)">GOLD</text>
+  
+  <!-- Decorative elements -->
+  <circle cx="15" cy="15" r="2" fill="url(#goldGradient)" opacity="0.6"/>
+  <circle cx="45" cy="15" r="1.5" fill="url(#goldGradient)" opacity="0.4"/>
+  <circle cx="15" cy="45" r="1.5" fill="url(#goldGradient)" opacity="0.4"/>
+  <circle cx="45" cy="45" r="2" fill="url(#goldGradient)" opacity="0.6"/>
 </svg>
-
-
