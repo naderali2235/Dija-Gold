@@ -135,10 +135,20 @@ builder.Services.AddCors(options =>
     {
         if (corsOrigins.Length > 0)
         {
-            policy.WithOrigins(corsOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
+            // Check if we want to allow all origins (development mode)
+            if (corsOrigins.Contains("*"))
+            {
+                policy.AllowAnyOrigin()
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            }
+            else
+            {
+                policy.WithOrigins(corsOrigins)
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials();
+            }
         }
         else
         {
