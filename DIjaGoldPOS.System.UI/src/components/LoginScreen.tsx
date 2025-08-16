@@ -21,12 +21,20 @@ export default function LoginScreen() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+    console.log('Login form submitted with username:', username.trim());
+    
     try {
       const success = await login(username.trim(), password);
+      console.log('Login result:', success);
+      
       if (!success) {
+        console.log('Login failed - setting error message');
         setError('Invalid username or password');
+      } else {
+        console.log('Login successful - should redirect to main app');
       }
     } catch (err) {
+      console.error('Login exception:', err);
       setError('Unable to sign in. Please try again.');
     } finally {
       setIsLoading(false);

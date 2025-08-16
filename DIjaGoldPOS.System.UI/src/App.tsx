@@ -16,10 +16,13 @@ import Settings from './components/Settings';
 import { Toaster } from './components/ui/sonner';
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
+  console.log('AppContent render - isAuthenticated:', isAuthenticated, 'isLoading:', isLoading, 'user:', user);
+
   if (isLoading) {
+    console.log('Rendering loading screen');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -33,13 +36,16 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
+    console.log('Rendering login screen');
     return <LoginScreen />;
   }
+
+  console.log('Rendering main app');
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
       case 'sales':
         return <Sales />;
       case 'returns':
@@ -61,7 +67,7 @@ function AppContent() {
       case 'settings':
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
     }
   };
 

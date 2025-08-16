@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api, { User as ApiUser, getAuthToken } from '../services/api';
+import api, { User as ApiUser, getAuthToken, testApiConnection } from '../services/api';
 
 interface User {
   id: string;
@@ -54,11 +54,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Check for stored token and validate with API
     const initializeAuth = async () => {
+      console.log('Initializing auth...');
+      
+      // Test API connectivity first
+      /*
+      const isApiConnected = await testApiConnection();
+      console.log('API connectivity test:', isApiConnected);
+      
+      if (!isApiConnected) {
+        console.error('API is not accessible. Check if the backend is running on the configured URL.');
+        setIsLoading(false);
+        return;
+      }
+      */
+      
       const token = getAuthToken();
+      console.log('Found stored token:', !!token);
+      
       if (token) {
         try {
           const apiUser = await api.auth.getCurrentUser();
           const mappedUser = mapApiUserToUser(apiUser);
+          console.log('Successfully validated stored token for user:', mappedUser.username);
           setUser(mappedUser);
         } catch (error) {
           // Token invalid or expired, clear it
@@ -75,18 +92,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
+      console.log('Starting login process for user:', username);
+      
       const response = await api.auth.login({
         username,
         password,
         rememberMe: true
       });
       
+      console.log('Login API response received:', response);
+      
       const mappedUser = mapApiUserToUser(response.user);
+      console.log('Mapped user:', mappedUser);
+      
       setUser(mappedUser);
+      console.log('User state set, login successful');
       
       return true;
     } catch (error) {
       console.error('Login failed:', error);
+      setUser(null); // Clear any existing user state on failure
       return false;
     } finally {
       setIsLoading(false);
@@ -106,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAuthenticated = !!user;
-  const isManager = user?.role === 'Manager' || user?.roles?.includes('Manager');
+  const isManager = !!(user?.role === 'Manager' || user?.roles?.includes('Manager'));
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isAuthenticated, isManager, isLoading }}>

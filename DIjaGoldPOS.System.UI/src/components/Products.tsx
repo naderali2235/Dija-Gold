@@ -213,7 +213,7 @@ export default function Products() {
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete "${product.name}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
       return;
     }
 
@@ -340,21 +340,21 @@ export default function Products() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dimensions">Dimensions</Label>
+                  <Label htmlFor="shape">Shape/Dimensions</Label>
                   <Input
-                    id="dimensions"
-                    value={productForm.dimensions}
-                    onChange={(e) => setProductForm({...productForm, dimensions: e.target.value})}
-                    placeholder="Size, length, diameter"
+                    id="shape"
+                    value={productForm.shape}
+                    onChange={(e) => setProductForm({...productForm, shape: e.target.value})}
+                    placeholder="Size, length, diameter, shape"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="supplier">Supplier</Label>
+                  <Label htmlFor="supplierId">Supplier ID</Label>
                   <Input
-                    id="supplier"
-                    value={productForm.supplier}
-                    onChange={(e) => setProductForm({...productForm, supplier: e.target.value})}
-                    placeholder="Supplier name"
+                    id="supplierId"
+                    value={productForm.supplierId}
+                    onChange={(e) => setProductForm({...productForm, supplierId: e.target.value})}
+                    placeholder="Supplier ID"
                   />
                 </div>
                 <div className="space-y-2">
@@ -367,53 +367,32 @@ export default function Products() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="basePrice">Base Price (EGP)</Label>
+                  <Label htmlFor="yearOfMinting">Year of Minting</Label>
                   <Input
-                    id="basePrice"
+                    id="yearOfMinting"
                     type="number"
-                    value={productForm.basePrice}
-                    onChange={(e) => setProductForm({...productForm, basePrice: e.target.value})}
-                    placeholder="0"
+                    value={productForm.yearOfMinting}
+                    onChange={(e) => setProductForm({...productForm, yearOfMinting: e.target.value})}
+                    placeholder="2024"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="makingCharges">Making Charges (EGP)</Label>
+                  <Label htmlFor="faceValue">Face Value</Label>
                   <Input
-                    id="makingCharges"
+                    id="faceValue"
                     type="number"
-                    value={productForm.makingCharges}
-                    onChange={(e) => setProductForm({...productForm, makingCharges: e.target.value})}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="minStock">Minimum Stock</Label>
-                  <Input
-                    id="minStock"
-                    type="number"
-                    value={productForm.minStock}
-                    onChange={(e) => setProductForm({...productForm, minStock: e.target.value})}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxStock">Maximum Stock</Label>
-                  <Input
-                    id="maxStock"
-                    type="number"
-                    value={productForm.maxStock}
-                    onChange={(e) => setProductForm({...productForm, maxStock: e.target.value})}
+                    value={productForm.faceValue}
+                    onChange={(e) => setProductForm({...productForm, faceValue: e.target.value})}
                     placeholder="0"
                   />
                 </div>
                 <div className="col-span-2 space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="countryOfOrigin">Country of Origin</Label>
                   <Input
-                    id="description"
-                    value={productForm.description}
-                    onChange={(e) => setProductForm({...productForm, description: e.target.value})}
-                    placeholder="Detailed product description"
-                    className="h-20"
+                    id="countryOfOrigin"
+                    value={productForm.countryOfOrigin}
+                    onChange={(e) => setProductForm({...productForm, countryOfOrigin: e.target.value})}
+                    placeholder="Country of origin"
                   />
                 </div>
               </div>
@@ -436,6 +415,7 @@ export default function Products() {
                   )}
                 </Button>
               </div>
+              </form>
             </DialogContent>
           </Dialog>
         )}

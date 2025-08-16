@@ -85,7 +85,7 @@ export default function Settings() {
   };
 
   const resetToDefaults = () => {
-    if (confirm('Are you sure you want to reset to default settings? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to reset to default settings? This action cannot be undone.')) {
       setGoldRates(DEFAULT_GOLD_RATES);
       setTaxSettings(DEFAULT_TAX_SETTINGS);
       setSystemSettings(DEFAULT_SYSTEM_SETTINGS);

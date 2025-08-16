@@ -17,12 +17,26 @@ import { useAuth } from './AuthContext';
 import { formatCurrency, GOLD_RATES_EGP } from './utils/currency';
 import { useGoldRates } from '../hooks/useApi';
 
-export default function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
+interface GoldRateData {
+  rate: number;
+  change: number;
+  changePercent: number;
+}
+
+interface GoldRatesMap {
+  [karat: string]: GoldRateData;
+}
+
+export default function Dashboard({ onNavigate }: DashboardProps) {
   const { user, isManager } = useAuth();
   const { data: goldRatesData, loading: goldRatesLoading, error: goldRatesError } = useGoldRates();
 
   // Transform API gold rates to dashboard format
-  const goldRates = React.useMemo(() => {
+  const goldRates: GoldRatesMap = React.useMemo(() => {
     if (!goldRatesData || goldRatesData.length === 0) {
       // Fallback to default rates if API data not available
       return {
@@ -33,14 +47,23 @@ export default function Dashboard() {
       };
     }
 
-    const rates: any = {};
+    const rates: GoldRatesMap = {};
     goldRatesData.forEach((rate: any) => {
+      // Skip if karatType is undefined or null
+      if (!rate.karatType) {
+        console.warn('Skipping gold rate with undefined karatType:', rate);
+        return;
+      }
+      
+      // Convert karatType number to string format (e.g., 18 -> "18k")
+      const karatString = `${rate.karatType}k`;
+      
       // Calculate mock change percentage for now (in real app, this would come from historical data)
       const mockChangePercent = Math.random() * 0.5 - 0.25; // Random between -0.25% and +0.25%
-      const mockChange = rate.sellRate * (mockChangePercent / 100);
+      const mockChange = rate.ratePerGram * (mockChangePercent / 100);
       
-      rates[rate.karat.toLowerCase()] = {
-        rate: rate.sellRate,
+      rates[karatString] = {
+        rate: rate.ratePerGram,
         change: mockChange,
         changePercent: mockChangePercent,
       };
@@ -83,7 +106,10 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Here's what's happening at your store today.</p>
         </div>
         <div className="flex gap-3">
-          <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+          <Button 
+            className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            onClick={() => onNavigate?.('sales')}
+          >
             <ShoppingCart className="mr-2 h-4 w-4" />
             New Sale
           </Button>

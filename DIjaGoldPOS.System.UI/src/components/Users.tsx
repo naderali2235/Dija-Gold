@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -46,71 +46,142 @@ import {
   Key,
   Activity,
   AlertTriangle,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  User as UserIcon,
+  Mail,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { toast } from 'sonner';
+import {
+  usePaginatedUsers,
+  useCreateUser,
+  useUpdateUser,
+  useUpdateUserRoles,
+  useUpdateUserStatus,
+  useUserActivity,
+  useResetPassword,
+  useUserPermissions,
+  useUpdateUserPermissions,
+} from '../hooks/useApi';
+import {
+  UserDto,
+  CreateUserRequest,
+  UpdateUserRequest,
+  UserActivityDto,
+  UserPermissionsDto,
+} from '../services/api';
 
-interface User {
-  id: string;
-  username: string;
+interface UserFormData {
+  userName: string;
   fullName: string;
   email: string;
-  role: 'Manager' | 'Cashier';
-  branchId: string;
-  branchName: string;
+  employeeCode: string;
+  password: string;
+  confirmPassword: string;
+  roles: string[];
+  branchId: number | null;
   isActive: boolean;
-  lastLogin: string;
-  createdDate: string;
-  permissions: {
-    sales: boolean;
-    returns: boolean;
-    inventory: boolean;
-    customers: boolean;
-    reports: boolean;
-    settings: boolean;
-  };
 }
 
-interface UserActivity {
-  id: string;
-  userId: string;
-  username: string;
-  action: string;
-  module: string;
-  timestamp: string;
-  ipAddress: string;
-  details: string;
-}
+const defaultUserForm: UserFormData = {
+  userName: '',
+  fullName: '',
+  email: '',
+  employeeCode: '',
+  password: '',
+  confirmPassword: '',
+  roles: ['Cashier'],
+  branchId: null,
+  isActive: true,
+};
+
+const availableRoles = ['Admin', 'Manager', 'Cashier'];
+
+const mockBranches = [
+  { id: 1, name: 'Main Branch' },
+  { id: 2, name: 'Mall Branch' },
+  { id: 3, name: 'Downtown Branch' },
+];
 
 export default function Users() {
-  const { isManager } = useAuth();
+  const { user: currentUser, isManager } = useAuth();
+  
+  // State management
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [branchFilter, setBranchFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [isNewUserOpen, setIsNewUserOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserDto | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [userForm, setUserForm] = useState<UserFormData>(defaultUserForm);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
-  // Form state for new/edit user
-  const [userForm, setUserForm] = useState({
-    username: '',
-    fullName: '',
-    email: '',
-    role: 'Cashier',
-    branchId: '',
-    password: '',
-    confirmPassword: '',
-    permissions: {
-      sales: true,
-      returns: false,
-      inventory: false,
-      customers: true,
-      reports: false,
-      settings: false,
-    },
-  });
+  // API Hooks
+  const {
+    data: usersData,
+    loading: usersLoading,
+    error: usersError,
+    fetchData: refetchUsers,
+    updateParams: updateUsersParams,
+    hasNextPage,
+    hasPrevPage,
+    nextPage,
+    prevPage,
+    setPage,
+  } = usePaginatedUsers({
+    searchTerm: searchQuery,
+    role: roleFilter,
+    branchId: branchFilter ? parseInt(branchFilter) : undefined,
+    isActive: true,
+  }) as {
+    data: { items: UserDto[]; totalCount: number; pageNumber: number; pageSize: number } | null;
+    loading: boolean;
+    error: string | null;
+    fetchData: () => Promise<any>;
+    updateParams: (params: any) => void;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+    nextPage: () => void;
+    prevPage: () => void;
+    setPage: (page: number) => void;
+  };
 
-  if (!isManager) {
+  const { execute: createUser, loading: createLoading } = useCreateUser();
+  const { execute: updateUser, loading: updateLoading } = useUpdateUser();
+  const { execute: updateUserRoles, loading: rolesLoading } = useUpdateUserRoles();
+  const { execute: updateUserStatus, loading: statusLoading } = useUpdateUserStatus();
+  const { execute: resetUserPassword, loading: resetLoading } = useResetPassword();
+  const { execute: fetchUserActivity, loading: activityLoading } = useUserActivity();
+  const { execute: fetchUserPermissions, loading: permissionsLoading } = useUserPermissions();
+  const { execute: updateUserPermissions, loading: updatePermissionsLoading } = useUpdateUserPermissions();
+
+  // Local state for user activity and permissions
+  const [userActivity, setUserActivity] = useState<UserActivityDto | null>(null);
+  const [userPermissions, setUserPermissions] = useState<UserPermissionsDto | null>(null);
+
+  // Update search parameters with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      updateUsersParams({
+        searchTerm: searchQuery || undefined,
+        role: roleFilter || undefined,
+        branchId: branchFilter ? parseInt(branchFilter) : undefined,
+        pageNumber: 1,
+      });
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, roleFilter, branchFilter, updateUsersParams]);
+
+  // Check permissions - only managers and admins can manage users
+  const canManageUsers = isManager || currentUser?.roles?.includes('Admin') || currentUser?.roles?.includes('Manager');
+  
+  if (!canManageUsers) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl text-[#0D1B2A]">User Management</h1>
@@ -118,7 +189,7 @@ export default function Users() {
           <CardContent className="pt-6">
             <div className="text-center py-8">
               <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Access denied. Only managers can access user management.</p>
+              <p className="text-muted-foreground">Access denied. Only managers and administrators can access user management.</p>
             </div>
           </CardContent>
         </Card>
@@ -126,486 +197,246 @@ export default function Users() {
     );
   }
 
-  // Mock data
-  const users: User[] = [
-    {
-      id: '1',
-      username: 'manager',
-      fullName: 'Store Manager',
-      email: 'manager@dijapos.com',
-      role: 'Manager',
-      branchId: 'branch1',
-      branchName: 'Main Branch',
-      isActive: true,
-      lastLogin: '2024-01-15T09:30:00Z',
-      createdDate: '2023-01-01T10:00:00Z',
-      permissions: {
-        sales: true,
-        returns: true,
-        inventory: true,
-        customers: true,
-        reports: true,
-        settings: true,
-      },
-    },
-    {
-      id: '2',
-      username: 'cashier1',
-      fullName: 'Ahmed Mohamed',
-      email: 'ahmed@dijapos.com',
-      role: 'Cashier',
-      branchId: 'branch1',
-      branchName: 'Main Branch',
-      isActive: true,
-      lastLogin: '2024-01-15T14:20:00Z',
-      createdDate: '2023-03-15T11:30:00Z',
-      permissions: {
-        sales: true,
-        returns: true,
-        inventory: false,
-        customers: true,
-        reports: false,
-        settings: false,
-      },
-    },
-    {
-      id: '3',
-      username: 'cashier2',
-      fullName: 'Fatima Hassan',
-      email: 'fatima@dijapos.com',
-      role: 'Cashier',
-      branchId: 'branch2',
-      branchName: 'Mall Branch',
-      isActive: true,
-      lastLogin: '2024-01-14T16:45:00Z',
-      createdDate: '2023-06-10T09:15:00Z',
-      permissions: {
-        sales: true,
-        returns: false,
-        inventory: false,
-        customers: true,
-        reports: false,
-        settings: false,
-      },
-    },
-    {
-      id: '4',
-      username: 'cashier3',
-      fullName: 'Mohamed Ali',
-      email: 'mohamed@dijapos.com',
-      role: 'Cashier',
-      branchId: 'branch1',
-      branchName: 'Main Branch',
-      isActive: false,
-      lastLogin: '2023-12-20T12:30:00Z',
-      createdDate: '2023-08-20T14:45:00Z',
-      permissions: {
-        sales: true,
-        returns: false,
-        inventory: false,
-        customers: false,
-        reports: false,
-        settings: false,
-      },
-    },
-  ];
-
-  const userActivities: UserActivity[] = [
-    {
-      id: '1',
-      userId: '2',
-      username: 'cashier1',
-      action: 'Sale Completed',
-      module: 'Sales',
-      timestamp: '2024-01-15T14:20:00Z',
-      ipAddress: '192.168.1.101',
-      details: 'Sale INV-2024-001 for EGP 25,000',
-    },
-    {
-      id: '2',
-      userId: '1',
-      username: 'manager',
-      action: 'Return Processed',
-      module: 'Returns',
-      timestamp: '2024-01-15T13:45:00Z',
-      ipAddress: '192.168.1.100',
-      details: 'Return RET-2024-001 for EGP 5,000',
-    },
-    {
-      id: '3',
-      userId: '3',
-      username: 'cashier2',
-      action: 'Customer Added',
-      module: 'Customers',
-      timestamp: '2024-01-15T12:30:00Z',
-      ipAddress: '192.168.1.102',
-      details: 'New customer: Ahmed Hassan',
-    },
-    {
-      id: '4',
-      userId: '1',
-      username: 'manager',
-      action: 'User Created',
-      module: 'Users',
-      timestamp: '2024-01-15T10:15:00Z',
-      ipAddress: '192.168.1.100',
-      details: 'Created new cashier user: cashier4',
-    },
-    {
-      id: '5',
-      userId: '2',
-      username: 'cashier1',
-      action: 'Login',
-      module: 'Authentication',
-      timestamp: '2024-01-15T09:30:00Z',
-      ipAddress: '192.168.1.101',
-      details: 'User logged in successfully',
-    },
-  ];
-
-  const branches = [
-    { id: 'branch1', name: 'Main Branch' },
-    { id: 'branch2', name: 'Mall Branch' },
-    { id: 'branch3', name: 'Downtown Branch' },
-  ];
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    const matchesBranch = branchFilter === 'all' || user.branchId === branchFilter;
-    
-    return matchesSearch && matchesRole && matchesBranch;
-  });
-
-  const handleCreateUser = () => {
+  // Handlers
+  const handleCreateUser = async () => {
     if (userForm.password !== userForm.confirmPassword) {
-      alert('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
-    console.log('Creating user:', userForm);
-    setIsNewUserOpen(false);
-    resetForm();
-  };
 
-  const handleUpdateUser = () => {
-    console.log('Updating user:', selectedUser?.id, userForm);
-    setSelectedUser(null);
-    setIsEditMode(false);
-    resetForm();
-  };
+    if (!userForm.userName || !userForm.fullName || !userForm.email || !userForm.password) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
 
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      console.log('Deleting user:', userId);
+    try {
+      const createUserData: CreateUserRequest = {
+        userName: userForm.userName,
+        fullName: userForm.fullName,
+        email: userForm.email,
+        employeeCode: userForm.employeeCode || undefined,
+        password: userForm.password,
+        roles: userForm.roles,
+        branchId: userForm.branchId || undefined,
+        isActive: userForm.isActive,
+      };
+
+      await createUser(createUserData);
+      toast.success('User created successfully');
+      setIsNewUserOpen(false);
+      resetForm();
+      refetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create user');
     }
   };
 
-  const handleResetPassword = () => {
-    console.log('Resetting password for user:', selectedUser?.id);
-    setIsResetPasswordOpen(false);
-    alert('Password reset email sent to user');
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const updateUserData: UpdateUserRequest = {
+        id: selectedUser.id,
+        fullName: userForm.fullName,
+        email: userForm.email,
+        employeeCode: userForm.employeeCode || undefined,
+        branchId: userForm.branchId || undefined,
+      };
+
+      await updateUser(selectedUser.id, updateUserData);
+      
+      // Update roles if changed
+      if (JSON.stringify(userForm.roles.sort()) !== JSON.stringify(selectedUser.roles.sort())) {
+        await updateUserRoles(selectedUser.id, {
+          userId: selectedUser.id,
+          roles: userForm.roles,
+        });
+      }
+
+      toast.success('User updated successfully');
+      setSelectedUser(null);
+      setIsEditMode(false);
+      resetForm();
+      refetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update user');
+    }
   };
 
-  const toggleUserStatus = (userId: string, isActive: boolean) => {
-    console.log('Toggling user status:', userId, isActive);
+  const handleToggleUserStatus = async (userId: string, isActive: boolean) => {
+    try {
+      await updateUserStatus(userId, {
+        userId,
+        isActive,
+        reason: isActive ? 'Account reactivated' : 'Account deactivated',
+      });
+      
+      toast.success(`User ${isActive ? 'activated' : 'deactivated'} successfully`);
+      refetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update user status');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return;
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      await resetUserPassword(selectedUser.id, {
+        userId: selectedUser.id,
+        newPassword,
+        forcePasswordChange: true,
+      });
+
+      toast.success('Password reset successfully');
+      setIsResetPasswordOpen(false);
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to reset password');
+    }
+  };
+
+  const handleViewUserDetails = async (user: UserDto) => {
+    setSelectedUser(user);
+    populateForm(user);
+
+    // Fetch user activity and permissions
+    try {
+      const [activity, permissions] = await Promise.all([
+        fetchUserActivity(user.id, { pageSize: 10 }),
+        fetchUserPermissions(user.id),
+      ]);
+      setUserActivity(activity);
+      setUserPermissions(permissions);
+    } catch (error) {
+      console.error('Failed to fetch user details:', error);
+    }
   };
 
   const resetForm = () => {
-    setUserForm({
-      username: '',
-      fullName: '',
-      email: '',
-      role: 'Cashier',
-      branchId: '',
-      password: '',
-      confirmPassword: '',
-      permissions: {
-        sales: true,
-        returns: false,
-        inventory: false,
-        customers: true,
-        reports: false,
-        settings: false,
-      },
-    });
+    setUserForm(defaultUserForm);
   };
 
-  const populateForm = (user: User) => {
+  const populateForm = (user: UserDto) => {
     setUserForm({
-      username: user.username,
+      userName: user.userName,
       fullName: user.fullName,
       email: user.email,
-      role: user.role,
-      branchId: user.branchId,
+      employeeCode: user.employeeCode || '',
       password: '',
       confirmPassword: '',
-      permissions: user.permissions,
+      roles: user.roles,
+      branchId: user.branchId || null,
+      isActive: user.isActive,
     });
   };
 
-  const userStats = {
-    total: users.length,
-    active: users.filter(u => u.isActive).length,
-    managers: users.filter(u => u.role === 'Manager').length,
-    cashiers: users.filter(u => u.role === 'Cashier').length,
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const getRoleBadgeColor = (roles: string[]) => {
+    if (roles.includes('Admin')) return 'bg-red-100 text-red-800';
+    if (roles.includes('Manager')) return 'bg-blue-100 text-blue-800';
+    return 'bg-green-100 text-green-800';
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl text-[#0D1B2A]">User Management</h1>
-          <p className="text-muted-foreground">Manage system users and permissions</p>
-        </div>
-        <Dialog open={isNewUserOpen} onOpenChange={setIsNewUserOpen}>
-          <DialogTrigger asChild>
-            <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-              <Plus className="mr-2 h-4 w-4" />
-              Add User
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl text-[#0D1B2A]">User Management</h1>
+        <Button 
+          onClick={() => setIsNewUserOpen(true)}
+          className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add User
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <Card className="pos-card">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {availableRoles.map(role => (
+                  <SelectItem key={role} value={role}>{role}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by branch" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                {mockBranches.map(branch => (
+                  <SelectItem key={branch.id} value={branch.id.toString()}>
+                    {branch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSearchQuery('');
+                setRoleFilter('all');
+                setBranchFilter('all');
+              }}
+            >
+              Clear Filters
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
-              <DialogDescription>
-                Create a new user account with appropriate permissions
-              </DialogDescription>
-            </DialogHeader>
-            <Tabs defaultValue="basic" className="w-full">
-              <TabsList>
-                <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="permissions">Permissions</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="basic" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username *</Label>
-                    <Input
-                      id="username"
-                      value={userForm.username}
-                      onChange={(e) => setUserForm({...userForm, username: e.target.value})}
-                      placeholder="Enter username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name *</Label>
-                    <Input
-                      id="fullName"
-                      value={userForm.fullName}
-                      onChange={(e) => setUserForm({...userForm, fullName: e.target.value})}
-                      placeholder="Enter full name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={userForm.email}
-                      onChange={(e) => setUserForm({...userForm, email: e.target.value})}
-                      placeholder="user@dijapos.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role *</Label>
-                    <Select value={userForm.role} onValueChange={(value) => setUserForm({...userForm, role: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Manager">Manager</SelectItem>
-                        <SelectItem value="Cashier">Cashier</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="branchId">Branch *</Label>
-                    <Select value={userForm.branchId} onValueChange={(value) => setUserForm({...userForm, branchId: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branches.map(branch => (
-                          <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={userForm.password}
-                      onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                      placeholder="Enter password"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      value={userForm.confirmPassword}
-                      onChange={(e) => setUserForm({...userForm, confirmPassword: e.target.value})}
-                      placeholder="Confirm password"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="permissions" className="space-y-4">
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Select which modules this user can access
-                  </p>
-                  
-                  {Object.entries(userForm.permissions).map(([permission, enabled]) => (
-                    <div key={permission} className="flex items-center justify-between">
-                      <Label htmlFor={permission} className="capitalize">
-                        {permission.replace('_', ' ')}
-                      </Label>
-                      <Switch
-                        id={permission}
-                        checked={enabled}
-                        onCheckedChange={(checked) => 
-                          setUserForm({
-                            ...userForm,
-                            permissions: {
-                              ...userForm.permissions,
-                              [permission]: checked,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-            
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={() => setIsNewUserOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreateUser} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                Create User
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Users Table */}
+      <Card className="pos-card">
+        <CardContent className="p-0">
+          {usersLoading && (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {usersError && (
+            <div className="text-center py-12 text-red-600">
+              <p>Error loading users: {usersError}</p>
+              <Button onClick={refetchUsers} className="mt-4">
+                Try Again
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+          )}
 
-      {/* User Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="pos-card">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Users</p>
-                <p className="text-2xl text-[#0D1B2A]">{userStats.total}</p>
-              </div>
-              <UserCog className="h-8 w-8 text-[#D4AF37]" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="pos-card">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Active Users</p>
-                <p className="text-2xl text-[#0D1B2A]">{userStats.active}</p>
-              </div>
-              <UserCog className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="pos-card">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Managers</p>
-                <p className="text-2xl text-[#0D1B2A]">{userStats.managers}</p>
-              </div>
-              <Shield className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="pos-card">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Cashiers</p>
-                <p className="text-2xl text-[#0D1B2A]">{userStats.cashiers}</p>
-              </div>
-              <UserCog className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="users">
-        <TabsList>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="activity">Activity Log</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="users" className="space-y-4">
-          {/* Filters */}
-          <Card className="pos-card">
-            <CardContent className="pt-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name, username, or email..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 touch-target"
-                  />
-                </div>
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="w-full md:w-32">
-                    <SelectValue placeholder="Role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    <SelectItem value="Manager">Manager</SelectItem>
-                    <SelectItem value="Cashier">Cashier</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={branchFilter} onValueChange={setBranchFilter}>
-                  <SelectTrigger className="w-full md:w-40">
-                    <SelectValue placeholder="Branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Branches</SelectItem>
-                    {branches.map(branch => (
-                      <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Users Table */}
-          <Card className="pos-card">
-            <CardHeader>
-              <CardTitle>System Users</CardTitle>
-              <CardDescription>
-                {filteredUsers.length} user(s) found
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          {usersData && usersData.items && (
+            <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -614,89 +445,89 @@ export default function Users() {
                     <TableHead>Branch</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Last Login</TableHead>
-                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {usersData.items.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{user.fullName}</p>
-                          <p className="text-sm text-muted-foreground">@{user.username}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        <div className="flex items-center space-x-3">
+                          <UserIcon className="h-8 w-8 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">{user.fullName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              @{user.userName}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {user.email}
+                            </div>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={user.role === 'Manager' ? 'default' : 'secondary'}>
-                          {user.role === 'Manager' && <Shield className="mr-1 h-3 w-3" />}
-                          {user.role}
-                        </Badge>
+                        <div className="space-y-1">
+                          {user.roles.map((role: string) => (
+                            <Badge 
+                              key={role} 
+                              variant="secondary" 
+                              className={getRoleBadgeColor(user.roles)}
+                            >
+                              {role}
+                            </Badge>
+                          ))}
+                        </div>
                       </TableCell>
-                      <TableCell>{user.branchName}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={user.isActive ? 'default' : 'secondary'}>
-                            {user.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
+                        {user.branchName || 'No Branch'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
                           <Switch
                             checked={user.isActive}
-                            onCheckedChange={(checked) => toggleUserStatus(user.id, checked)}
-                            size="sm"
+                            onCheckedChange={(checked: boolean) => 
+                              handleToggleUserStatus(user.id, checked)
+                            }
+                            disabled={statusLoading}
                           />
+                          <span className="text-sm">
+                            {user.isActive ? (
+                              <span className="flex items-center text-green-600">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Active
+                              </span>
+                            ) : (
+                              <span className="flex items-center text-red-600">
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Inactive
+                              </span>
+                            )}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Clock className="h-3 w-3" />
-                          {new Date(user.lastLogin).toLocaleDateString()}
+                        <div className="text-sm">
+                          {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(user.createdDate).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex space-x-2">
                           <Button
-                            variant="outline"
                             size="sm"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              populateForm(user);
-                            }}
-                            className="touch-target"
+                            variant="ghost"
+                            onClick={() => handleViewUserDetails(user)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
-                            variant="outline"
                             size="sm"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              populateForm(user);
-                              setIsEditMode(true);
-                            }}
-                            className="touch-target"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
                             onClick={() => {
                               setSelectedUser(user);
                               setIsResetPasswordOpen(true);
                             }}
-                            className="touch-target"
                           >
                             <Key className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteUser(user.id)}
-                            className="touch-target text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -704,87 +535,208 @@ export default function Users() {
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="activity" className="space-y-4">
-          <Card className="pos-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-[#D4AF37]" />
-                User Activity Log
-              </CardTitle>
-              <CardDescription>
-                Recent user actions and system events
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Module</TableHead>
-                    <TableHead>IP Address</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {userActivities.map((activity) => (
-                    <TableRow key={activity.id}>
-                      <TableCell>
-                        {new Date(activity.timestamp).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{activity.username}</p>
-                      </TableCell>
-                      <TableCell>{activity.action}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{activity.module}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{activity.ipAddress}</TableCell>
-                      <TableCell>
-                        <p className="max-w-60 truncate text-sm">{activity.details}</p>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
-      {/* User Details/Edit Dialog */}
-      {selectedUser && !isResetPasswordOpen && (
+              {/* Pagination */}
+              <div className="flex items-center justify-between px-6 py-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Showing {usersData.items.length} of {usersData.totalCount} users
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={prevPage}
+                    disabled={!hasPrevPage}
+                  >
+                    Previous
+                  </Button>
+                  <span className="flex items-center px-3 text-sm">
+                    Page {usersData.pageNumber} of {Math.ceil(usersData.totalCount / usersData.pageSize)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={nextPage}
+                    disabled={!hasNextPage}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create User Dialog */}
+      <Dialog open={isNewUserOpen} onOpenChange={setIsNewUserOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New User</DialogTitle>
+            <DialogDescription>
+              Add a new user to the system with appropriate roles and permissions.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="userName">Username *</Label>
+              <Input
+                id="userName"
+                value={userForm.userName}
+                onChange={(e) => setUserForm({...userForm, userName: e.target.value})}
+                placeholder="Enter username"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name *</Label>
+              <Input
+                id="fullName"
+                value={userForm.fullName}
+                onChange={(e) => setUserForm({...userForm, fullName: e.target.value})}
+                placeholder="Enter full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                value={userForm.email}
+                onChange={(e) => setUserForm({...userForm, email: e.target.value})}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employeeCode">Employee Code</Label>
+              <Input
+                id="employeeCode"
+                value={userForm.employeeCode}
+                onChange={(e) => setUserForm({...userForm, employeeCode: e.target.value})}
+                placeholder="Enter employee code"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password *</Label>
+              <Input
+                id="password"
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                placeholder="Enter password"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password *</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={userForm.confirmPassword}
+                onChange={(e) => setUserForm({...userForm, confirmPassword: e.target.value})}
+                placeholder="Confirm password"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Roles *</Label>
+              <Select
+                value={userForm.roles[0] || ''}
+                onValueChange={(value: string) => setUserForm({...userForm, roles: [value]})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRoles.map(role => (
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Branch</Label>
+              <Select
+                value={userForm.branchId?.toString() || ''}
+                onValueChange={(value: string) => setUserForm({...userForm, branchId: value ? parseInt(value) : null})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No Branch</SelectItem>
+                  {mockBranches.map(branch => (
+                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2 mt-4">
+            <Switch
+              checked={userForm.isActive}
+              onCheckedChange={(checked: boolean) => setUserForm({...userForm, isActive: checked})}
+            />
+            <Label>Active Account</Label>
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => {
+              setIsNewUserOpen(false);
+              resetForm();
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateUser} 
+              disabled={createLoading}
+              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            >
+              {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create User
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* User Details Dialog */}
+      {selectedUser && (
         <Dialog open={!!selectedUser} onOpenChange={() => {
           setSelectedUser(null);
           setIsEditMode(false);
+          setUserActivity(null);
+          setUserPermissions(null);
         }}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {isEditMode ? 'Edit User' : 'User Details'} - {selectedUser.username}
+              <DialogTitle className="flex items-center gap-2">
+                <UserIcon className="h-5 w-5" />
+                {selectedUser.fullName}
+                {!selectedUser.isActive && (
+                  <Badge variant="secondary" className="bg-red-100 text-red-800">
+                    Inactive
+                  </Badge>
+                )}
               </DialogTitle>
+              <DialogDescription>
+                Manage user details, roles, and permissions
+              </DialogDescription>
             </DialogHeader>
             
-            <Tabs defaultValue="basic" className="w-full">
-              <TabsList>
-                <TabsTrigger value="basic">Basic Info</TabsTrigger>
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="permissions">Permissions</TabsTrigger>
+                <TabsTrigger value="activity">Activity</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="basic" className="space-y-4">
+              <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Username</Label>
-                    <Input
-                      value={userForm.username}
-                      onChange={(e) => setUserForm({...userForm, username: e.target.value})}
-                      readOnly={!isEditMode}
-                    />
+                    <Input value={userForm.userName} readOnly />
                   </div>
                   <div className="space-y-2">
                     <Label>Full Name</Label>
@@ -795,7 +747,7 @@ export default function Users() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Email Address</Label>
+                    <Label>Email</Label>
                     <Input
                       value={userForm.email}
                       onChange={(e) => setUserForm({...userForm, email: e.target.value})}
@@ -803,58 +755,183 @@ export default function Users() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Role</Label>
+                    <Label>Employee Code</Label>
+                    <Input
+                      value={userForm.employeeCode}
+                      onChange={(e) => setUserForm({...userForm, employeeCode: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Roles</Label>
                     {isEditMode ? (
-                      <Select value={userForm.role} onValueChange={(value) => setUserForm({...userForm, role: value})}>
+                      <Select
+                        value={userForm.roles[0] || ''}
+                        onValueChange={(value: string) => setUserForm({...userForm, roles: [value]})}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Manager">Manager</SelectItem>
-                          <SelectItem value="Cashier">Cashier</SelectItem>
+                          {availableRoles.map(role => (
+                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input value={userForm.role} readOnly />
+                      <div className="flex gap-2">
+                        {selectedUser.roles.map(role => (
+                          <Badge key={role} variant="secondary" className={getRoleBadgeColor(selectedUser.roles)}>
+                            {role}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    {isEditMode ? (
+                      <Select
+                        value={userForm.branchId?.toString() || ''}
+                        onValueChange={(value: string) => setUserForm({...userForm, branchId: value ? parseInt(value) : null})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No Branch</SelectItem>
+                          {mockBranches.map(branch => (
+                            <SelectItem key={branch.id} value={branch.id.toString()}>
+                              {branch.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input value={selectedUser.branchName || 'No Branch'} readOnly />
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Last Login</Label>
                     <div className="p-2 bg-muted rounded">
-                      {new Date(selectedUser.lastLogin).toLocaleString()}
+                      {selectedUser.lastLoginAt ? formatDate(selectedUser.lastLoginAt) : 'Never'}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Account Created</Label>
                     <div className="p-2 bg-muted rounded">
-                      {new Date(selectedUser.createdDate).toLocaleString()}
+                      {formatDate(selectedUser.createdAt)}
                     </div>
                   </div>
                 </div>
               </TabsContent>
               
-              <TabsContent value="permissions" className="space-y-4">
-                <div className="space-y-4">
-                  {Object.entries(userForm.permissions).map(([permission, enabled]) => (
-                    <div key={permission} className="flex items-center justify-between">
-                      <Label className="capitalize">
-                        {permission.replace('_', ' ')}
-                      </Label>
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(checked) => 
-                          setUserForm({
-                            ...userForm,
-                            permissions: {
-                              ...userForm.permissions,
-                              [permission]: checked,
-                            },
-                          })
-                        }
-                        disabled={!isEditMode}
-                      />
+              <TabsContent value="permissions" className="space-y-4 mt-4">
+                {permissionsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : userPermissions ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      {Object.entries(userPermissions.featureAccess).map(([feature, hasAccess]) => (
+                        <div key={feature} className="flex items-center justify-between p-3 border rounded">
+                          <Label className="capitalize font-medium">
+                            {feature.replace(/([A-Z])/g, ' $1').trim()}
+                          </Label>
+                          <Badge variant={hasAccess ? "default" : "secondary"}>
+                            {hasAccess ? 'Allowed' : 'Denied'}
+                          </Badge>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No permission data available</p>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="activity" className="space-y-4 mt-4">
+                {activityLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : userActivity && userActivity.activities.length > 0 ? (
+                  <div className="space-y-3">
+                    {userActivity.activities.map((activity) => (
+                      <div key={activity.id} className="flex items-start space-x-3 p-3 border rounded">
+                        <Activity className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">{activity.action}</p>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(activity.timestamp)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {activity.details}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{activity.entityType}</span>
+                            <span>•</span>
+                            <span>{activity.ipAddress}</span>
+                            {activity.branchName && (
+                              <>
+                                <span>•</span>
+                                <span>{activity.branchName}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No activity records found</p>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="settings" className="space-y-4 mt-4">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 border rounded">
+                    <div>
+                      <Label className="text-base font-medium">Account Status</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedUser.isActive ? 'Account is active and can log in' : 'Account is disabled'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={selectedUser.isActive}
+                      onCheckedChange={(checked: boolean) => 
+                        handleToggleUserStatus(selectedUser.id, checked)
+                      }
+                      disabled={statusLoading}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded">
+                    <div>
+                      <Label className="text-base font-medium">Email Confirmed</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedUser.emailConfirmed ? 'Email address is verified' : 'Email needs verification'}
+                      </p>
+                    </div>
+                    <Badge variant={selectedUser.emailConfirmed ? "default" : "secondary"}>
+                      {selectedUser.emailConfirmed ? 'Verified' : 'Unverified'}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded">
+                    <div>
+                      <Label className="text-base font-medium">Account Lockout</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedUser.lockoutEnd ? 'Account is temporarily locked' : 'Account is not locked'}
+                      </p>
+                    </div>
+                    <Badge variant={selectedUser.lockoutEnd ? "destructive" : "default"}>
+                      {selectedUser.lockoutEnd ? 'Locked' : 'Unlocked'}
+                    </Badge>
+                  </div>
                 </div>
               </TabsContent>
             </Tabs>
@@ -867,12 +944,20 @@ export default function Users() {
                 {isEditMode ? 'Cancel' : 'Close'}
               </Button>
               {isEditMode && (
-                <Button onClick={handleUpdateUser} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                <Button 
+                  onClick={handleUpdateUser} 
+                  disabled={updateLoading || rolesLoading}
+                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                >
+                  {(updateLoading || rolesLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Update User
                 </Button>
               )}
               {!isEditMode && (
-                <Button onClick={() => setIsEditMode(true)} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                <Button 
+                  onClick={() => setIsEditMode(true)} 
+                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                >
                   <Edit className="mr-2 h-4 w-4" />
                   Edit User
                 </Button>
@@ -883,50 +968,69 @@ export default function Users() {
       )}
 
       {/* Reset Password Dialog */}
-      {isResetPasswordOpen && selectedUser && (
-        <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Reset Password</DialogTitle>
-              <DialogDescription>
-                Reset password for {selectedUser.fullName} ({selectedUser.username})
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">Password Reset</p>
-                    <p className="text-sm text-yellow-700">
-                      A password reset email will be sent to the user's email address. 
-                      They will be required to create a new password on their next login.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label>User Email</Label>
-                <div className="p-2 bg-muted rounded">
-                  {selectedUser.email}
+      <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              {selectedUser && `Set a new password for ${selectedUser.fullName} (${selectedUser.userName})`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">Password Reset</p>
+                  <p className="text-sm text-yellow-700">
+                    The user will be required to change this password on their next login.
+                  </p>
                 </div>
               </div>
             </div>
             
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={() => setIsResetPasswordOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleResetPassword} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                <Key className="mr-2 h-4 w-4" />
-                Send Reset Email
-              </Button>
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+              />
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+            
+            <div className="space-y-2">
+              <Label>Confirm New Password</Label>
+              <Input
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                placeholder="Confirm new password"
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => {
+              setIsResetPasswordOpen(false);
+              setNewPassword('');
+              setConfirmNewPassword('');
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleResetPassword} 
+              disabled={resetLoading}
+              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            >
+              {resetLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Key className="mr-2 h-4 w-4" />
+              Reset Password
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

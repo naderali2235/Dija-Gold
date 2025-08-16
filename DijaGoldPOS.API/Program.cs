@@ -125,6 +125,7 @@ builder.Services.AddScoped<ILabelPrintingService, LabelPrintingService>();
 
 builder.Services.AddControllers();
 
+
 // Add CORS via configuration
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 var exposedHeaders = builder.Configuration.GetSection("Cors:ExposedHeaders").Get<string[]>() ?? Array.Empty<string>();
@@ -162,6 +163,7 @@ builder.Services.AddCors(options =>
         }
     });
 });
+
 
 // Add Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -262,6 +264,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Add health check endpoint
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 // Initialize database
 using (var scope = app.Services.CreateScope())

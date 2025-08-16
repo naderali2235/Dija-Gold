@@ -15,6 +15,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from './ui/sidebar';
+
 import {
   BarChart3,
   Package,
@@ -203,7 +204,7 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
         </Sidebar>
 
         {/* Main content */}
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 flex flex-col md:ml-[var(--sidebar-width)]">
           {/* Top bar */}
           <header className="flex items-center justify-between px-6 py-4 bg-card border-b border-border">
             <div className="flex items-center gap-4">
