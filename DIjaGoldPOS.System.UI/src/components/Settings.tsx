@@ -104,14 +104,15 @@ export default function Settings() {
           <p className="text-muted-foreground">Configure system preferences and business rules</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={resetToDefaults}>
+          <Button variant="outline" className="touch-target hover:bg-[#F4E9B1] transition-colors" onClick={resetToDefaults}>
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset to Defaults
           </Button>
           <Button 
             onClick={handleSaveSettings}
             disabled={!hasUnsavedChanges}
-            className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            className="touch-target"
+            variant="golden"
           >
             <Save className="mr-2 h-4 w-4" />
             Save Changes

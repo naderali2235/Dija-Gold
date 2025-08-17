@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -47,27 +47,14 @@ import {
   ShoppingBag,
   Edit,
   Eye,
+  Loader2,
+  TrendingDown,
+  DollarSign,
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
-
-interface Customer {
-  id: string;
-  customerNumber: string;
-  name: string;
-  phone: string;
-  email: string;
-  address: string;
-  city: string;
-  dateOfBirth?: string;
-  anniversaryDate?: string;
-  loyaltyPoints: number;
-  totalPurchases: number;
-  lastPurchaseDate: string;
-  customerSince: string;
-  status: 'active' | 'inactive' | 'vip';
-  notes: string;
-  preferredCategories: string[];
-}
+import { useCustomers, useCreateCustomer, useCustomer, useUpdateCustomer, useSearchTransactions, useTransactionTypes, useTransactionStatuses } from '../hooks/useApi';
+import { Customer } from '../services/api';
+import { EnumMapper } from '../types/enums';
 
 interface CustomerTransaction {
   id: string;
@@ -87,6 +74,12 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // API hooks
+  const { execute: fetchCustomers, data: customersData, loading: customersLoading, error: customersError } = useCustomers();
+  const { execute: createCustomer, loading: createLoading, error: createError } = useCreateCustomer();
+  const { execute: fetchCustomer, data: singleCustomer, loading: singleCustomerLoading } = useCustomer();
+  const { execute: updateCustomer, loading: updateLoading, error: updateError } = useUpdateCustomer();
+
   // Form state for new/edit customer
   const [customerForm, setCustomerForm] = useState({
     name: '',
@@ -96,102 +89,75 @@ export default function Customers() {
     city: '',
     dateOfBirth: '',
     anniversaryDate: '',
+    loyaltyTier: 1,
+    defaultDiscountPercentage: 0,
+    makingChargesWaived: false,
     notes: '',
   });
 
-  // Mock data
-  const customers: Customer[] = [
-    {
-      id: '1',
-      customerNumber: 'CUST-001',
-      name: 'Ahmed Hassan',
-      phone: '+20 100 123 4567',
-      email: 'ahmed.hassan@email.com',
-      address: '123 Tahrir Square',
-      city: 'Cairo',
-      dateOfBirth: '1985-06-15',
-      anniversaryDate: '2020-03-20',
-      loyaltyPoints: 2450,
-      totalPurchases: 125000,
-      lastPurchaseDate: '2024-01-15T10:30:00Z',
-      customerSince: '2020-03-20T09:00:00Z',
-      status: 'vip',
-      notes: 'Prefers traditional designs, frequent buyer',
-      preferredCategories: ['Rings', 'Necklaces'],
-    },
-    {
-      id: '2',
-      customerNumber: 'CUST-002',
-      name: 'Fatima El-Sayed',
-      phone: '+20 101 987 6543',
-      email: 'fatima.elsayed@email.com',
-      address: '456 Nile Corniche',
-      city: 'Alexandria',
-      dateOfBirth: '1990-12-10',
-      loyaltyPoints: 890,
-      totalPurchases: 45000,
-      lastPurchaseDate: '2024-01-12T14:20:00Z',
-      customerSince: '2022-08-15T11:30:00Z',
-      status: 'active',
-      notes: 'Interested in modern designs',
-      preferredCategories: ['Earrings', 'Bracelets'],
-    },
-    {
-      id: '3',
-      customerNumber: 'CUST-003',
-      name: 'Mohamed Ali',
-      phone: '+20 102 555 7890',
-      email: 'mohamed.ali@email.com',
-      address: '789 Garden City',
-      city: 'Cairo',
-      loyaltyPoints: 150,
-      totalPurchases: 8500,
-      lastPurchaseDate: '2023-11-20T16:45:00Z',
-      customerSince: '2023-06-10T13:15:00Z',
-      status: 'inactive',
-      notes: 'Occasional buyer, price sensitive',
-      preferredCategories: ['Chains'],
-    },
-  ];
+  // State for customer transactions
+  const [customerTransactions, setCustomerTransactions] = useState<CustomerTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  
+  // API hooks
+  const { execute: searchTransactions } = useSearchTransactions();
+  const { data: transactionTypesData, execute: fetchTransactionTypes } = useTransactionTypes();
+  const { data: transactionStatusesData, execute: fetchTransactionStatuses } = useTransactionStatuses();
 
-  const customerTransactions: CustomerTransaction[] = [
-    {
-      id: '1',
-      transactionNumber: 'INV-2024-001',
-      date: '2024-01-15T10:30:00Z',
-      type: 'sale',
-      amount: 25000,
-      items: 2,
-      status: 'completed',
-    },
-    {
-      id: '2',
-      transactionNumber: 'INV-2024-002',
-      date: '2024-01-12T14:20:00Z',
-      type: 'sale',
-      amount: 15000,
-      items: 1,
-      status: 'completed',
-    },
-    {
-      id: '3',
-      transactionNumber: 'RET-2024-001',
-      date: '2024-01-10T11:15:00Z',
-      type: 'return',
-      amount: -5000,
-      items: 1,
-      status: 'completed',
-    },
-  ];
+  // Fetch customers on component mount
+  useEffect(() => {
+    fetchCustomers({
+      searchTerm: searchQuery,
+      pageNumber: 1,
+      pageSize: 100
+    });
+    // Fetch lookup data
+    fetchTransactionTypes();
+    fetchTransactionStatuses();
+  }, [fetchTransactionTypes, fetchTransactionStatuses]);
 
-  const filteredCustomers = customers.filter(customer => {
+  // Function to fetch customer transactions
+  const fetchCustomerTransactions = async (customerId: number) => {
+    try {
+      setTransactionsLoading(true);
+      const result = await searchTransactions({
+        customerId: customerId,
+        pageSize: 10,
+      });
+      
+      // Transform API transactions to component format
+      const transformedTransactions: CustomerTransaction[] = result.items.map((transaction: any) => ({
+        id: transaction.id.toString(),
+        transactionNumber: transaction.transactionNumber,
+        date: transaction.transactionDate,
+        type: transaction.transactionType.toLowerCase(),
+        amount: transaction.totalAmount,
+        items: transaction.items?.length || 0,
+        status: transaction.status.toLowerCase(),
+      }));
+      
+      setCustomerTransactions(transformedTransactions);
+    } catch (error) {
+      console.error('Failed to fetch customer transactions:', error);
+      setCustomerTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
+  // Filter customers based on search and status
+  const filteredCustomers = (customersData?.items || []).filter((customer: Customer) => {
     const matchesSearch = 
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.customerNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      (customer.fullName && customer.fullName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (customer.mobileNumber && customer.mobileNumber.includes(searchQuery)) ||
+      (customer.email && customer.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (customer.customerNumber && customer.customerNumber.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
+    const matchesStatus = 
+      statusFilter === 'all' || 
+      (statusFilter === 'active' ? customer.isActive : false) ||
+      (statusFilter === 'inactive' ? !customer.isActive : false) ||
+      (statusFilter === 'vip' ? customer.loyaltyTier >= 3 : false);
     
     return matchesSearch && matchesStatus;
   });
@@ -213,17 +179,68 @@ export default function Customers() {
     );
   };
 
-  const handleCreateCustomer = () => {
-    console.log('Creating customer:', customerForm);
-    setIsNewCustomerOpen(false);
-    resetForm();
+  const handleCreateCustomer = async () => {
+    try {
+      await createCustomer({
+        fullName: customerForm.name,
+        mobileNumber: customerForm.phone,
+        email: customerForm.email,
+        address: customerForm.address,
+        city: customerForm.city,
+        dateOfBirth: customerForm.dateOfBirth || undefined,
+        anniversaryDate: customerForm.anniversaryDate || undefined,
+        notes: customerForm.notes,
+        isActive: true,
+        loyaltyTier: customerForm.loyaltyTier,
+        defaultDiscountPercentage: customerForm.defaultDiscountPercentage,
+        makingChargesWaived: customerForm.makingChargesWaived
+      });
+      
+      setIsNewCustomerOpen(false);
+      resetForm();
+      
+      // Refresh customer list
+      fetchCustomers({
+        searchTerm: searchQuery,
+        pageNumber: 1,
+        pageSize: 100
+      });
+    } catch (error) {
+      console.error('Failed to create customer:', error);
+    }
   };
 
-  const handleUpdateCustomer = () => {
-    console.log('Updating customer:', selectedCustomer?.id, customerForm);
-    setSelectedCustomer(null);
-    setIsEditMode(false);
-    resetForm();
+  const handleUpdateCustomer = async () => {
+    if (!selectedCustomer) return;
+    
+    try {
+      await updateCustomer(selectedCustomer.id, {
+        fullName: customerForm.name,
+        mobileNumber: customerForm.phone,
+        email: customerForm.email,
+        address: customerForm.address,
+        city: customerForm.city,
+        dateOfBirth: customerForm.dateOfBirth || undefined,
+        anniversaryDate: customerForm.anniversaryDate || undefined,
+        notes: customerForm.notes,
+        loyaltyTier: customerForm.loyaltyTier,
+        defaultDiscountPercentage: customerForm.defaultDiscountPercentage,
+        makingChargesWaived: customerForm.makingChargesWaived,
+      });
+      
+      setSelectedCustomer(null);
+      setIsEditMode(false);
+      resetForm();
+      
+      // Refresh customer list
+      fetchCustomers({
+        searchTerm: searchQuery,
+        pageNumber: 1,
+        pageSize: 100
+      });
+    } catch (error) {
+      console.error('Failed to update customer:', error);
+    }
   };
 
   const resetForm = () => {
@@ -235,28 +252,42 @@ export default function Customers() {
       city: '',
       dateOfBirth: '',
       anniversaryDate: '',
+      loyaltyTier: 1,
+      defaultDiscountPercentage: 0,
+      makingChargesWaived: false,
       notes: '',
     });
   };
 
   const populateForm = (customer: Customer) => {
     setCustomerForm({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      address: customer.address,
-      city: customer.city,
+      name: customer.fullName,
+      phone: customer.mobileNumber || '',
+      email: customer.email || '',
+      address: customer.address || '',
+      city: customer.city || '',
       dateOfBirth: customer.dateOfBirth || '',
       anniversaryDate: customer.anniversaryDate || '',
-      notes: customer.notes,
+      loyaltyTier: customer.loyaltyTier,
+      defaultDiscountPercentage: customer.defaultDiscountPercentage || 0,
+      makingChargesWaived: customer.makingChargesWaived,
+      notes: customer.notes || '',
+    });
+  };
+
+  const handleSearch = () => {
+    fetchCustomers({
+      searchTerm: searchQuery,
+      pageNumber: 1,
+      pageSize: 100
     });
   };
 
   const customerStats = {
-    total: customers.length,
-    active: customers.filter(c => c.status === 'active').length,
-    vip: customers.filter(c => c.status === 'vip').length,
-    totalValue: customers.reduce((sum, c) => sum + c.totalPurchases, 0),
+    total: customersData?.items?.length || 0,
+    active: (customersData?.items || []).filter((c: Customer) => c.isActive).length,
+    vip: (customersData?.items || []).filter((c: Customer) => c.loyaltyTier >= 3).length, // Assuming VIP is tier 3+
+    totalValue: (customersData?.items || []).reduce((sum: number, c: Customer) => sum + (c.totalPurchases || 0), 0),
   };
 
   return (
@@ -268,18 +299,23 @@ export default function Customers() {
         </div>
         <Dialog open={isNewCustomerOpen} onOpenChange={setIsNewCustomerOpen}>
           <DialogTrigger asChild>
-            <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+            <Button className="touch-target" variant="golden">
               <Plus className="mr-2 h-4 w-4" />
               Add Customer
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
             <DialogHeader>
               <DialogTitle>Add New Customer</DialogTitle>
               <DialogDescription>
                 Enter customer details to add to database
               </DialogDescription>
             </DialogHeader>
+            {createError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {createError}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name *</Label>
@@ -345,6 +381,46 @@ export default function Customers() {
                   onChange={(e) => setCustomerForm({...customerForm, anniversaryDate: e.target.value})}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="loyaltyTier">Loyalty Tier</Label>
+                <Select value={customerForm.loyaltyTier.toString()} onValueChange={(value) => setCustomerForm({...customerForm, loyaltyTier: parseInt(value)})}>
+                  <SelectTrigger className="bg-white border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                    <SelectValue placeholder="Select loyalty tier" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border border-gray-300 shadow-lg">
+                    <SelectItem value="1">Tier 1 - Standard</SelectItem>
+                    <SelectItem value="2">Tier 2 - Silver</SelectItem>
+                    <SelectItem value="3">Tier 3 - Gold</SelectItem>
+                    <SelectItem value="4">Tier 4 - Platinum</SelectItem>
+                    <SelectItem value="5">Tier 5 - Diamond</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="defaultDiscountPercentage">Default Discount (%)</Label>
+                <Input
+                  id="defaultDiscountPercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={customerForm.defaultDiscountPercentage}
+                  onChange={(e) => setCustomerForm({...customerForm, defaultDiscountPercentage: parseFloat(e.target.value) || 0})}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="makingChargesWaived">Making Charges Waived</Label>
+                <Select value={customerForm.makingChargesWaived.toString()} onValueChange={(value) => setCustomerForm({...customerForm, makingChargesWaived: value === 'true'})}>
+                  <SelectTrigger className="bg-white border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                    <SelectValue placeholder="Select option" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border border-gray-300 shadow-lg">
+                    <SelectItem value="false">No - Apply making charges</SelectItem>
+                    <SelectItem value="true">Yes - Waive making charges</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Textarea
@@ -359,8 +435,15 @@ export default function Customers() {
               <Button variant="outline" onClick={() => setIsNewCustomerOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateCustomer} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                Add Customer
+              <Button onClick={handleCreateCustomer} variant="golden" disabled={createLoading}>
+                {createLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  'Add Customer'
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -428,6 +511,7 @@ export default function Customers() {
                 placeholder="Search by name, phone, email, or customer number..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="pl-10 touch-target"
               />
             </div>
@@ -435,13 +519,17 @@ export default function Customers() {
               <SelectTrigger className="w-full md:w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="vip">VIP</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Status</SelectItem>
+                <SelectItem value="active" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Active</SelectItem>
+                <SelectItem value="inactive" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Inactive</SelectItem>
+                <SelectItem value="vip" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">VIP</SelectItem>
               </SelectContent>
             </Select>
+            <Button onClick={handleSearch} variant="outline" className="touch-target">
+              <Search className="mr-2 h-4 w-4" />
+              Search
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -451,11 +539,22 @@ export default function Customers() {
         <CardHeader>
           <CardTitle>Customers</CardTitle>
           <CardDescription>
-            {filteredCustomers.length} customer(s) found
+            {customersLoading ? 'Loading customers...' : `${filteredCustomers.length} customer(s) found`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredCustomers.length === 0 ? (
+          {customersError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              Error loading customers: {customersError}
+            </div>
+          )}
+          
+          {customersLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading customers...</p>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
             <div className="text-center py-8">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No customers found</p>
@@ -476,12 +575,12 @@ export default function Customers() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCustomers.map((customer) => (
+                {filteredCustomers.map((customer: Customer) => (
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">{customer.customerNumber}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{customer.name}</p>
+                        <p className="font-medium">{customer.fullName}</p>
                         <p className="text-sm text-muted-foreground">Since {new Date(customer.customerSince).getFullYear()}</p>
                       </div>
                     </TableCell>
@@ -489,7 +588,7 @@ export default function Customers() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-1 text-sm">
                           <Phone className="h-3 w-3" />
-                          {customer.phone}
+                          {customer.mobileNumber || 'N/A'}
                         </div>
                         {customer.email && (
                           <div className="flex items-center gap-1 text-sm">
@@ -499,16 +598,16 @@ export default function Customers() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{customer.city}</TableCell>
+                    <TableCell>{customer.city || 'N/A'}</TableCell>
                     <TableCell>{formatCurrency(customer.totalPurchases)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Gift className="h-4 w-4 text-[#D4AF37]" />
-                        {customer.loyaltyPoints} pts
+                        {customer.loyaltyTier} pts
                       </div>
                     </TableCell>
-                    <TableCell>{getStatusBadge(customer.status)}</TableCell>
-                    <TableCell>{new Date(customer.lastPurchaseDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{getStatusBadge(customer.isActive ? 'active' : 'inactive')}</TableCell>
+                    <TableCell>{customer.lastPurchaseDate ? new Date(customer.lastPurchaseDate).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button
@@ -518,9 +617,10 @@ export default function Customers() {
                             setSelectedCustomer(customer);
                             populateForm(customer);
                           }}
-                          className="touch-target"
+                          className="touch-target hover:bg-[#F4E9B1] transition-colors"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
                         </Button>
                         <Button
                           variant="outline"
@@ -530,9 +630,10 @@ export default function Customers() {
                             populateForm(customer);
                             setIsEditMode(true);
                           }}
-                          className="touch-target"
+                          className="touch-target hover:bg-[#F4E9B1] transition-colors"
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
                         </Button>
                       </div>
                     </TableCell>
@@ -550,12 +651,17 @@ export default function Customers() {
           setSelectedCustomer(null);
           setIsEditMode(false);
         }}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
             <DialogHeader>
               <DialogTitle>
                 {isEditMode ? 'Edit Customer' : 'Customer Details'} - {selectedCustomer.customerNumber}
               </DialogTitle>
             </DialogHeader>
+            {updateError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {updateError}
+              </div>
+            )}
             
             <Tabs defaultValue="details" className="w-full">
               <TabsList>
@@ -611,6 +717,60 @@ export default function Customers() {
                       readOnly={!isEditMode}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="loyaltyTier">Loyalty Tier</Label>
+                    {isEditMode ? (
+                      <Select value={customerForm.loyaltyTier.toString()} onValueChange={(value) => setCustomerForm({...customerForm, loyaltyTier: parseInt(value)})}>
+                        <SelectTrigger className="bg-white border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                          <SelectValue placeholder="Select loyalty tier" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-300 shadow-lg">
+                          <SelectItem value="1">Tier 1 - Standard</SelectItem>
+                          <SelectItem value="2">Tier 2 - Silver</SelectItem>
+                          <SelectItem value="3">Tier 3 - Gold</SelectItem>
+                          <SelectItem value="4">Tier 4 - Platinum</SelectItem>
+                          <SelectItem value="5">Tier 5 - Diamond</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={`Tier ${customerForm.loyaltyTier}`}
+                        readOnly
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="defaultDiscountPercentage">Default Discount (%)</Label>
+                    <Input
+                      id="defaultDiscountPercentage"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={customerForm.defaultDiscountPercentage}
+                      onChange={(e) => setCustomerForm({...customerForm, defaultDiscountPercentage: parseFloat(e.target.value) || 0})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="makingChargesWaived">Making Charges Waived</Label>
+                    {isEditMode ? (
+                      <Select value={customerForm.makingChargesWaived.toString()} onValueChange={(value) => setCustomerForm({...customerForm, makingChargesWaived: value === 'true'})}>
+                        <SelectTrigger className="bg-white border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                          <SelectValue placeholder="Select option" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-300 shadow-lg">
+                          <SelectItem value="false">No - Apply making charges</SelectItem>
+                          <SelectItem value="true">Yes - Waive making charges</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={customerForm.makingChargesWaived ? "Yes - Waived" : "No - Applied"}
+                        readOnly
+                      />
+                    )}
+                  </div>
                 </div>
               </TabsContent>
               
@@ -653,8 +813,8 @@ export default function Customers() {
                     <CardContent className="pt-6">
                       <div className="text-center">
                         <Gift className="h-12 w-12 text-[#D4AF37] mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-[#0D1B2A]">{selectedCustomer.loyaltyPoints}</p>
-                        <p className="text-sm text-muted-foreground">Loyalty Points</p>
+                        <p className="text-2xl font-bold text-[#0D1B2A]">{selectedCustomer.loyaltyTier}</p>
+                        <p className="text-sm text-muted-foreground">Loyalty Tier</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -663,19 +823,43 @@ export default function Customers() {
                     <CardContent className="pt-6">
                       <div className="text-center">
                         <Star className="h-12 w-12 text-purple-600 mx-auto mb-2" />
-                        <p className="text-lg font-medium text-[#0D1B2A]">{selectedCustomer.status.toUpperCase()}</p>
+                        <p className="text-lg font-medium text-[#0D1B2A]">{selectedCustomer.isActive ? 'ACTIVE' : 'INACTIVE'}</p>
                         <p className="text-sm text-muted-foreground">Customer Status</p>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
                 
+                <div className="grid grid-cols-2 gap-4">
+                  <Card className="pos-card">
+                    <CardContent className="pt-6">
+                      <div className="text-center">
+                        <TrendingDown className="h-12 w-12 text-green-600 mx-auto mb-2" />
+                        <p className="text-2xl font-bold text-[#0D1B2A]">{selectedCustomer.defaultDiscountPercentage || 0}%</p>
+                        <p className="text-sm text-muted-foreground">Default Discount</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="pos-card">
+                    <CardContent className="pt-6">
+                      <div className="text-center">
+                        <DollarSign className="h-12 w-12 text-blue-600 mx-auto mb-2" />
+                        <p className="text-lg font-medium text-[#0D1B2A]">{selectedCustomer.makingChargesWaived ? 'WAIVED' : 'APPLIED'}</p>
+                        <p className="text-sm text-muted-foreground">Making Charges</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+                
                 <div className="space-y-2">
-                  <Label>Preferred Categories</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedCustomer.preferredCategories.map((category, index) => (
-                      <Badge key={index} variant="outline">{category}</Badge>
-                    ))}
+                  <Label>Customer Information</Label>
+                  <div className="text-sm text-muted-foreground">
+                    <p>Customer since: {new Date(selectedCustomer.customerSince).toLocaleDateString()}</p>
+                    <p>Total purchases: {formatCurrency(selectedCustomer.totalPurchases)}</p>
+                    {selectedCustomer.lastPurchaseDate && (
+                      <p>Last purchase: {new Date(selectedCustomer.lastPurchaseDate).toLocaleDateString()}</p>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -689,12 +873,19 @@ export default function Customers() {
                 {isEditMode ? 'Cancel' : 'Close'}
               </Button>
               {isEditMode && (
-                <Button onClick={handleUpdateCustomer} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                  Update Customer
+                <Button onClick={handleUpdateCustomer} variant="golden" disabled={updateLoading}>
+                  {updateLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Customer'
+                  )}
                 </Button>
               )}
               {!isEditMode && (
-                <Button onClick={() => setIsEditMode(true)} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                <Button onClick={() => setIsEditMode(true)} variant="golden">
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Customer
                 </Button>

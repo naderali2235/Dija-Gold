@@ -40,6 +40,9 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
 import { useAuth } from './AuthContext';
+import { useSearchTransactions, useTransactionTypes, useTransactionStatuses } from '../hooks/useApi';
+import { Transaction as ApiTransaction } from '../services/api';
+import { EnumMapper } from '../types/enums';
 
 interface Transaction {
   id: string;
@@ -65,90 +68,67 @@ interface TransactionItem {
 }
 
 export default function Returns() {
-  const { isManager } = useAuth();
+  const { isManager, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [returnItems, setReturnItems] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState('');
   const [isProcessingReturn, setIsProcessingReturn] = useState(false);
 
-  // Mock data
-  const transactions: Transaction[] = [
-    {
-      id: '1',
-      transactionNumber: 'INV-2024-001',
-      date: '2024-01-15T10:30:00Z',
-      customerName: 'Rajesh Kumar',
-      total: 125000,
-      status: 'completed',
-      canReturn: true,
-      items: [
-        {
-          id: '1',
-          name: 'Gold Chain 22K',
-          category: 'Chain',
-          weight: 12.5,
-          rate: 6000,
-          quantity: 1,
-          total: 95000,
-          returned: false,
-        },
-        {
-          id: '2',
-          name: 'Gold Earrings 18K',
-          category: 'Earrings',
-          weight: 3.2,
-          rate: 4900,
-          quantity: 1,
-          total: 30000,
-          returned: false,
-        },
-      ],
-    },
-    {
-      id: '2',
-      transactionNumber: 'INV-2024-002',
-      date: '2024-01-14T15:45:00Z',
-      customerName: 'Priya Sharma',
-      total: 85000,
-      status: 'partially_returned',
-      canReturn: true,
-      items: [
-        {
-          id: '3',
-          name: 'Gold Ring 22K',
-          category: 'Ring',
-          weight: 8.5,
-          rate: 6000,
-          quantity: 1,
-          total: 85000,
-          returned: true,
-          returnReason: 'Size issue',
-        },
-      ],
-    },
-    {
-      id: '3',
-      transactionNumber: 'INV-2024-003',
-      date: '2024-01-13T11:20:00Z',
-      customerName: 'Amit Patel',
-      total: 156000,
-      status: 'completed',
-      canReturn: false,
-      items: [
-        {
-          id: '4',
-          name: 'Gold Bangles 22K',
-          category: 'Bangles',
-          weight: 25.6,
-          rate: 6000,
-          quantity: 2,
-          total: 156000,
-          returned: false,
-        },
-      ],
-    },
-  ];
+  // API hooks
+  const { execute: searchTransactions, loading: transactionsLoading } = useSearchTransactions();
+  const { data: transactionTypesData, execute: fetchTransactionTypes } = useTransactionTypes();
+  const { data: transactionStatusesData, execute: fetchTransactionStatuses } = useTransactionStatuses();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  // Fetch transactions on component mount
+  React.useEffect(() => {
+    // Fetch lookup data
+    fetchTransactionTypes();
+    fetchTransactionStatuses();
+    
+    const fetchTransactions = async () => {
+      try {
+        if (user?.branch?.id) {
+          const result = await searchTransactions({
+            branchId: user.branch.id,
+            transactionType: 'Sale',
+            status: 'Completed',
+            pageSize: 50,
+          });
+          
+          // Transform API transactions to component format
+          const transformedTransactions: Transaction[] = result.items.map((apiTransaction: ApiTransaction) => ({
+            id: apiTransaction.id.toString(),
+            transactionNumber: apiTransaction.transactionNumber,
+            date: apiTransaction.transactionDate,
+            customerName: apiTransaction.customerName || 'Walk-in Customer',
+            total: apiTransaction.totalAmount,
+            status: apiTransaction.status.toLowerCase() as 'completed' | 'returned' | 'partially_returned',
+            canReturn: apiTransaction.status === 'Completed',
+            items: apiTransaction.items.map((item, index) => ({
+              id: item.id.toString(),
+              name: item.productName,
+              category: item.productCode,
+              weight: item.totalWeight,
+              rate: item.goldRatePerGram,
+              quantity: item.quantity,
+              total: item.lineTotal,
+              returned: false,
+            })),
+          }));
+          
+          setTransactions(transformedTransactions);
+        }
+      } catch (error) {
+        console.error('Failed to fetch transactions:', error);
+        // Set empty array on error - user will see "no transactions found" message
+        setTransactions([]);
+      }
+    };
+
+    fetchTransactions();
+  }, [user?.branch?.id, searchTransactions, fetchTransactionTypes, fetchTransactionStatuses]);
 
   const filteredTransactions = transactions.filter(
     transaction =>
@@ -182,14 +162,29 @@ export default function Returns() {
 
     setIsProcessingReturn(true);
     
-    // Mock return processing
-    setTimeout(() => {
+    try {
+      // TODO: Replace with actual return API call when available
+      // const returnRequest = {
+      //   transactionId: selectedTransaction?.id,
+      //   items: returnItems,
+      //   reason: returnReason,
+      //   processedBy: user?.id,
+      // };
+      // await processReturn(returnRequest);
+      
+      // Simulate API call for now
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       alert('Return processed successfully!');
       setSelectedTransaction(null);
       setReturnItems([]);
       setReturnReason('');
+    } catch (error) {
+      alert('Failed to process return. Please try again.');
+      console.error('Return processing error:', error);
+    } finally {
       setIsProcessingReturn(false);
-    }, 2000);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -212,7 +207,7 @@ export default function Returns() {
           <Button
             variant="outline"
             onClick={() => setSelectedTransaction(null)}
-            className="touch-target"
+            className="touch-target hover:bg-[#F4E9B1] transition-colors"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Search
@@ -312,13 +307,13 @@ export default function Returns() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select reason" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="defective">Defective Product</SelectItem>
-                      <SelectItem value="size_issue">Size Issue</SelectItem>
-                      <SelectItem value="customer_dissatisfied">Customer Dissatisfied</SelectItem>
-                      <SelectItem value="wrong_item">Wrong Item Delivered</SelectItem>
-                      <SelectItem value="quality_issue">Quality Issue</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                    <SelectContent className="bg-white border-gray-200 shadow-lg">
+                      <SelectItem value="defective" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Defective Product</SelectItem>
+                      <SelectItem value="size_issue" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Size Issue</SelectItem>
+                      <SelectItem value="customer_dissatisfied" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Customer Dissatisfied</SelectItem>
+                      <SelectItem value="wrong_item" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Wrong Item Delivered</SelectItem>
+                      <SelectItem value="quality_issue" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Quality Issue</SelectItem>
+                      <SelectItem value="other" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -353,7 +348,8 @@ export default function Returns() {
                 </div>
 
                 <Button
-                  className="w-full touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  className="w-full touch-target"
+                  variant="golden"
                   onClick={handleProcessReturn}
                   disabled={!isManager || returnItems.length === 0 || !returnReason || isProcessingReturn}
                 >
@@ -454,7 +450,7 @@ export default function Returns() {
                         size="sm"
                         onClick={() => setSelectedTransaction(transaction)}
                         disabled={!transaction.canReturn}
-                        className="touch-target"
+                        className="touch-target hover:bg-[#F4E9B1] transition-colors"
                       >
                         <RotateCcw className="mr-2 h-4 w-4" />
                         {transaction.canReturn ? 'Process Return' : 'View Only'}

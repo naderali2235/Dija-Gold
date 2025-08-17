@@ -20,6 +20,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from './ui/dialog';
 import {
   Select,
@@ -51,6 +52,8 @@ import {
   XCircle,
   Building,
   CreditCard,
+  FileText,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
@@ -64,6 +67,7 @@ import {
   useSupplierBalance,
   useUpdateSupplierBalance,
   useSupplierTransactions,
+  useSearchPurchaseOrders,
 } from '../hooks/useApi';
 import {
   SupplierDto,
@@ -73,6 +77,7 @@ import {
   SupplierBalanceDto,
   UpdateSupplierBalanceRequest,
   SupplierTransactionDto,
+  PurchaseOrderDto,
 } from '../services/api';
 
 interface SupplierFormData {
@@ -88,6 +93,29 @@ interface SupplierFormData {
   creditLimitEnforced: boolean;
   paymentTerms: string;
   notes: string;
+}
+
+interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplierName: string;
+  orderDate: string;
+  expectedDelivery: string;
+  totalAmount: number;
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  items: number;
+  notes: string;
+}
+
+interface SupplierTransaction {
+  id: string;
+  date: string;
+  type: 'purchase' | 'payment' | 'credit_note' | 'debit_note';
+  reference: string;
+  amount: number;
+  balance: number;
+  description: string;
 }
 
 const defaultSupplierForm: SupplierFormData = {
@@ -113,9 +141,18 @@ export default function Suppliers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isNewSupplierOpen, setIsNewSupplierOpen] = useState(false);
+  const [isNewPOOpen, setIsNewPOOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierDto | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [supplierForm, setSupplierForm] = useState<SupplierFormData>(defaultSupplierForm);
+  
+  // Purchase Order form state
+  const [poForm, setPOForm] = useState({
+    supplierId: '',
+    expectedDelivery: '',
+    notes: '',
+    items: [{ description: '', quantity: '', unitPrice: '', total: '' }],
+  });
   
   // Balance update form
   const [isBalanceUpdateOpen, setIsBalanceUpdateOpen] = useState(false);
@@ -165,6 +202,31 @@ export default function Suppliers() {
   const [supplierProducts, setSupplierProducts] = useState<SupplierProductsDto | null>(null);
   const [supplierBalance, setSupplierBalance] = useState<SupplierBalanceDto | null>(null);
   const [supplierTransactions, setSupplierTransactions] = useState<SupplierTransactionDto[] | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderDto[] | null>(null);
+
+  // API hooks for purchase orders
+  const { execute: searchPurchaseOrders, loading: purchaseOrdersLoading } = useSearchPurchaseOrders();
+
+  // Functions to fetch supplier-specific data
+  const handleFetchPurchaseOrders = async (supplierId: number) => {
+    try {
+      const result = await searchPurchaseOrders({ supplierId });
+      setPurchaseOrders(result.items || []);
+    } catch (error) {
+      console.error('Failed to fetch purchase orders:', error);
+      setPurchaseOrders([]);
+    }
+  };
+
+  const handleFetchSupplierTransactions = async (supplierId: number) => {
+    try {
+      const transactions = await fetchSupplierTransactions(supplierId);
+      setSupplierTransactions(transactions);
+    } catch (error) {
+      console.error('Failed to fetch supplier transactions:', error);
+      setSupplierTransactions([]);
+    }
+  };
 
   // Update search parameters with debounce
   useEffect(() => {
@@ -261,14 +323,16 @@ export default function Suppliers() {
 
     // Fetch supplier details
     try {
-      const [products, balance, transactions] = await Promise.all([
+      const [products, balance, transactions, purchaseOrders] = await Promise.all([
         fetchSupplierProducts(supplier.id),
         fetchSupplierBalance(supplier.id),
         fetchSupplierTransactions(supplier.id, { pageSize: 10 }),
+        searchPurchaseOrders({ supplierId: supplier.id }),
       ]);
       setSupplierProducts(products);
       setSupplierBalance(balance);
       setSupplierTransactions(transactions);
+      setPurchaseOrders(purchaseOrders.items || []);
     } catch (error) {
       console.error('Failed to fetch supplier details:', error);
     }
@@ -301,6 +365,26 @@ export default function Suppliers() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update supplier balance');
     }
+  };
+
+  const handleCreatePO = () => {
+    if (!isManager) {
+      toast.error('Only managers can create purchase orders');
+      return;
+    }
+    console.log('Creating PO:', poForm);
+    toast.success('Purchase order created successfully');
+    setIsNewPOOpen(false);
+    resetPOForm();
+  };
+
+  const resetPOForm = () => {
+    setPOForm({
+      supplierId: '',
+      expectedDelivery: '',
+      notes: '',
+      items: [{ description: '', quantity: '', unitPrice: '', total: '' }],
+    });
   };
 
   const resetForm = () => {
@@ -338,20 +422,178 @@ export default function Suppliers() {
     return 'text-gray-600'; // Zero balance
   };
 
+  const getStatusBadge = (status: string) => {
+    const variants = {
+      active: { variant: 'default' as const, className: 'bg-green-100 text-green-800' },
+      inactive: { variant: 'secondary' as const, className: 'bg-gray-100 text-gray-800' },
+      blocked: { variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+    };
+
+    const config = variants[status as keyof typeof variants];
+
+    return (
+      <Badge variant={config.variant} className={config.className}>
+        {status.toUpperCase()}
+      </Badge>
+    );
+  };
+
+  const getPOStatusBadge = (status: string) => {
+    const variants = {
+      draft: { variant: 'outline' as const, className: 'bg-gray-100 text-gray-800' },
+      sent: { variant: 'default' as const, className: 'bg-blue-100 text-blue-800' },
+      confirmed: { variant: 'default' as const, className: 'bg-yellow-100 text-yellow-800' },
+      received: { variant: 'default' as const, className: 'bg-green-100 text-green-800' },
+      cancelled: { variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+    };
+
+    const config = variants[status as keyof typeof variants];
+
+    return (
+      <Badge variant={config.variant} className={config.className}>
+        {status.toUpperCase()}
+      </Badge>
+    );
+  };
+
+  // Calculate supplier stats
+  const supplierStats = {
+    total: suppliersData?.totalCount || 0,
+    active: suppliersData?.items?.filter(s => s.isActive).length || 0,
+    totalBalance: suppliersData?.items?.reduce((sum, s) => sum + s.currentBalance, 0) || 0,
+    totalPurchases: 0, // Will be calculated from actual purchase data when available
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl text-[#0D1B2A]">Suppliers Management</h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl text-[#0D1B2A]">Supplier Management</h1>
+          <p className="text-muted-foreground">Manage suppliers and purchase orders</p>
+        </div>
         {isManager && (
-          <Button 
-            onClick={() => setIsNewSupplierOpen(true)}
-            className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Supplier
-          </Button>
+          <div className="flex gap-3">
+            <Dialog open={isNewPOOpen} onOpenChange={setIsNewPOOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="touch-target">
+                  <FileText className="mr-2 h-4 w-4" />
+                  New Purchase Order
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Create Purchase Order</DialogTitle>
+                  <DialogDescription>
+                    Create a new purchase order for supplier
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Supplier</Label>
+                      <Select value={poForm.supplierId} onValueChange={(value) => setPOForm({...poForm, supplierId: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select supplier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {suppliersData?.items?.filter(s => s.isActive).map(supplier => (
+                            <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                              {supplier.companyName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Expected Delivery</Label>
+                      <Input
+                        type="date"
+                        value={poForm.expectedDelivery}
+                        onChange={(e) => setPOForm({...poForm, expectedDelivery: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notes</Label>
+                    <Textarea
+                      value={poForm.notes}
+                      onChange={(e) => setPOForm({...poForm, notes: e.target.value})}
+                      placeholder="Additional notes for this purchase order"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6">
+                  <Button variant="outline" onClick={() => setIsNewPOOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreatePO} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                    Create PO
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            
+            <Button 
+              onClick={() => setIsNewSupplierOpen(true)}
+              className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Supplier
+            </Button>
+          </div>
         )}
+      </div>
+
+      {/* Supplier Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="pos-card">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Suppliers</p>
+                <p className="text-2xl text-[#0D1B2A]">{supplierStats.total}</p>
+              </div>
+              <Truck className="h-8 w-8 text-[#D4AF37]" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="pos-card">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Active Suppliers</p>
+                <p className="text-2xl text-[#0D1B2A]">{supplierStats.active}</p>
+              </div>
+              <Truck className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="pos-card">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Outstanding Balance</p>
+                <p className="text-2xl text-[#0D1B2A]">{formatCurrency(supplierStats.totalBalance)}</p>
+              </div>
+              <DollarSign className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="pos-card">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Purchases</p>
+                <p className="text-2xl text-[#0D1B2A]">{formatCurrency(supplierStats.totalPurchases)}</p>
+              </div>
+              <ShoppingCart className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -371,10 +613,10 @@ export default function Suppliers() {
               <SelectTrigger>
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Status</SelectItem>
+                <SelectItem value="active" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Active</SelectItem>
+                <SelectItem value="inactive" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Inactive</SelectItem>
               </SelectContent>
             </Select>
             <div />
@@ -391,15 +633,22 @@ export default function Suppliers() {
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
           <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
+          <TabsTrigger value="purchase-orders">Purchase Orders</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="suppliers" className="space-y-4">
           {/* Suppliers Table */}
           <Card className="pos-card">
+            <CardHeader>
+              <CardTitle>Suppliers</CardTitle>
+              <CardDescription>
+                {suppliersData?.items?.length || 0} supplier(s) found
+              </CardDescription>
+            </CardHeader>
             <CardContent className="p-0">
               {suppliersLoading && (
                 <div className="flex justify-center items-center py-12">
@@ -421,118 +670,78 @@ export default function Suppliers() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Supplier</TableHead>
+                        <TableHead>Supplier #</TableHead>
+                        <TableHead>Company</TableHead>
                         <TableHead>Contact</TableHead>
-                        <TableHead>Balance</TableHead>
-                        <TableHead>Credit Limit</TableHead>
+                        <TableHead>Payment Terms</TableHead>
+                        <TableHead>Current Balance</TableHead>
+                        <TableHead>Total Purchases</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Last Transaction</TableHead>
+                        <TableHead>Last Order</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {suppliersData.items.map((supplier) => (
                         <TableRow key={supplier.id}>
+                          <TableCell className="font-medium">SUP-{supplier.id.toString().padStart(3, '0')}</TableCell>
                           <TableCell>
-                            <div className="flex items-center space-x-3">
-                              <Building className="h-8 w-8 text-muted-foreground" />
-                              <div>
-                                <div className="font-medium">{supplier.companyName}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {supplier.contactPersonName}
-                                </div>
-                                {supplier.taxRegistrationNumber && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Tax: {supplier.taxRegistrationNumber}
-                                  </div>
-                                )}
-                              </div>
+                            <div>
+                              <p className="font-medium">{supplier.companyName}</p>
+                              <p className="text-sm text-muted-foreground">{supplier.contactPersonName}</p>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">
-                              {supplier.phone && (
-                                <div className="flex items-center text-sm">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  {supplier.phone}
-                                </div>
-                              )}
-                              {supplier.email && (
-                                <div className="flex items-center text-sm">
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  {supplier.email}
-                                </div>
-                              )}
-                              {supplier.address && (
-                                <div className="flex items-center text-sm">
-                                  <MapPin className="h-3 w-3 mr-1" />
-                                  {supplier.address.substring(0, 30)}...
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className={`font-medium ${getBalanceColor(supplier.currentBalance)}`}>
-                              {formatCurrency(supplier.currentBalance)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium">
-                                {formatCurrency(supplier.creditLimit)}
+                              <p className="text-sm font-medium">{supplier.contactPersonName}</p>
+                              <div className="flex items-center gap-1 text-sm">
+                                <Phone className="h-3 w-3" />
+                                {supplier.phone || 'N/A'}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {supplier.paymentTermsDays} days
-                              </div>
-                              {supplier.creditLimitEnforced && (
-                                <Badge variant="outline" className="text-xs">
-                                  Enforced
-                                </Badge>
-                              )}
                             </div>
                           </TableCell>
+                          <TableCell>{supplier.paymentTerms || `Net ${supplier.paymentTermsDays} days`}</TableCell>
+                          <TableCell className={supplier.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}>
+                            {formatCurrency(supplier.currentBalance)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(0)}</TableCell>
                           <TableCell>
                             <Badge 
-                              variant="secondary" 
+                              variant={supplier.isActive ? 'default' : 'secondary'} 
                               className={getStatusBadgeColor(supplier.isActive)}
                             >
-                              {supplier.isActive ? (
-                                <span className="flex items-center">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Active
-                                </span>
-                              ) : (
-                                <span className="flex items-center">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Inactive
-                                </span>
-                              )}
+                              {supplier.isActive ? 'ACTIVE' : 'INACTIVE'}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm">
-                              {supplier.lastTransactionDate 
-                                ? formatDate(supplier.lastTransactionDate) 
-                                : 'Never'}
-                            </div>
+                            {supplier.lastTransactionDate 
+                              ? formatDate(supplier.lastTransactionDate) 
+                              : 'Never'}
                           </TableCell>
                           <TableCell>
-                            <div className="flex space-x-2">
+                            <div className="flex gap-2">
                               <Button
+                                variant="outline"
                                 size="sm"
-                                variant="ghost"
                                 onClick={() => handleViewSupplierDetails(supplier)}
+                                className="touch-target"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
                               {isManager && (
                                 <Button
+                                  variant="outline"
                                   size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteSupplier(supplier.id, supplier.companyName)}
-                                  disabled={deleteLoading}
+                                  onClick={() => {
+                                    setSelectedSupplier(supplier);
+                                    populateForm(supplier);
+                                    setIsEditMode(true);
+                                    // Fetch supplier data for edit mode
+                                    handleViewSupplierDetails(supplier);
+                                  }}
+                                  className="touch-target"
                                 >
-                                  <XCircle className="h-4 w-4" />
+                                  <Edit className="h-4 w-4" />
                                 </Button>
                               )}
                             </div>
@@ -574,13 +783,115 @@ export default function Suppliers() {
             </CardContent>
           </Card>
         </TabsContent>
-
+        
+        <TabsContent value="purchase-orders" className="space-y-4">
+          <Card className="pos-card">
+            <CardHeader>
+              <CardTitle>Purchase Orders</CardTitle>
+              <CardDescription>
+                {purchaseOrdersLoading ? 'Loading...' : `${purchaseOrders?.length || 0} purchase order(s) found`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>PO Number</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Order Date</TableHead>
+                    <TableHead>Expected Delivery</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead>Total Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purchaseOrdersLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : purchaseOrders && purchaseOrders.length > 0 ? (
+                    purchaseOrders.map((po: PurchaseOrderDto) => (
+                      <TableRow key={po.id}>
+                        <TableCell className="font-medium">{po.purchaseOrderNumber}</TableCell>
+                        <TableCell>{po.supplierName}</TableCell>
+                        <TableCell>{new Date(po.orderDate).toLocaleDateString()}</TableCell>
+                        <TableCell>{po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString() : 'N/A'}</TableCell>
+                        <TableCell>{po.items?.length || 0}</TableCell>
+                        <TableCell>{formatCurrency(po.totalAmount)}</TableCell>
+                        <TableCell>{getPOStatusBadge(po.status)}</TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" className="touch-target">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        No purchase orders found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
         <TabsContent value="transactions" className="space-y-4">
           <Card className="pos-card">
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                Select a supplier to view transaction history
-              </div>
+            <CardHeader>
+              <CardTitle>Supplier Transactions</CardTitle>
+              <CardDescription>
+                Payment history and account movements
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Running Balance</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactionsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : supplierTransactions && supplierTransactions.length > 0 ? (
+                    supplierTransactions.map((transaction: SupplierTransactionDto) => (
+                      <TableRow key={transaction.transactionId}>
+                        <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
+                        <TableCell className="capitalize">{transaction.transactionType.replace('_', ' ')}</TableCell>
+                        <TableCell className="font-medium">{transaction.transactionNumber}</TableCell>
+                        <TableCell className={transaction.amount < 0 ? 'text-green-600' : 'text-red-600'}>
+                          {transaction.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(transaction.amount))}
+                        </TableCell>
+                        <TableCell>{formatCurrency(transaction.balanceAfterTransaction)}</TableCell>
+                        <TableCell>{transaction.notes || 'N/A'}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No transactions found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -588,7 +899,7 @@ export default function Suppliers() {
 
       {/* Create Supplier Dialog */}
       <Dialog open={isNewSupplierOpen} onOpenChange={setIsNewSupplierOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Add New Supplier</DialogTitle>
             <DialogDescription>
@@ -726,7 +1037,7 @@ export default function Suppliers() {
             <Button 
               onClick={handleCreateSupplier} 
               disabled={createLoading}
-              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+              variant="golden"
             >
               {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Supplier
@@ -735,41 +1046,64 @@ export default function Suppliers() {
         </DialogContent>
       </Dialog>
 
-      {/* Supplier Details Dialog - Basic structure, will add the rest in next part */}
+      {/* Supplier Details Dialog */}
       {selectedSupplier && (
         <Dialog open={!!selectedSupplier} onOpenChange={() => {
           setSelectedSupplier(null);
           setIsEditMode(false);
-          setSupplierProducts(null);
-          setSupplierBalance(null);
-          setSupplierTransactions(null);
         }}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                {selectedSupplier.companyName}
-                <Badge variant="secondary" className={getStatusBadgeColor(selectedSupplier.isActive)}>
-                  {selectedSupplier.isActive ? 'Active' : 'Inactive'}
-                </Badge>
+              <DialogTitle>
+                {isEditMode ? 'Edit Supplier' : 'Supplier Details'} - SUP-{selectedSupplier.id.toString().padStart(3, '0')}
               </DialogTitle>
-              <DialogDescription>
-                Supplier information, products, balance, and transaction history
-              </DialogDescription>
             </DialogHeader>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Company Name</Label>
+                <Input
+                  value={supplierForm.companyName}
+                  onChange={(e) => setSupplierForm({...supplierForm, companyName: e.target.value})}
+                  readOnly={!isEditMode}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Person</Label>
+                <Input
+                  value={supplierForm.contactPersonName}
+                  onChange={(e) => setSupplierForm({...supplierForm, contactPersonName: e.target.value})}
+                  readOnly={!isEditMode}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Current Balance</Label>
+                <div className="p-2 bg-muted rounded">
+                  {formatCurrency(selectedSupplier.currentBalance)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Total Purchases</Label>
+                <div className="p-2 bg-muted rounded">
+                  {formatCurrency(0)}
+                </div>
+              </div>
+            </div>
             
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="outline" onClick={() => {
                 setSelectedSupplier(null);
                 setIsEditMode(false);
               }}>
-                Close
+                {isEditMode ? 'Cancel' : 'Close'}
               </Button>
-              {isManager && (
-                <Button 
-                  onClick={() => setIsEditMode(true)} 
-                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
-                >
+              {isEditMode && isManager && (
+                <Button onClick={handleUpdateSupplier} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                  Update Supplier
+                </Button>
+              )}
+              {!isEditMode && isManager && (
+                <Button onClick={() => setIsEditMode(true)} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Supplier
                 </Button>

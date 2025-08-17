@@ -98,6 +98,13 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
       id: 'suppliers',
       badge: null,
     },
+    {
+      title: 'Purchase Orders',
+      icon: FileText,
+      id: 'purchase-orders',
+      badge: null,
+      managerOnly: true,
+    },
   ];
 
   const adminItems = [

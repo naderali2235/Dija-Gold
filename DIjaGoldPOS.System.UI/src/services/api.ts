@@ -4,6 +4,7 @@
  */
 
 import { API_CONFIG, STORAGE_KEYS } from '../config/environment';
+import { EnumLookupDto, ApiLookupsResponse } from '../types/enums';
 
 // Base API configuration
 const API_BASE_URL = API_CONFIG.BASE_URL;
@@ -197,7 +198,7 @@ export interface Product {
   id: number;
   productCode: string;
   name: string;
-  categoryType: 'Ring' | 'Chain' | 'Necklace' | 'Earrings' | 'Bangles' | 'Bracelet' | 'Bullion' | 'Coins' | 'Other';
+  categoryType: 'GoldJewelry' | 'Bullion' | 'Coins';
   karatType: '18K' | '21K' | '22K' | '24K';
   weight: number;
   brand?: string;
@@ -1814,6 +1815,8 @@ export interface Customer {
   dateOfBirth?: string;
   anniversaryDate?: string;
   loyaltyTier: number;
+  defaultDiscountPercentage?: number;
+  makingChargesWaived: boolean;
   totalPurchases: number;
   lastPurchaseDate?: string;
   customerSince: string;
@@ -1990,6 +1993,92 @@ export const customersApi = {
     }
     
     throw new Error(response.message || 'Failed to create customer');
+  },
+
+  async updateCustomer(id: number, customer: Partial<Omit<Customer, 'id' | 'customerNumber' | 'customerSince' | 'totalPurchases' | 'lastPurchaseDate'>>): Promise<Customer> {
+    const response = await apiRequest<Customer>(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(customer),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update customer');
+  }
+};
+
+// Lookups API for enum data
+export const lookupsApi = {
+  async getAllLookups(): Promise<ApiLookupsResponse> {
+    const response = await apiRequest<ApiLookupsResponse>('/lookups');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch lookup data');
+  },
+
+  async getTransactionTypes(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/transaction-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch transaction types');
+  },
+
+  async getPaymentMethods(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/payment-methods');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch payment methods');
+  },
+
+  async getTransactionStatuses(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/transaction-statuses');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch transaction statuses');
+  },
+
+  async getKaratTypes(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/karat-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch karat types');
+  },
+
+  async getProductCategoryTypes(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/product-category-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch product category types');
+  },
+
+  async getChargeTypes(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/charge-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch charge types');
   }
 };
 
@@ -2014,4 +2103,5 @@ export default {
   labels: labelsApi,
   transactions: transactionsApi,
   customers: customersApi,
+  lookups: lookupsApi,
 };

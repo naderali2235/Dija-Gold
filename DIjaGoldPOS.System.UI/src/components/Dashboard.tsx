@@ -12,10 +12,11 @@ import {
   DollarSign,
   RotateCcw,
   Wrench,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency, GOLD_RATES_EGP } from './utils/currency';
-import { useGoldRates } from '../hooks/useApi';
+import { useGoldRates, useDailySalesSummary, useTransactionLogReport } from '../hooks/useApi';
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
@@ -34,6 +35,21 @@ interface GoldRatesMap {
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const { user, isManager } = useAuth();
   const { data: goldRatesData, loading: goldRatesLoading, error: goldRatesError } = useGoldRates();
+  
+  // Dashboard data hooks
+  const { execute: fetchDailySalesSummary, loading: dailySalesLoading } = useDailySalesSummary();
+  const { execute: fetchTransactionLogReport, loading: transactionLogLoading } = useTransactionLogReport();
+  
+  // State for dashboard data
+  const [todayStats, setTodayStats] = React.useState({
+    sales: { count: 0, amount: 0 },
+    returns: { count: 0, amount: 0 },
+    repairs: { count: 0, amount: 0 },
+    lowStock: 0,
+  });
+  
+  const [recentActivities, setRecentActivities] = React.useState<any[]>([]);
+  const [dashboardLoading, setDashboardLoading] = React.useState(true);
 
   // Transform API gold rates to dashboard format
   const goldRates: GoldRatesMap = React.useMemo(() => {
@@ -58,33 +74,77 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       // Convert karatType number to string format (e.g., 18 -> "18k")
       const karatString = `${rate.karatType}k`;
       
-      // Calculate mock change percentage for now (in real app, this would come from historical data)
-      const mockChangePercent = Math.random() * 0.5 - 0.25; // Random between -0.25% and +0.25%
-      const mockChange = rate.ratePerGram * (mockChangePercent / 100);
+      // For now, use a small fixed change percentage (in real app, this would come from historical data)
+      const changePercent = 0.1; // 0.1% change
+      const change = rate.ratePerGram * (changePercent / 100);
       
       rates[karatString] = {
         rate: rate.ratePerGram,
-        change: mockChange,
-        changePercent: mockChangePercent,
+        change: change,
+        changePercent: changePercent,
       };
     });
     
     return rates;
   }, [goldRatesData]);
 
-  const todayStats = {
-    sales: { count: 23, amount: 145780 },
-    returns: { count: 2, amount: 8560 },
-    repairs: { count: 5, amount: 3200 },
-    lowStock: 12,
-  };
+  // Fetch dashboard data on component mount
+  React.useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setDashboardLoading(true);
+        const today = new Date().toISOString().split('T')[0];
+        const branchId = user?.branch?.id || 1; // Default to branch 1 if user branch not available
+        
+        // Fetch daily sales summary
+        const dailySales = await fetchDailySalesSummary(branchId, today);
+        setTodayStats({
+          sales: { 
+            count: dailySales.transactionCount, 
+            amount: dailySales.totalSales 
+          },
+          returns: { 
+            count: 0, // This would need to be calculated from transaction data
+            amount: dailySales.totalReturns 
+          },
+          repairs: { 
+            count: 0, // This would need to be calculated from transaction data
+            amount: 0 
+          },
+          lowStock: 0, // This would need to be fetched from inventory API
+        });
+        
+        // Fetch recent transactions
+        const transactionLog = await fetchTransactionLogReport(branchId, today);
+        const activities = transactionLog.transactions.slice(0, 5).map((transaction: any) => ({
+          type: transaction.transactionType.toLowerCase(),
+          id: transaction.transactionNumber,
+          amount: transaction.totalAmount,
+          time: new Date(transaction.transactionDate).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+        }));
+        setRecentActivities(activities);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+        // Set fallback data on error
+        setTodayStats({
+          sales: { count: 0, amount: 0 },
+          returns: { count: 0, amount: 0 },
+          repairs: { count: 0, amount: 0 },
+          lowStock: 0,
+        });
+        setRecentActivities([]);
+      } finally {
+        setDashboardLoading(false);
+      }
+    };
 
-  const recentActivities = [
-    { type: 'sale', id: 'INV-2024-001', amount: 12500, time: '10:30 AM' },
-    { type: 'return', id: 'RET-2024-001', amount: 8560, time: '11:15 AM' },
-    { type: 'repair', id: 'REP-2024-003', amount: 800, time: '12:00 PM' },
-    { type: 'sale', id: 'INV-2024-002', amount: 25600, time: '1:45 PM' },
-  ];
+    if (user?.branch?.id) {
+      fetchDashboardData();
+    }
+  }, [user?.branch?.id, fetchDailySalesSummary, fetchTransactionLogReport]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -107,7 +167,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
         <div className="flex gap-3">
           <Button 
-            className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+            className="touch-target"
+            variant="golden"
             onClick={() => onNavigate?.('sales')}
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
@@ -170,55 +231,103 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="pos-card">
+        <Card 
+          className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigate?.('sales')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Today's Sales</CardTitle>
             <ShoppingCart className="h-4 w-4 text-[#D4AF37]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-[#0D1B2A]">{todayStats.sales.count}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(todayStats.sales.amount)} total
-            </p>
+            {dashboardLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-300 rounded mb-2"></div>
+                <div className="h-3 bg-gray-300 rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl text-[#0D1B2A]">{todayStats.sales.count}</div>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(todayStats.sales.amount)} total
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="pos-card">
+        <Card 
+          className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigate?.('returns')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Returns</CardTitle>
             <RotateCcw className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-[#0D1B2A]">{todayStats.returns.count}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(todayStats.returns.amount)} total
-            </p>
+            {dashboardLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-300 rounded mb-2"></div>
+                <div className="h-3 bg-gray-300 rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl text-[#0D1B2A]">{todayStats.returns.count}</div>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(todayStats.returns.amount)} total
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="pos-card">
+        <Card 
+          className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigate?.('repairs')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Repairs</CardTitle>
             <Wrench className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-[#0D1B2A]">{todayStats.repairs.count}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(todayStats.repairs.amount)} total
-            </p>
+            {dashboardLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-300 rounded mb-2"></div>
+                <div className="h-3 bg-gray-300 rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl text-[#0D1B2A]">{todayStats.repairs.count}</div>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(todayStats.repairs.amount)} total
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="pos-card">
+        <Card 
+          className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigate?.('inventory')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Low Stock</CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-[#0D1B2A]">{todayStats.lowStock}</div>
-            <p className="text-xs text-muted-foreground">
-              Items need restocking
-            </p>
+            {dashboardLoading ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-300 rounded mb-2"></div>
+                <div className="h-3 bg-gray-300 rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl text-[#0D1B2A]">{todayStats.lowStock}</div>
+                <p className="text-xs text-muted-foreground">
+                  Items need restocking
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -257,29 +366,53 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+              <Button 
+                variant="outline" 
+                className="touch-target h-20 flex-col gap-2"
+                onClick={() => onNavigate?.('sales')}
+              >
                 <ShoppingCart className="h-6 w-6" />
                 New Sale
               </Button>
-              <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+              <Button 
+                variant="outline" 
+                className="touch-target h-20 flex-col gap-2"
+                onClick={() => onNavigate?.('returns')}
+              >
                 <RotateCcw className="h-6 w-6" />
                 Process Return
               </Button>
-              <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+              <Button 
+                variant="outline" 
+                className="touch-target h-20 flex-col gap-2"
+                onClick={() => onNavigate?.('inventory')}
+              >
                 <Package className="h-6 w-6" />
                 Check Inventory
               </Button>
-              <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+              <Button 
+                variant="outline" 
+                className="touch-target h-20 flex-col gap-2"
+                onClick={() => onNavigate?.('customers')}
+              >
                 <Users className="h-6 w-6" />
                 Find Customer
               </Button>
               {isManager && (
                 <>
-                  <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="touch-target h-20 flex-col gap-2"
+                    onClick={() => onNavigate?.('reports')}
+                  >
                     <TrendingUp className="h-6 w-6" />
                     Daily Report
                   </Button>
-                  <Button variant="outline" className="touch-target h-20 flex-col gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="touch-target h-20 flex-col gap-2"
+                    onClick={() => onNavigate?.('settings')}
+                  >
                     <DollarSign className="h-6 w-6" />
                     Update Rates
                   </Button>

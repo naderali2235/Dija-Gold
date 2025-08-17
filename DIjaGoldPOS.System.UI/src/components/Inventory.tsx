@@ -394,9 +394,9 @@ export default function Inventory() {
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Select Branch" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-white border-gray-200 shadow-lg">
               {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id.toString()}>
+                <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                   {branch.name}
                 </SelectItem>
               ))}
@@ -406,7 +406,7 @@ export default function Inventory() {
             <>
               <Button 
                 onClick={() => setIsAddInventoryOpen(true)}
-                className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                variant="golden"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Stock
@@ -502,10 +502,10 @@ export default function Inventory() {
               <SelectTrigger>
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Items</SelectItem>
-                <SelectItem value="normal_stock">Normal Stock</SelectItem>
-                <SelectItem value="low_stock">Low Stock</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Items</SelectItem>
+                <SelectItem value="normal_stock" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Normal Stock</SelectItem>
+                <SelectItem value="low_stock" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Low Stock</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex items-center space-x-2">
@@ -815,7 +815,7 @@ export default function Inventory() {
 
       {/* Add Inventory Dialog */}
       <Dialog open={isAddInventoryOpen} onOpenChange={setIsAddInventoryOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Add Inventory</DialogTitle>
             <DialogDescription>
@@ -840,10 +840,10 @@ export default function Inventory() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Purchase">Purchase</SelectItem>
-                  <SelectItem value="Return">Return</SelectItem>
-                  <SelectItem value="Adjustment">Adjustment</SelectItem>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
+                  <SelectItem value="Purchase" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Purchase</SelectItem>
+                  <SelectItem value="Return" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Return</SelectItem>
+                  <SelectItem value="Adjustment" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Adjustment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -910,7 +910,7 @@ export default function Inventory() {
             <Button 
               onClick={handleAddInventory} 
               disabled={addLoading}
-              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+              variant="golden"
             >
               {addLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Inventory
@@ -921,7 +921,7 @@ export default function Inventory() {
 
       {/* Adjust Inventory Dialog */}
       <Dialog open={isAdjustInventoryOpen} onOpenChange={setIsAdjustInventoryOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Adjust Inventory</DialogTitle>
             <DialogDescription>
@@ -993,7 +993,7 @@ export default function Inventory() {
 
       {/* Transfer Inventory Dialog */}
       <Dialog open={isTransferInventoryOpen} onOpenChange={setIsTransferInventoryOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Transfer Inventory</DialogTitle>
             <DialogDescription>
@@ -1027,9 +1027,9 @@ export default function Inventory() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {branches.map((branch) => (
-                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                    <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {branch.name}
                     </SelectItem>
                   ))}
@@ -1042,9 +1042,9 @@ export default function Inventory() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {branches.map((branch) => (
-                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                    <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {branch.name}
                     </SelectItem>
                   ))}
@@ -1094,7 +1094,7 @@ export default function Inventory() {
             <Button 
               onClick={handleTransferInventory} 
               disabled={transferLoading}
-              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+              variant="golden"
             >
               {transferLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Transfer Inventory

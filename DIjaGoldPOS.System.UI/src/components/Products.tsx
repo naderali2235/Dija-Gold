@@ -48,8 +48,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../hooks/useApi';
+import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes } from '../hooks/useApi';
 import { Product } from '../services/api';
+import { EnumMapper } from '../types/enums';
 
 export default function Products() {
   const { isManager } = useAuth();
@@ -65,12 +66,16 @@ export default function Products() {
   const { execute: createProduct, loading: creatingProduct } = useCreateProduct();
   const { execute: updateProduct, loading: updatingProduct } = useUpdateProduct();
   const { execute: deleteProduct, loading: deletingProduct } = useDeleteProduct();
+  
+  // Lookup data hooks
+  const { data: karatTypesData, loading: karatTypesLoading, execute: fetchKaratTypes } = useKaratTypes();
+  const { data: categoryTypesData, loading: categoryTypesLoading, execute: fetchCategoryTypes } = useProductCategoryTypes();
 
   // Form state for new/edit product
   const [productForm, setProductForm] = useState({
     productCode: '',
     name: '',
-    categoryType: 'Ring' as Product['categoryType'],
+    categoryType: 'GoldJewelry' as Product['categoryType'],
     karatType: '22K' as Product['karatType'],
     weight: '',
     brand: '',
@@ -85,6 +90,12 @@ export default function Products() {
     makingChargesApplicable: true,
     supplierId: '',
   });
+
+  // Fetch lookup data on mount
+  useEffect(() => {
+    fetchKaratTypes();
+    fetchCategoryTypes();
+  }, [fetchKaratTypes, fetchCategoryTypes]);
 
   // Fetch products on mount and when filters change
   useEffect(() => {
@@ -101,15 +112,21 @@ export default function Products() {
   // Get products from API
   const products = productsData?.items || [];
   
-  const categories = ['Ring', 'Chain', 'Necklace', 'Earrings', 'Bangles', 'Bracelet', 'Bullion', 'Coins', 'Other'];
-  const karats = ['18K', '21K', '22K', '24K'];
+  // Generate categories and karats from API data, fallback to backend category types
+  const categories = categoryTypesData ? ['GoldJewelry', 'Bullion', 'Coins'] : ['GoldJewelry', 'Bullion', 'Coins'];
+  const categoryDisplayNames = {
+    'GoldJewelry': 'Gold Jewelry',
+    'Bullion': 'Bullion',
+    'Coins': 'Gold Coins'
+  };
+  const karats = karatTypesData ? EnumMapper.lookupToSelectOptions(karatTypesData).map((option: {value: string, label: string}) => option.value) : ['18K', '21K', '22K', '24K'];
 
   // Form handling
   const resetForm = () => {
     setProductForm({
       productCode: '',
       name: '',
-      categoryType: 'Ring',
+      categoryType: 'GoldJewelry',
       karatType: '22K',
       weight: '',
       brand: '',
@@ -128,6 +145,7 @@ export default function Products() {
 
   const openEditDialog = (product: Product) => {
     setSelectedProduct(product);
+    
     setProductForm({
       productCode: product.productCode,
       name: product.name,
@@ -186,7 +204,6 @@ export default function Products() {
         alert('Product created successfully!');
       }
 
-      // Refresh products list
       await fetchProducts({
         searchTerm: searchQuery || undefined,
         categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
@@ -221,7 +238,6 @@ export default function Products() {
       await deleteProduct(product.id);
       alert('Product deleted successfully!');
       
-      // Refresh products list
       await fetchProducts({
         searchTerm: searchQuery || undefined,
         categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
@@ -258,12 +274,12 @@ export default function Products() {
         {isManager && (
           <Dialog open={isNewProductOpen} onOpenChange={setIsNewProductOpen}>
             <DialogTrigger asChild>
-              <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+              <Button className="touch-target" variant="golden">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Product
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
               <DialogHeader>
                 <DialogTitle>{isEditMode ? 'Edit Product' : 'Add New Product'}</DialogTitle>
                 <DialogDescription>
@@ -298,9 +314,9 @@ export default function Products() {
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {categories.map(cat => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        {categories.map((cat: string) => (
+                          <SelectItem key={cat} value={cat} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{categoryDisplayNames[cat as keyof typeof categoryDisplayNames]}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -320,9 +336,9 @@ export default function Products() {
                       <SelectTrigger>
                         <SelectValue placeholder="Select karat" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {karats.map(karat => (
-                          <SelectItem key={karat} value={karat}>{karat}</SelectItem>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        {karats.map((karat: string) => (
+                          <SelectItem key={karat} value={karat} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{karat}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -402,7 +418,7 @@ export default function Products() {
                 </Button>
                 <Button 
                   type="submit" 
-                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  variant="golden"
                   disabled={creatingProduct}
                 >
                   {creatingProduct ? (
@@ -438,10 +454,10 @@ export default function Products() {
               <SelectTrigger className="w-full md:w-40">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Categories</SelectItem>
+                {categories.map((cat: string) => (
+                  <SelectItem key={cat} value={cat} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{categoryDisplayNames[cat as keyof typeof categoryDisplayNames]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -449,10 +465,10 @@ export default function Products() {
               <SelectTrigger className="w-full md:w-32">
                 <SelectValue placeholder="Karat" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Karats</SelectItem>
-                {karats.map(karat => (
-                  <SelectItem key={karat} value={karat}>{karat}</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Karats</SelectItem>
+                {karats.map((karat: string) => (
+                  <SelectItem key={karat} value={karat} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{karat}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -536,7 +552,7 @@ export default function Products() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p>{product.categoryType}</p>
+                          <p>{categoryDisplayNames[product.categoryType as keyof typeof categoryDisplayNames]}</p>
                           {product.subCategory && <p className="text-sm text-muted-foreground">{product.subCategory}</p>}
                         </div>
                       </TableCell>
@@ -564,12 +580,13 @@ export default function Products() {
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="bg-white border-gray-200 shadow-lg">
                             <DropdownMenuItem 
                               onClick={() => {
                                 setSelectedProduct(product);
                                 // Could add a view details dialog here
                               }}
+                              className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                             >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
@@ -581,13 +598,14 @@ export default function Products() {
                                     openEditDialog(product);
                                     setIsNewProductOpen(true);
                                   }}
+                                  className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                                 >
                                   <Edit className="mr-2 h-4 w-4" />
                                   Edit Product
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
                                   onClick={() => handleDelete(product)}
-                                  className="text-red-600"
+                                  className="text-red-600 hover:bg-red-50 focus:bg-red-50 focus:text-red-700"
                                   disabled={deletingProduct}
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />

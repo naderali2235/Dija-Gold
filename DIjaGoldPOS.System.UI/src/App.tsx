@@ -10,6 +10,7 @@ import Products from './components/Products';
 import Inventory from './components/Inventory';
 import Customers from './components/Customers';
 import Suppliers from './components/Suppliers';
+import PurchaseOrders from './components/PurchaseOrders';
 import Reports from './components/Reports';
 import Users from './components/Users';
 import Settings from './components/Settings';
@@ -60,6 +61,8 @@ function AppContent() {
         return <Customers />;
       case 'suppliers':
         return <Suppliers />;
+      case 'purchase-orders':
+        return <PurchaseOrders />;
       case 'reports':
         return <Reports />;
       case 'users':

@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace DijaGoldPOS.API.Models.Enums;
 
 /// <summary>
@@ -6,11 +8,14 @@ namespace DijaGoldPOS.API.Models.Enums;
 public enum ProductCategoryType
 {
     /// <summary>Gold Jewelry - rings, necklaces, bracelets, earrings, etc.</summary>
+    [Description("Gold Jewelry")]
     GoldJewelry = 1,
     
     /// <summary>Bullion - bars, ingots (0.25g to 100g)</summary>
+    [Description("Bullion")]
     Bullion = 2,
     
     /// <summary>Coins - gold coins (0.25g to 1g)</summary>
+    [Description("Gold Coins")]
     Coins = 3
 }

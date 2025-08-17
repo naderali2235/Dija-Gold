@@ -12,12 +12,14 @@ export const API_CONFIG = {
 // Application Configuration
 export const APP_CONFIG = {
   NAME: 'DijaGold POS System',
-  VERSION: '2.0.1',
+  VERSION: '2.1.0', // Updated version - replaced mock data with real API integration
   COMPANY: 'DijaGold Jewelry',
 };
 
 // Development flags
 export const DEV_CONFIG = {
+  // Mock API is disabled by default - only enabled when REACT_APP_MOCK_API=true is explicitly set
+  // All components now use real API calls instead of mock data
   MOCK_API: process.env.REACT_APP_MOCK_API === 'true',
   DEBUG_MODE: process.env.NODE_ENV === 'development',
   ENABLE_CONSOLE_LOGS: process.env.NODE_ENV === 'development',

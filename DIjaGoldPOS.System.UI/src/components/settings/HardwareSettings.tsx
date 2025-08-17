@@ -4,7 +4,7 @@ import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Printer, Wifi, Database, Settings as SettingsIcon } from 'lucide-react';
+import { Printer, Wifi, Database, Settings as SettingsIcon, Loader2 } from 'lucide-react';
 import { PRINTER_OPTIONS } from './constants';
 
 interface HardwareSettingsProps {
@@ -13,9 +13,27 @@ interface HardwareSettingsProps {
 }
 
 export function HardwareSettings({ hardwareSettings }: HardwareSettingsProps) {
-  const testConnection = (device: string) => {
-    // Mock test functionality
-    alert(`Testing connection to ${device}...`);
+  const [testingDevice, setTestingDevice] = React.useState<string | null>(null);
+
+  const testConnection = async (device: string) => {
+    setTestingDevice(device);
+    
+    try {
+      // TODO: Replace with actual hardware API calls when available
+      // For printer: await testPrinterConnection()
+      // For scanner: await testScannerConnection()
+      // For scale: await calibrateScale()
+      
+      // Simulate hardware test
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      alert(`${device} test completed successfully!`);
+    } catch (error) {
+      alert(`${device} test failed. Please check connection.`);
+      console.error(`Hardware test failed for ${device}:`, error);
+    } finally {
+      setTestingDevice(null);
+    }
   };
 
   return (
@@ -40,9 +58,9 @@ export function HardwareSettings({ hardwareSettings }: HardwareSettingsProps) {
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
                     {PRINTER_OPTIONS.map(option => (
-                      <SelectItem key={option.value} value={option.value}>
+                      <SelectItem key={option.value} value={option.value} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                         {option.label}
                       </SelectItem>
                     ))}
@@ -82,17 +100,44 @@ export function HardwareSettings({ hardwareSettings }: HardwareSettingsProps) {
             </div>
             
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => testConnection('printer')}>
-                <Printer className="mr-2 h-4 w-4" />
-                Test Printer
+              <Button 
+                variant="outline" 
+                className="touch-target" 
+                onClick={() => testConnection('printer')}
+                disabled={testingDevice === 'printer'}
+              >
+                {testingDevice === 'printer' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="mr-2 h-4 w-4" />
+                )}
+                {testingDevice === 'printer' ? 'Testing...' : 'Test Printer'}
               </Button>
-              <Button variant="outline" onClick={() => testConnection('scanner')}>
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Test Scanner
+              <Button 
+                variant="outline" 
+                className="touch-target" 
+                onClick={() => testConnection('scanner')}
+                disabled={testingDevice === 'scanner'}
+              >
+                {testingDevice === 'scanner' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                )}
+                {testingDevice === 'scanner' ? 'Testing...' : 'Test Scanner'}
               </Button>
-              <Button variant="outline" onClick={() => testConnection('scale')}>
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Calibrate Scale
+              <Button 
+                variant="outline" 
+                className="touch-target" 
+                onClick={() => testConnection('scale')}
+                disabled={testingDevice === 'scale'}
+              >
+                {testingDevice === 'scale' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                )}
+                {testingDevice === 'scale' ? 'Calibrating...' : 'Calibrate Scale'}
               </Button>
             </div>
           </div>
@@ -137,13 +182,31 @@ export function HardwareSettings({ hardwareSettings }: HardwareSettingsProps) {
             </div>
             
             <div className="flex gap-3 pt-2">
-              <Button variant="outline">
-                <Database className="mr-2 h-4 w-4" />
-                Backup Now
+              <Button 
+                variant="outline" 
+                className="touch-target"
+                onClick={() => testConnection('backup')}
+                disabled={testingDevice === 'backup'}
+              >
+                {testingDevice === 'backup' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="mr-2 h-4 w-4" />
+                )}
+                {testingDevice === 'backup' ? 'Backing up...' : 'Backup Now'}
               </Button>
-              <Button variant="outline">
-                <Wifi className="mr-2 h-4 w-4" />
-                Test Connection
+              <Button 
+                variant="outline" 
+                className="touch-target"
+                onClick={() => testConnection('network')}
+                disabled={testingDevice === 'network'}
+              >
+                {testingDevice === 'network' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Wifi className="mr-2 h-4 w-4" />
+                )}
+                {testingDevice === 'network' ? 'Testing...' : 'Test Connection'}
               </Button>
             </div>
           </div>

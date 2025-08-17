@@ -110,9 +110,9 @@ export function SystemSettings({ systemSettings, onSystemSettingChange }: System
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {CURRENCY_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {option.label}
                     </SelectItem>
                   ))}
@@ -128,9 +128,9 @@ export function SystemSettings({ systemSettings, onSystemSettingChange }: System
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {TIMEZONE_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {option.label}
                     </SelectItem>
                   ))}
@@ -146,9 +146,9 @@ export function SystemSettings({ systemSettings, onSystemSettingChange }: System
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {LANGUAGE_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {option.label}
                     </SelectItem>
                   ))}

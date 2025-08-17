@@ -41,8 +41,8 @@ public class CreateCustomerRequestDto
     [StringLength(15, ErrorMessage = "Mobile number cannot exceed 15 characters")]
     public string? MobileNumber { get; set; }
 
-    [EmailAddress(ErrorMessage = "Invalid email address")]
-    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
+    //[EmailAddress(ErrorMessage = "Invalid email address")]
+    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters",MinimumLength = 0)]
     public string? Email { get; set; }
 
     [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]

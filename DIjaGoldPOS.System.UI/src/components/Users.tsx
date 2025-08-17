@@ -65,6 +65,7 @@ import {
   useResetPassword,
   useUserPermissions,
   useUpdateUserPermissions,
+  usePaginatedBranches,
 } from '../hooks/useApi';
 import {
   UserDto,
@@ -72,6 +73,7 @@ import {
   UpdateUserRequest,
   UserActivityDto,
   UserPermissionsDto,
+  BranchDto,
 } from '../services/api';
 
 interface UserFormData {
@@ -100,12 +102,6 @@ const defaultUserForm: UserFormData = {
 
 const availableRoles = ['Admin', 'Manager', 'Cashier'];
 
-const mockBranches = [
-  { id: 1, name: 'Main Branch' },
-  { id: 2, name: 'Mall Branch' },
-  { id: 3, name: 'Downtown Branch' },
-];
-
 export default function Users() {
   const { user: currentUser, isManager } = useAuth();
   
@@ -120,6 +116,16 @@ export default function Users() {
   const [userForm, setUserForm] = useState<UserFormData>(defaultUserForm);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+
+  // Branches API hook
+  const {
+    data: branchesData,
+    loading: branchesLoading,
+    error: branchesError,
+  } = usePaginatedBranches({
+    isActive: true,
+    pageSize: 100, // Get all branches
+  });
 
   // API Hooks
   const {
@@ -359,7 +365,7 @@ export default function Users() {
         <h1 className="text-3xl text-[#0D1B2A]">User Management</h1>
         <Button 
           onClick={() => setIsNewUserOpen(true)}
-          className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+          variant="golden"
         >
           <Plus className="mr-2 h-4 w-4" />
           Add User
@@ -383,10 +389,10 @@ export default function Users() {
               <SelectTrigger>
                 <SelectValue placeholder="Filter by role" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Roles</SelectItem>
                 {availableRoles.map(role => (
-                  <SelectItem key={role} value={role}>{role}</SelectItem>
+                  <SelectItem key={role} value={role} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{role}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -394,10 +400,14 @@ export default function Users() {
               <SelectTrigger>
                 <SelectValue placeholder="Filter by branch" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {mockBranches.map(branch => (
-                  <SelectItem key={branch.id} value={branch.id.toString()}>
+              <SelectContent className="bg-white border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Branches</SelectItem>
+                {branchesLoading ? (
+                  <SelectItem value="" disabled>Loading branches...</SelectItem>
+                ) : branchesError ? (
+                  <SelectItem value="" disabled>Error loading branches</SelectItem>
+                ) : branchesData?.items?.map((branch: BranchDto) => (
+                  <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                     {branch.name}
                   </SelectItem>
                 ))}
@@ -570,7 +580,7 @@ export default function Users() {
 
       {/* Create User Dialog */}
       <Dialog open={isNewUserOpen} onOpenChange={setIsNewUserOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
             <DialogDescription>
@@ -639,15 +649,15 @@ export default function Users() {
             <div className="space-y-2">
               <Label>Roles *</Label>
               <Select
-                value={userForm.roles[0] || ''}
+                value={userForm.roles[0] || 'Cashier'}
                 onValueChange={(value: string) => setUserForm({...userForm, roles: [value]})}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
                   {availableRoles.map(role => (
-                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                    <SelectItem key={role} value={role} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{role}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -655,16 +665,20 @@ export default function Users() {
             <div className="space-y-2">
               <Label>Branch</Label>
               <Select
-                value={userForm.branchId?.toString() || ''}
-                onValueChange={(value: string) => setUserForm({...userForm, branchId: value ? parseInt(value) : null})}
+                value={userForm.branchId?.toString() || 'none'}
+                onValueChange={(value: string) => setUserForm({...userForm, branchId: value && value !== 'none' ? parseInt(value) : null})}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select branch" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No Branch</SelectItem>
-                  {mockBranches.map(branch => (
-                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                <SelectContent className="bg-white border-gray-200 shadow-lg">
+                  <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">No Branch</SelectItem>
+                  {branchesLoading ? (
+                    <SelectItem value="" disabled>Loading branches...</SelectItem>
+                  ) : branchesError ? (
+                    <SelectItem value="" disabled>Error loading branches</SelectItem>
+                  ) : branchesData?.items?.map((branch: BranchDto) => (
+                    <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {branch.name}
                     </SelectItem>
                   ))}
@@ -691,7 +705,7 @@ export default function Users() {
             <Button 
               onClick={handleCreateUser} 
               disabled={createLoading}
-              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+              variant="golden"
             >
               {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create User
@@ -708,7 +722,7 @@ export default function Users() {
           setUserActivity(null);
           setUserPermissions(null);
         }}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <UserIcon className="h-5 w-5" />
@@ -766,15 +780,15 @@ export default function Users() {
                     <Label>Roles</Label>
                     {isEditMode ? (
                       <Select
-                        value={userForm.roles[0] || ''}
+                        value={userForm.roles[0] || 'Cashier'}
                         onValueChange={(value: string) => setUserForm({...userForm, roles: [value]})}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white border-gray-200 shadow-lg">
                           {availableRoles.map(role => (
-                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                            <SelectItem key={role} value={role} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{role}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -792,16 +806,20 @@ export default function Users() {
                     <Label>Branch</Label>
                     {isEditMode ? (
                       <Select
-                        value={userForm.branchId?.toString() || ''}
-                        onValueChange={(value: string) => setUserForm({...userForm, branchId: value ? parseInt(value) : null})}
+                        value={userForm.branchId?.toString() || 'none'}
+                        onValueChange={(value: string) => setUserForm({...userForm, branchId: value && value !== 'none' ? parseInt(value) : null})}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">No Branch</SelectItem>
-                          {mockBranches.map(branch => (
-                            <SelectItem key={branch.id} value={branch.id.toString()}>
+                        <SelectContent className="bg-white border-gray-200 shadow-lg">
+                          <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">No Branch</SelectItem>
+                          {branchesLoading ? (
+                            <SelectItem value="" disabled>Loading branches...</SelectItem>
+                          ) : branchesError ? (
+                            <SelectItem value="" disabled>Error loading branches</SelectItem>
+                          ) : branchesData?.items?.map((branch: BranchDto) => (
+                            <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                               {branch.name}
                             </SelectItem>
                           ))}
@@ -947,7 +965,7 @@ export default function Users() {
                 <Button 
                   onClick={handleUpdateUser} 
                   disabled={updateLoading || rolesLoading}
-                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  variant="golden"
                 >
                   {(updateLoading || rolesLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Update User
@@ -956,7 +974,7 @@ export default function Users() {
               {!isEditMode && (
                 <Button 
                   onClick={() => setIsEditMode(true)} 
-                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  variant="golden"
                 >
                   <Edit className="mr-2 h-4 w-4" />
                   Edit User
@@ -969,7 +987,7 @@ export default function Users() {
 
       {/* Reset Password Dialog */}
       <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
-        <DialogContent>
+        <DialogContent className="bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
@@ -1022,7 +1040,7 @@ export default function Users() {
             <Button 
               onClick={handleResetPassword} 
               disabled={resetLoading}
-              className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+              variant="golden"
             >
               {resetLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Key className="mr-2 h-4 w-4" />

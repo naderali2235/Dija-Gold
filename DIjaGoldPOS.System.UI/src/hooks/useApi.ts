@@ -291,6 +291,10 @@ export function useCreateCustomer() {
   return useApiCall(api.customers.createCustomer);
 }
 
+export function useUpdateCustomer() {
+  return useApiCall(api.customers.updateCustomer);
+}
+
 // Users Management hooks
 export function useUsers() {
   return useApiCall(api.users.getUsers);
@@ -541,6 +545,52 @@ export function useDecodeQrPayload() {
   return useApiCall(api.labels.decodeQrPayload);
 }
 
+// Lookups API hooks
+export function useAllLookups() {
+  return useApiCall(api.lookups.getAllLookups);
+}
+
+export function useTransactionTypes() {
+  return useApiCall(api.lookups.getTransactionTypes);
+}
+
+export function usePaymentMethods() {
+  return useApiCall(api.lookups.getPaymentMethods);
+}
+
+export function useTransactionStatuses() {
+  return useApiCall(api.lookups.getTransactionStatuses);
+}
+
+export function useKaratTypes() {
+  return useApiCall(api.lookups.getKaratTypes);
+}
+
+export function useProductCategoryTypes() {
+  return useApiCall(api.lookups.getProductCategoryTypes);
+}
+
+export function useChargeTypes() {
+  return useApiCall(api.lookups.getChargeTypes);
+}
+
+// Purchase Orders hooks
+export function useCreatePurchaseOrder() {
+  return useApiCall(api.purchaseOrders.createPurchaseOrder);
+}
+
+export function usePurchaseOrder() {
+  return useApiCall(api.purchaseOrders.getPurchaseOrder);
+}
+
+export function useSearchPurchaseOrders() {
+  return useApiCall(api.purchaseOrders.searchPurchaseOrders);
+}
+
+export function useReceivePurchaseOrder() {
+  return useApiCall(api.purchaseOrders.receivePurchaseOrder);
+}
+
 export default {
   useApiState,
   useApiCall,
@@ -614,4 +664,11 @@ export default {
   useGenerateProductLabelZpl,
   usePrintProductLabel,
   useDecodeQrPayload,
+  useAllLookups,
+  useTransactionTypes,
+  usePaymentMethods,
+  useTransactionStatuses,
+  useKaratTypes,
+  useProductCategoryTypes,
+  useChargeTypes,
 };

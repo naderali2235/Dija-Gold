@@ -302,9 +302,9 @@ export default function Reports() {
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Select Branch" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-white border-gray-200 shadow-lg">
               {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id.toString()}>
+                <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                   {branch.name}
                 </SelectItem>
               ))}
@@ -381,18 +381,20 @@ export default function Reports() {
                   disabled={excelExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Excel
+                  Export Excel
                 </Button>
                 <Button
                   onClick={() => handleExportToPdf(dailySalesReport, `Daily_Sales_${selectedDate}`, 'daily-sales-summary')}
                   disabled={pdfExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  PDF
+                  Export PDF
                 </Button>
               </div>
             )}
@@ -544,18 +546,20 @@ export default function Reports() {
                   disabled={excelExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Excel
+                  Export Excel
                 </Button>
                 <Button
                   onClick={() => handleExportToPdf(cashReconciliationReport, `Cash_Reconciliation_${selectedDate}`, 'cash-reconciliation')}
                   disabled={pdfExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  PDF
+                  Export PDF
                 </Button>
               </div>
             )}
@@ -636,6 +640,7 @@ export default function Reports() {
                   disabled={excelExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                   Excel
@@ -749,18 +754,20 @@ export default function Reports() {
                   disabled={excelExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Excel
+                  Export Excel
                 </Button>
                 <Button
                   onClick={() => handleExportToPdf(transactionLogReport, `Transaction_Log_${selectedDate}`, 'transaction-log')}
                   disabled={pdfExportLoading}
                   variant="outline"
                   size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  PDF
+                  Export PDF
                 </Button>
               </div>
             )}

@@ -40,9 +40,10 @@ import {
   Loader2,
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCustomers, useProcessSale } from '../hooks/useApi';
+import { useProducts, useCustomers, useProcessSale, useGoldRates, useKaratTypes, usePaymentMethods } from '../hooks/useApi';
 import { useAuth } from './AuthContext';
 import api, { Product, Customer } from '../services/api';
+import { EnumMapper, EnumLookupDto } from '../types/enums';
 
 interface CartItem {
   id: number;
@@ -68,11 +69,15 @@ export default function Sales() {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'BankTransfer' | 'Cheque'>('Cash');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [isProcessingTransaction, setIsProcessingTransaction] = useState(false);
+  const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   
   // API hooks
   const { data: productsData, loading: productsLoading, execute: fetchProducts } = useProducts();
   const { data: customersData, loading: customersLoading, execute: fetchCustomers } = useCustomers();
   const { execute: processSale } = useProcessSale();
+  const { data: goldRatesData, loading: goldRatesLoading } = useGoldRates();
+  const { data: karatTypesData, execute: fetchKaratTypes } = useKaratTypes();
+  const { data: paymentMethodsData, execute: fetchPaymentMethods } = usePaymentMethods();
 
   // Fetch data on component mount
   useEffect(() => {
@@ -82,7 +87,9 @@ export default function Sales() {
       pageNumber: 1,
       pageSize: 50
     });
-  }, [searchQuery, fetchProducts]);
+    fetchKaratTypes();
+    fetchPaymentMethods();
+  }, [searchQuery, fetchProducts, fetchKaratTypes, fetchPaymentMethods]);
 
   useEffect(() => {
     if (customerSearch.trim()) {
@@ -105,10 +112,19 @@ export default function Sales() {
   const addToCart = (product: Product) => {
     const existingItem = cart.find(item => item.productId === product.id);
     
-    // Calculate current gold rate for the product (using mock rate for now)
-    const goldRate = product.karatType === '24K' ? 3270.5 : 
-                     product.karatType === '22K' ? 2997.13 : 
-                     product.karatType === '21K' ? 2727.94 : 2452.88;
+    // Get current gold rate from API data
+    // Find gold rate data - handle different karat formats
+    let goldRateData = goldRatesData?.find(rate => rate.karat === product.karatType);
+    
+    // If not found, try mapping from karat type enum
+    if (!goldRateData && karatTypesData) {
+      const karatTypeLookup = karatTypesData.find(kt => kt.name.toLowerCase() === product.karatType.toLowerCase());
+      if (karatTypeLookup) {
+        goldRateData = goldRatesData?.find(rate => rate.karat === EnumMapper.karatEnumToString(karatTypeLookup.value as any));
+      }
+    }
+    
+    const goldRate = goldRateData?.sellRate || 3000; // Fallback rate if API data not available
     
     const makingCharges = product.makingChargesApplicable ? (product.weight * goldRate * 0.15) : 0;
     const unitPrice = (product.weight * goldRate) + makingCharges;
@@ -231,14 +247,14 @@ export default function Sales() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl text-[#0D1B2A]">New Sale</h1>
         <div className="flex gap-3">
-          <Dialog>
+          <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="touch-target">
+              <Button variant="outline" className="touch-target hover:bg-[#F4E9B1] transition-colors">
                 <User className="mr-2 h-4 w-4" />
                 {selectedCustomer ? selectedCustomer.fullName : 'Select Customer'}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md bg-white rounded-lg shadow-lg border-0">
+            <DialogContent className="max-w-md bg-white border-gray-200 shadow-lg">
               <DialogHeader className="text-center pb-4">
                 <DialogTitle className="text-xl font-bold text-gray-800">Select Customer</DialogTitle>
                 <DialogDescription className="text-gray-500 text-sm">
@@ -273,6 +289,7 @@ export default function Sales() {
                         onClick={() => {
                           setSelectedCustomer(customer);
                           setCustomerSearch('');
+                          setIsCustomerDialogOpen(false);
                         }}
                       >
                         <div className="flex items-center justify-between">
@@ -281,7 +298,7 @@ export default function Sales() {
                             <p className="text-sm text-gray-500">{customer.mobileNumber || customer.email || 'No contact info'}</p>
                           </div>
                           <span className="text-sm font-medium text-gray-600">
-                            {customer.totalPurchases || 0} pts
+                            Tier {customer.loyaltyTier}
                           </span>
                         </div>
                       </div>
@@ -290,8 +307,11 @@ export default function Sales() {
                 </div>
                 <Button
                   variant="outline"
-                  className="w-full bg-white border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
-                  onClick={() => setSelectedCustomer(null)}
+                  className="w-full touch-target hover:bg-[#F4E9B1] transition-colors"
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    setIsCustomerDialogOpen(false);
+                  }}
                 >
                   Proceed without customer
                 </Button>
@@ -366,6 +386,7 @@ export default function Sales() {
                           </p>
                           <Button
                             size="sm"
+                            variant="golden"
                             onClick={() => addToCart(product)}
                             disabled={!product.isActive}
                             className="touch-target"
@@ -418,6 +439,7 @@ export default function Sales() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="touch-target hover:bg-[#F4E9B1] transition-colors"
                             onClick={() => updateQuantity(item.id, item.quantity - 1)}
                           >
                             <Minus className="h-3 w-3" />
@@ -426,6 +448,7 @@ export default function Sales() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="touch-target hover:bg-[#F4E9B1] transition-colors"
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
                           >
                             <Plus className="h-3 w-3" />
@@ -472,14 +495,29 @@ export default function Sales() {
                       value={paymentMethod}
                       onValueChange={(value) => setPaymentMethod(value as any)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="hover:bg-[#F4E9B1] transition-colors focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37]">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Card">Card</SelectItem>
-                        <SelectItem value="BankTransfer">Bank Transfer</SelectItem>
-                        <SelectItem value="Cheque">Cheque</SelectItem>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        {paymentMethodsData ? (
+                          paymentMethodsData.map((method: EnumLookupDto) => (
+                            <SelectItem 
+                              key={method.value} 
+                              value={method.name}
+                              className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
+                            >
+                              {method.displayName}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          // Fallback options if API data not loaded
+                          <>
+                            <SelectItem value="Cash" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Cash</SelectItem>
+                            <SelectItem value="Card" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Card</SelectItem>
+                            <SelectItem value="BankTransfer" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Bank Transfer</SelectItem>
+                            <SelectItem value="Cheque" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Cheque</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -494,6 +532,7 @@ export default function Sales() {
                       placeholder={formatCurrency(total)}
                       min="0"
                       step="0.01"
+                      className="focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
                     />
                     {amountPaid > 0 && amountPaid !== total && (
                       <p className="text-sm text-muted-foreground">
@@ -503,7 +542,8 @@ export default function Sales() {
                   </div>
                   
                   <Button
-                    className="w-full touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                    className="w-full touch-target"
+                    variant="golden"
                     onClick={handleCheckout}
                     disabled={isProcessingTransaction || cart.length === 0 || amountPaid < total}
                   >

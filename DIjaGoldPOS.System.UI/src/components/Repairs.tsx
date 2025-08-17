@@ -84,55 +84,70 @@ export default function Repairs() {
     notes: '',
   });
 
-  // Mock data
-  const repairJobs: RepairJob[] = [
-    {
-      id: '1',
-      jobNumber: 'REP-2024-001',
-      customerName: 'Rajesh Kumar',
-      customerPhone: '+91 98765 43210',
-      itemDescription: 'Gold chain with broken clasp',
-      repairType: 'Clasp Repair',
-      status: 'in_progress',
-      priority: 'medium',
-      estimatedCost: 800,
-      receivedDate: '2024-01-15T10:00:00Z',
-      estimatedCompletion: '2024-01-20T10:00:00Z',
-      notes: 'Customer wants original clasp design maintained',
-    },
-    {
-      id: '2',
-      jobNumber: 'REP-2024-002',
-      customerName: 'Priya Sharma',
-      customerPhone: '+91 87654 32109',
-      itemDescription: 'Ring resizing from 16 to 18',
-      repairType: 'Resizing',
-      status: 'completed',
-      priority: 'high',
-      estimatedCost: 1200,
-      actualCost: 1100,
-      receivedDate: '2024-01-12T14:30:00Z',
-      estimatedCompletion: '2024-01-18T14:30:00Z',
-      completedDate: '2024-01-17T16:45:00Z',
-      notes: 'Ring resized successfully, customer satisfied',
-    },
-    {
-      id: '3',
-      jobNumber: 'REP-2024-003',
-      customerName: 'Amit Patel',
-      customerPhone: '+91 76543 21098',
-      itemDescription: 'Earring back replacement',
-      repairType: 'Component Replacement',
-      status: 'ready_for_pickup',
-      priority: 'low',
-      estimatedCost: 300,
-      actualCost: 250,
-      receivedDate: '2024-01-14T11:15:00Z',
-      estimatedCompletion: '2024-01-16T11:15:00Z',
-      completedDate: '2024-01-16T09:30:00Z',
-      notes: 'New earring backs fitted, matching originals',
-    },
-  ];
+  // State for repair jobs (will be replaced with API data when available)
+  const [repairJobs, setRepairJobs] = useState<RepairJob[]>([]);
+  const [repairJobsLoading, setRepairJobsLoading] = useState(false);
+
+  // TODO: Replace with actual repair API when available
+  // const { execute: fetchRepairJobs, loading: repairJobsLoading } = useRepairJobs();
+  
+  // Mock data for now - will be replaced with API call
+  React.useEffect(() => {
+    setRepairJobsLoading(true);
+    // Simulate API call
+    setTimeout(() => {
+      const mockJobs: RepairJob[] = [
+        {
+          id: '1',
+          jobNumber: 'REP-2024-001',
+          customerName: 'Rajesh Kumar',
+          customerPhone: '+91 98765 43210',
+          itemDescription: 'Gold chain with broken clasp',
+          repairType: 'Clasp Repair',
+          status: 'in_progress',
+          priority: 'medium',
+          estimatedCost: 800,
+          receivedDate: '2024-01-15T10:00:00Z',
+          estimatedCompletion: '2024-01-20T10:00:00Z',
+          notes: 'Customer wants original clasp design maintained',
+        },
+        {
+          id: '2',
+          jobNumber: 'REP-2024-002',
+          customerName: 'Priya Sharma',
+          customerPhone: '+91 87654 32109',
+          itemDescription: 'Ring resizing from 16 to 18',
+          repairType: 'Resizing',
+          status: 'completed',
+          priority: 'high',
+          estimatedCost: 1200,
+          actualCost: 1100,
+          receivedDate: '2024-01-12T14:30:00Z',
+          estimatedCompletion: '2024-01-18T14:30:00Z',
+          completedDate: '2024-01-17T16:45:00Z',
+          notes: 'Ring resized successfully, customer satisfied',
+        },
+        {
+          id: '3',
+          jobNumber: 'REP-2024-003',
+          customerName: 'Amit Patel',
+          customerPhone: '+91 76543 21098',
+          itemDescription: 'Earring back replacement',
+          repairType: 'Component Replacement',
+          status: 'ready_for_pickup',
+          priority: 'low',
+          estimatedCost: 300,
+          actualCost: 250,
+          receivedDate: '2024-01-14T11:15:00Z',
+          estimatedCompletion: '2024-01-16T11:15:00Z',
+          completedDate: '2024-01-16T09:30:00Z',
+          notes: 'New earring backs fitted, matching originals',
+        },
+      ];
+      setRepairJobs(mockJobs);
+      setRepairJobsLoading(false);
+    }, 1000);
+  }, []);
 
   const filteredJobs = repairJobs.filter(job => {
     const matchesSearch = job.jobNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -177,26 +192,63 @@ export default function Repairs() {
     );
   };
 
-  const handleNewRepairSubmit = () => {
-    // Mock submission
-    console.log('New repair submitted:', newRepair);
-    setIsNewRepairOpen(false);
-    setNewRepair({
-      customerName: '',
-      customerPhone: '',
-      itemDescription: '',
-      repairType: '',
-      priority: 'medium',
-      estimatedCost: '',
-      estimatedCompletion: '',
-      notes: '',
-    });
+  const handleNewRepairSubmit = async () => {
+    try {
+      // TODO: Replace with actual repair API when available
+      // const repairRequest = {
+      //   customerName: newRepair.customerName,
+      //   customerPhone: newRepair.customerPhone,
+      //   itemDescription: newRepair.itemDescription,
+      //   repairType: newRepair.repairType,
+      //   priority: newRepair.priority,
+      //   estimatedCost: parseFloat(newRepair.estimatedCost),
+      //   estimatedCompletion: newRepair.estimatedCompletion,
+      //   notes: newRepair.notes,
+      //   branchId: user?.branch?.id,
+      // };
+      // await createRepairJob(repairRequest);
+      
+      // Simulate API call for now
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('New repair submitted:', newRepair);
+      setIsNewRepairOpen(false);
+      setNewRepair({
+        customerName: '',
+        customerPhone: '',
+        itemDescription: '',
+        repairType: '',
+        priority: 'medium',
+        estimatedCost: '',
+        estimatedCompletion: '',
+        notes: '',
+      });
+      
+      // Refresh repair jobs list
+      // await fetchRepairJobs();
+    } catch (error) {
+      console.error('Failed to create repair job:', error);
+      alert('Failed to create repair job. Please try again.');
+    }
   };
 
-  const handleStatusUpdate = (jobId: string, newStatus: string) => {
-    // Mock status update
-    console.log(`Updating job ${jobId} to status ${newStatus}`);
-    alert(`Job status updated to ${newStatus}`);
+  const handleStatusUpdate = async (jobId: string, newStatus: string) => {
+    try {
+      // TODO: Replace with actual repair API when available
+      // await updateRepairJobStatus(jobId, newStatus);
+      
+      // Simulate API call for now
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log(`Updating job ${jobId} to status ${newStatus}`);
+      alert(`Job status updated to ${newStatus}`);
+      
+      // Refresh repair jobs list
+      // await fetchRepairJobs();
+    } catch (error) {
+      console.error('Failed to update repair job status:', error);
+      alert('Failed to update job status. Please try again.');
+    }
   };
 
   return (
@@ -208,12 +260,12 @@ export default function Repairs() {
         </div>
         <Dialog open={isNewRepairOpen} onOpenChange={setIsNewRepairOpen}>
           <DialogTrigger asChild>
-            <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+            <Button className="touch-target" variant="golden">
               <Plus className="mr-2 h-4 w-4" />
               New Repair Job
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
             <DialogHeader>
               <DialogTitle>Create New Repair Job</DialogTitle>
               <DialogDescription>
@@ -254,15 +306,15 @@ export default function Repairs() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select repair type" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cleaning">Cleaning & Polishing</SelectItem>
-                    <SelectItem value="resizing">Ring Resizing</SelectItem>
-                    <SelectItem value="clasp_repair">Clasp Repair</SelectItem>
-                    <SelectItem value="chain_repair">Chain Repair</SelectItem>
-                    <SelectItem value="stone_setting">Stone Setting</SelectItem>
-                    <SelectItem value="prong_repair">Prong Repair</SelectItem>
-                    <SelectItem value="component_replacement">Component Replacement</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
+                    <SelectItem value="cleaning" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Cleaning & Polishing</SelectItem>
+                    <SelectItem value="resizing" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Ring Resizing</SelectItem>
+                    <SelectItem value="clasp_repair" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Clasp Repair</SelectItem>
+                    <SelectItem value="chain_repair" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Chain Repair</SelectItem>
+                    <SelectItem value="stone_setting" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Stone Setting</SelectItem>
+                    <SelectItem value="prong_repair" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Prong Repair</SelectItem>
+                    <SelectItem value="component_replacement" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Component Replacement</SelectItem>
+                    <SelectItem value="other" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -272,10 +324,10 @@ export default function Repairs() {
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
+                    <SelectItem value="low" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Low</SelectItem>
+                    <SelectItem value="medium" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Medium</SelectItem>
+                    <SelectItem value="high" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">High</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -309,10 +361,10 @@ export default function Repairs() {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={() => setIsNewRepairOpen(false)}>
+              <Button variant="outline" className="touch-target" onClick={() => setIsNewRepairOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleNewRepairSubmit} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+              <Button onClick={handleNewRepairSubmit} variant="golden">
                 Create Job
               </Button>
             </div>
@@ -408,11 +460,11 @@ export default function Repairs() {
                           <div className="flex gap-2">
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="touch-target">
+                                <Button variant="outline" size="sm" className="touch-target hover:bg-[#F4E9B1] transition-colors">
                                   View
                                 </Button>
                               </DialogTrigger>
-                              <DialogContent>
+                              <DialogContent className="bg-white border-gray-200 shadow-lg">
                                 <DialogHeader>
                                   <DialogTitle>{job.jobNumber} - Details</DialogTitle>
                                 </DialogHeader>

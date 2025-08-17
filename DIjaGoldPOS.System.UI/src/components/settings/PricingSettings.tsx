@@ -57,7 +57,7 @@ export function PricingSettings({
             ))}
           </div>
           <div className="flex justify-end mt-4">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="touch-target">
               <TrendingUp className="mr-2 h-4 w-4" />
               Update from Market
             </Button>
