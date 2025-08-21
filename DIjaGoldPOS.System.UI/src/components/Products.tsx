@@ -48,9 +48,54 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes } from '../hooks/useApi';
-import { Product } from '../services/api';
-import { EnumMapper } from '../types/enums';
+import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes, useSuppliers, useGoldRates, useMakingCharges } from '../hooks/useApi';
+import { Product, SupplierDto } from '../services/api';
+import { EnumMapper, ProductCategoryType, KaratType } from '../types/enums';
+import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
+
+// Component to handle async price display
+function ProductPriceDisplay({ product, goldRatesData, makingChargesData }: { 
+  product: Product, 
+  goldRatesData: any[], 
+  makingChargesData: any[] 
+}) {
+  const [price, setPrice] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        setLoading(true);
+        const pricing = await getProductPricingFromAPI(product.id, 1);
+        setPrice(pricing.estimatedTotalPrice);
+      } catch (error) {
+        console.error('Error fetching price from API:', error);
+        // Fallback to local calculation
+        try {
+          if (goldRatesData && makingChargesData) {
+            const pricing = calculateProductPricing(product, goldRatesData, makingChargesData, 1, null, []);
+            setPrice(pricing.finalTotal);
+          } else {
+            setPrice(0);
+          }
+        } catch (fallbackError) {
+          console.error('Fallback calculation failed:', fallbackError);
+          setPrice(0);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrice();
+  }, [product.id, goldRatesData, makingChargesData]);
+
+  if (loading) {
+    return <Loader2 className="h-4 w-4 animate-spin" />;
+  }
+
+  return <span>{formatCurrency(price || 0)}</span>;
+}
 
 export default function Products() {
   const { isManager } = useAuth();
@@ -68,15 +113,20 @@ export default function Products() {
   const { execute: deleteProduct, loading: deletingProduct } = useDeleteProduct();
   
   // Lookup data hooks
-  const { data: karatTypesData, loading: karatTypesLoading, execute: fetchKaratTypes } = useKaratTypes();
-  const { data: categoryTypesData, loading: categoryTypesLoading, execute: fetchCategoryTypes } = useProductCategoryTypes();
+  const { data: karatTypesData, loading: karatTypesLoading, fetchKaratTypes } = useKaratTypes();
+  const { data: categoryTypesData, loading: categoryTypesLoading, fetchCategories: fetchCategoryTypes } = useProductCategoryTypes();
+  const { data: suppliersData, loading: suppliersLoading, execute: fetchSuppliers } = useSuppliers();
+  
+  // Pricing data hooks
+  const { data: goldRatesData, loading: goldRatesLoading, fetchRates } = useGoldRates();
+  const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
 
   // Form state for new/edit product
   const [productForm, setProductForm] = useState({
     productCode: '',
     name: '',
-    categoryType: 'GoldJewelry' as Product['categoryType'],
-    karatType: '22K' as Product['karatType'],
+    categoryType: 'GoldJewelry' as 'GoldJewelry' | 'Bullion' | 'Coins',
+    karatType: '22K' as '18K' | '21K' | '22K' | '24K',
     weight: '',
     brand: '',
     designStyle: '',
@@ -88,14 +138,17 @@ export default function Products() {
     faceValue: '',
     hasNumismaticValue: false,
     makingChargesApplicable: true,
-    supplierId: '',
+    supplierId: 'none',
   });
 
   // Fetch lookup data on mount
   useEffect(() => {
     fetchKaratTypes();
     fetchCategoryTypes();
-  }, [fetchKaratTypes, fetchCategoryTypes]);
+    fetchSuppliers();
+    fetchRates();
+    fetchCharges();
+  }, [fetchKaratTypes, fetchCategoryTypes, fetchSuppliers, fetchRates, fetchCharges]);
 
   // Fetch products on mount and when filters change
   useEffect(() => {
@@ -120,6 +173,11 @@ export default function Products() {
     'Coins': 'Gold Coins'
   };
   const karats = karatTypesData ? EnumMapper.lookupToSelectOptions(karatTypesData).map((option: {value: string, label: string}) => option.value) : ['18K', '21K', '22K', '24K'];
+  const suppliers = suppliersData?.items || [];
+  const supplierOptions = suppliers.map(supplier => ({
+    value: supplier.id.toString(),
+    label: `${supplier.companyName}${supplier.contactPersonName ? ` (${supplier.contactPersonName})` : ''}`
+  }));
 
   // Form handling
   const resetForm = () => {
@@ -139,18 +197,19 @@ export default function Products() {
       faceValue: '',
       hasNumismaticValue: false,
       makingChargesApplicable: true,
-      supplierId: '',
+      supplierId: 'none',
     });
   };
 
   const openEditDialog = (product: Product) => {
+    console.log('Opening edit dialog for product:', product);
     setSelectedProduct(product);
     
-    setProductForm({
+    const formData = {
       productCode: product.productCode,
       name: product.name,
-      categoryType: product.categoryType,
-      karatType: product.karatType,
+      categoryType: EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType),
+      karatType: EnumMapper.karatEnumToString(product.karatType as KaratType),
       weight: product.weight.toString(),
       brand: product.brand || '',
       designStyle: product.designStyle || '',
@@ -162,8 +221,11 @@ export default function Products() {
       faceValue: product.faceValue?.toString() || '',
       hasNumismaticValue: product.hasNumismaticValue || false,
       makingChargesApplicable: product.makingChargesApplicable,
-      supplierId: product.supplierId?.toString() || '',
-    });
+      supplierId: product.supplierId?.toString() || 'none',
+    };
+    
+    console.log('Setting form data:', formData);
+    setProductForm(formData);
     setIsEditMode(true);
   };
 
@@ -175,27 +237,57 @@ export default function Products() {
       return;
     }
     
+    // Validate required fields
+    if (!productForm.productCode.trim()) {
+      alert('Product code is required');
+      return;
+    }
+    
+    if (!productForm.name.trim()) {
+      alert('Product name is required');
+      return;
+    }
+    
+    if (!productForm.weight || isNaN(parseFloat(productForm.weight)) || parseFloat(productForm.weight) <= 0) {
+      alert('Valid weight is required (must be greater than 0)');
+      return;
+    }
+    
+    if (!productForm.categoryType) {
+      alert('Category is required');
+      return;
+    }
+    
+    if (!productForm.karatType) {
+      alert('Karat is required');
+      return;
+    }
+    
     try {
+      const weight = parseFloat(productForm.weight);
+      
       const productData = {
-        productCode: productForm.productCode,
-        name: productForm.name,
-        categoryType: productForm.categoryType,
-        karatType: productForm.karatType,
-        weight: parseFloat(productForm.weight),
-        brand: productForm.brand || undefined,
-        designStyle: productForm.designStyle || undefined,
-        subCategory: productForm.subCategory || undefined,
-        shape: productForm.shape || undefined,
-        purityCertificateNumber: productForm.purityCertificateNumber || undefined,
-        countryOfOrigin: productForm.countryOfOrigin || undefined,
+        productCode: productForm.productCode.trim(),
+        name: productForm.name.trim(),
+        categoryType: EnumMapper.productCategoryStringToEnum(productForm.categoryType),
+        karatType: EnumMapper.karatStringToEnum(productForm.karatType),
+        weight: weight,
+        brand: productForm.brand?.trim() || undefined,
+        designStyle: productForm.designStyle?.trim() || undefined,
+        subCategory: productForm.subCategory?.trim() || undefined,
+        shape: productForm.shape?.trim() || undefined,
+        purityCertificateNumber: productForm.purityCertificateNumber?.trim() || undefined,
+        countryOfOrigin: productForm.countryOfOrigin?.trim() || undefined,
         yearOfMinting: productForm.yearOfMinting ? parseInt(productForm.yearOfMinting) : undefined,
         faceValue: productForm.faceValue ? parseFloat(productForm.faceValue) : undefined,
         hasNumismaticValue: productForm.hasNumismaticValue,
         makingChargesApplicable: productForm.makingChargesApplicable,
-        supplierId: productForm.supplierId ? parseInt(productForm.supplierId) : undefined,
+        supplierId: productForm.supplierId && productForm.supplierId !== '' && productForm.supplierId !== 'none' ? parseInt(productForm.supplierId) : undefined,
         isActive: true,
       };
 
+      console.log('Submitting product data:', productData);
+      
       if (isEditMode && selectedProduct) {
         await updateProduct(selectedProduct.id, productData);
         alert('Product updated successfully!');
@@ -220,7 +312,26 @@ export default function Products() {
       setIsNewProductOpen(false);
     } catch (error) {
       console.error('Error saving product:', error);
-      alert(error instanceof Error ? error.message : 'Failed to save product');
+      
+      // Show more detailed error information
+      if (error instanceof Error) {
+        try {
+          // Try to parse error message as JSON to show validation errors
+          const errorData = JSON.parse(error.message);
+          if (errorData.errors) {
+            const errorMessages = Object.entries(errorData.errors)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('\n');
+            alert(`Validation errors:\n${errorMessages}`);
+          } else {
+            alert(error.message);
+          }
+        } catch {
+          alert(error.message);
+        }
+      } else {
+        alert('Failed to save product');
+      }
     }
   };
 
@@ -252,15 +363,7 @@ export default function Products() {
     }
   };
 
-  const calculatePrice = (product: Product) => {
-    // Calculate current gold rate for the product
-    const goldRate = product.karatType === '24K' ? 3270.5 : 
-                     product.karatType === '22K' ? 2997.13 : 
-                     product.karatType === '21K' ? 2727.94 : 2452.88;
-    
-    const makingCharges = product.makingChargesApplicable ? (product.weight * goldRate * 0.15) : 0;
-    return (product.weight * goldRate) + makingCharges;
-  };
+
 
 
 
@@ -310,7 +413,7 @@ export default function Products() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="categoryType">Category</Label>
-                    <Select value={productForm.categoryType} onValueChange={(value) => setProductForm({...productForm, categoryType: value as any})}>
+                    <Select value={productForm.categoryType} onValueChange={(value) => setProductForm({...productForm, categoryType: value as any})} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
@@ -332,7 +435,7 @@ export default function Products() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="karatType">Karat</Label>
-                    <Select value={productForm.karatType} onValueChange={(value) => setProductForm({...productForm, karatType: value as any})}>
+                    <Select value={productForm.karatType} onValueChange={(value) => setProductForm({...productForm, karatType: value as any})} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select karat" />
                       </SelectTrigger>
@@ -350,11 +453,12 @@ export default function Products() {
                       type="number"
                       step="0.001"
                       min="0.001"
-                    value={productForm.weight}
-                    onChange={(e) => setProductForm({...productForm, weight: e.target.value})}
-                    placeholder="0.0"
-                  />
-                </div>
+                      value={productForm.weight}
+                      onChange={(e) => setProductForm({...productForm, weight: e.target.value})}
+                      placeholder="0.0"
+                      required
+                    />
+                  </div>
                 <div className="space-y-2">
                   <Label htmlFor="shape">Shape/Dimensions</Label>
                   <Input
@@ -364,15 +468,30 @@ export default function Products() {
                     placeholder="Size, length, diameter, shape"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supplierId">Supplier ID</Label>
-                  <Input
-                    id="supplierId"
-                    value={productForm.supplierId}
-                    onChange={(e) => setProductForm({...productForm, supplierId: e.target.value})}
-                    placeholder="Supplier ID"
-                  />
-                </div>
+                                  <div className="space-y-2">
+                    <Label htmlFor="supplierId">Supplier</Label>
+                    <Select value={productForm.supplierId === 'none' ? '' : productForm.supplierId} onValueChange={(value) => setProductForm({...productForm, supplierId: value})} disabled={suppliersLoading}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={suppliersLoading ? "Loading suppliers..." : "Select supplier"} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        {suppliersLoading ? (
+                          <SelectItem value="loading" disabled>Loading suppliers...</SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
+                              None (No supplier)
+                            </SelectItem>
+                            {supplierOptions.map((supplier) => (
+                              <SelectItem key={supplier.value} value={supplier.value} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
+                                {supplier.label}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 <div className="space-y-2">
                   <Label htmlFor="brand">Brand</Label>
                   <Input
@@ -413,21 +532,21 @@ export default function Products() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <Button variant="outline" onClick={() => setIsNewProductOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsNewProductOpen(false)}>
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   variant="golden"
-                  disabled={creatingProduct}
+                  disabled={creatingProduct || updatingProduct}
                 >
-                  {creatingProduct ? (
+                  {creatingProduct || updatingProduct ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating...
+                      {isEditMode ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
-                    'Add Product'
+                    isEditMode ? 'Update Product' : 'Add Product'
                   )}
                 </Button>
               </div>
@@ -539,7 +658,6 @@ export default function Products() {
               </TableHeader>
               <TableBody>
                 {products.map((product) => {
-                  const estimatedPrice = calculatePrice(product);
                   return (
                     <TableRow key={product.id}>
                       <TableCell className="font-medium">{product.productCode}</TableCell>
@@ -552,17 +670,23 @@ export default function Products() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p>{categoryDisplayNames[product.categoryType as keyof typeof categoryDisplayNames]}</p>
+                          <p>{categoryDisplayNames[EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType) as keyof typeof categoryDisplayNames]}</p>
                           {product.subCategory && <p className="text-sm text-muted-foreground">{product.subCategory}</p>}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{product.karatType}</Badge>
+                        <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType as KaratType)}</Badge>
                       </TableCell>
                       <TableCell>{product.weight}g</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{formatCurrency(estimatedPrice)}</p>
+                          <p className="font-medium">
+                            <ProductPriceDisplay 
+                              product={product} 
+                              goldRatesData={goldRatesData || []} 
+                              makingChargesData={makingChargesData || []} 
+                            />
+                          </p>
                           {product.makingChargesApplicable && (
                             <p className="text-sm text-muted-foreground">+ Making Charges</p>
                           )}

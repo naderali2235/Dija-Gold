@@ -1,10 +1,9 @@
-import { GOLD_RATES_EGP } from '../utils/currency';
-
+// Default gold rates - now fetched from API instead of hardcoded values
 export const DEFAULT_GOLD_RATES = {
-  '24k': GOLD_RATES_EGP['24k'].toString(),
-  '22k': GOLD_RATES_EGP['22k'].toString(),
-  '18k': GOLD_RATES_EGP['18k'].toString(),
-  '14k': GOLD_RATES_EGP['14k'].toString(),
+  '24k': '0', // Will be populated from API
+  '22k': '0', // Will be populated from API
+  '21k': '0', // Will be populated from API
+  '18k': '0', // Will be populated from API
 };
 
 export const DEFAULT_TAX_SETTINGS = {
@@ -45,15 +44,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
   smsNotifications: false,
 };
 
-export const DEFAULT_HARDWARE_SETTINGS = {
-  receiptPrinter: 'EPSON-TM-T20',
-  cashDrawer: 'Connected',
-  barcodeScanner: 'Honeywell-1900',
-  scale: 'Ohaus-Navigator',
-  networkStatus: 'Connected',
-  backupLocation: 'Local & Cloud',
-};
-
 export const CURRENCY_OPTIONS = [
   { value: 'EGP', label: 'Egyptian Pound (EGP)' },
   { value: 'USD', label: 'US Dollar (USD)' },
@@ -69,10 +59,4 @@ export const TIMEZONE_OPTIONS = [
 export const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
   { value: 'ar', label: 'Arabic' },
-];
-
-export const PRINTER_OPTIONS = [
-  { value: 'EPSON-TM-T20', label: 'EPSON TM-T20' },
-  { value: 'STAR-TSP143', label: 'STAR TSP143' },
-  { value: 'CITIZEN-CT-S310', label: 'CITIZEN CT-S310' },
 ];

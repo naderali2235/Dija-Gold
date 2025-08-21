@@ -31,9 +31,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function mapApiUserToUser(apiUser: ApiUser): User {
+  console.log('Mapping API user to UI user:', apiUser);
+  
   // Map API user to UI user format for backward compatibility
-  const primaryRole = apiUser.roles.includes('Manager') ? 'Manager' : 'Cashier';
-  return {
+  const primaryRole: 'Cashier' | 'Manager' = apiUser.roles.includes('Manager') ? 'Manager' : 'Cashier';
+  const mappedUser = {
     id: apiUser.id,
     username: apiUser.username,
     role: primaryRole,
@@ -45,6 +47,9 @@ function mapApiUserToUser(apiUser: ApiUser): User {
     branch: apiUser.branch,
     lastLoginAt: apiUser.lastLoginAt,
   };
+  
+  console.log('Mapped user:', mappedUser);
+  return mappedUser;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -73,9 +78,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (token) {
         try {
+          console.log('Attempting to get current user from API...');
           const apiUser = await api.auth.getCurrentUser();
           const mappedUser = mapApiUserToUser(apiUser);
           console.log('Successfully validated stored token for user:', mappedUser.username);
+          console.log('User branch information:', mappedUser.branch);
           setUser(mappedUser);
         } catch (error) {
           // Token invalid or expired, clear it
@@ -104,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const mappedUser = mapApiUserToUser(response.user);
       console.log('Mapped user:', mappedUser);
+      console.log('User branch information:', mappedUser.branch);
       
       setUser(mappedUser);
       console.log('User state set, login successful');

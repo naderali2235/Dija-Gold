@@ -25,16 +25,16 @@ export const parseCurrency = (value: string): number => {
   return parseFloat(value.replace(/[^0-9.-]+/g, '')) || 0;
 };
 
+// Date formatting utility
+export const formatDate = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString();
+};
+
 // Egyptian Pound symbol
 export const EGP_SYMBOL = 'EGP';
 
-// Gold rate conversions (example rates in EGP)
-export const GOLD_RATES_EGP = {
-  '24k': 3270.50, // per gram
-  '22k': 2997.13,
-  '18k': 2452.88,
-  '14k': 1908.63,
-};
+// Gold rate conversions - now fetched from API
+// Legacy rates removed - use API data instead
 
 // Format numbers with Western numerals
 export const formatNumber = (number: number): string => {

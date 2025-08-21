@@ -155,4 +155,94 @@ public class SupplierRepository : Repository<Supplier>, ISupplierRepository
         // Check if the new balance would exceed the credit limit
         return (supplier.CurrentBalance + additionalAmount) <= supplier.CreditLimit;
     }
+
+    /// <summary>
+    /// Get supplier transactions with optional date filtering
+    /// </summary>
+    public async Task<(List<SupplierTransaction> Transactions, int TotalCount)> GetTransactionsAsync(
+        int supplierId, 
+        DateTime? fromDate = null, 
+        DateTime? toDate = null,
+        int pageNumber = 1,
+        int pageSize = 20)
+    {
+        var query = _context.SupplierTransactions
+            .Include(st => st.Branch)
+            .Where(st => st.SupplierId == supplierId);
+
+        // Apply date filters
+        if (fromDate.HasValue)
+        {
+            query = query.Where(st => st.TransactionDate >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(st => st.TransactionDate <= toDate.Value);
+        }
+
+        // Get total count
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination and ordering
+        var transactions = await query
+            .OrderByDescending(st => st.TransactionDate)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (transactions, totalCount);
+    }
+
+    /// <summary>
+    /// Create a new supplier transaction
+    /// </summary>
+    public async Task<SupplierTransaction> CreateTransactionAsync(SupplierTransaction transaction)
+    {
+        // Generate transaction number if not provided
+        if (string.IsNullOrEmpty(transaction.TransactionNumber))
+        {
+            transaction.TransactionNumber = await GenerateTransactionNumberAsync();
+        }
+
+        _context.SupplierTransactions.Add(transaction);
+        await _context.SaveChangesAsync();
+        
+        return transaction;
+    }
+
+    /// <summary>
+    /// Get recent transactions for a supplier
+    /// </summary>
+    public async Task<List<SupplierTransaction>> GetRecentTransactionsAsync(int supplierId, int count = 10)
+    {
+        return await _context.SupplierTransactions
+            .Include(st => st.Branch)
+            .Where(st => st.SupplierId == supplierId)
+            .OrderByDescending(st => st.TransactionDate)
+            .Take(count)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Generate unique transaction number
+    /// </summary>
+    private async Task<string> GenerateTransactionNumberAsync()
+    {
+        var today = DateTime.UtcNow.Date;
+        var prefix = $"ST{today:yyyyMMdd}";
+        
+        var lastTransaction = await _context.SupplierTransactions
+            .Where(st => st.TransactionNumber.StartsWith(prefix))
+            .OrderByDescending(st => st.TransactionNumber)
+            .FirstOrDefaultAsync();
+
+        if (lastTransaction == null)
+        {
+            return $"{prefix}001";
+        }
+
+        var lastNumber = int.Parse(lastTransaction.TransactionNumber.Substring(prefix.Length));
+        return $"{prefix}{(lastNumber + 1):D3}";
+    }
 }

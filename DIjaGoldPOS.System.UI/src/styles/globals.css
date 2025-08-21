@@ -36,7 +36,7 @@
   --destructive-foreground: var(--dija-white);
   --border: rgba(13, 27, 42, 0.1);
   --input: transparent;
-  --input-background: #F8F9FA;
+  --input-background: #FFFFFF;
   --switch-background: #DEE2E6;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -76,6 +76,7 @@
   --destructive-foreground: var(--dija-white);
   --border: rgba(212, 175, 55, 0.2);
   --input: rgba(212, 175, 55, 0.1);
+  --input-background: #1A2B3A;
   --ring: var(--dija-gold);
 }
 
@@ -345,4 +346,35 @@ html {
   .sidebar-simple {
     display: none;
   }
+}
+
+/* Force English numerals globally */
+* {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ensure all number inputs use English numerals */
+input[type="number"],
+input[inputmode="numeric"],
+input[inputmode="decimal"],
+.number-input {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+
+/* Force English numerals in all text that might contain numbers */
+.currency,
+.number,
+.amount,
+.price,
+.quantity,
+.weight,
+.percentage {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+
+/* Prevent Arabic-Indic numerals from being displayed */
+body {
+  font-feature-settings: "tnum" 1;
 }

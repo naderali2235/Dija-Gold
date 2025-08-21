@@ -110,6 +110,7 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IBranchRepository, BranchRepository>();
 builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
 builder.Services.AddScoped<IPurchaseOrderRepository, PurchaseOrderRepository>();
+builder.Services.AddScoped<ICashDrawerBalanceRepository, CashDrawerBalanceRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Add business services
@@ -122,8 +123,22 @@ builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 builder.Services.AddScoped<ILabelPrintingService, LabelPrintingService>();
+builder.Services.AddScoped<ICashDrawerService, CashDrawerService>();
+builder.Services.AddScoped<IRepairJobService, RepairJobService>();
 
-builder.Services.AddControllers();
+// Configure JSON serialization options
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+});
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    });
 
 
 // Add CORS via configuration
@@ -275,7 +290,7 @@ using (var scope = app.Services.CreateScope())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     
-    await DbInitializer.InitializeAsync(context, userManager, roleManager);
+    //await DbInitializer.InitializeAsync(context, userManager, roleManager);
 }
 
 app.Run();

@@ -139,6 +139,7 @@ public class CashReconciliationReport
     public decimal OpeningBalance { get; set; }
     public decimal CashSales { get; set; }
     public decimal CashReturns { get; set; }
+    public decimal CashRepairs { get; set; }
     public decimal ExpectedClosingBalance { get; set; }
     public decimal ActualClosingBalance { get; set; }
     public decimal CashOverShort { get; set; }

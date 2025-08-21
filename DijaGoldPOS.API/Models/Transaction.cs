@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace DijaGoldPOS.API.Models;
 
@@ -184,50 +185,60 @@ public class Transaction : BaseEntity
     /// <summary>
     /// Navigation property to branch
     /// </summary>
+    [JsonIgnore]
     public virtual Branch Branch { get; set; } = null!;
     
     /// <summary>
     /// Navigation property to customer
     /// </summary>
+    [JsonIgnore]
     public virtual Customer? Customer { get; set; }
     
     /// <summary>
     /// Navigation property to cashier
     /// </summary>
+    [JsonIgnore]
     public virtual ApplicationUser Cashier { get; set; } = null!;
     
     /// <summary>
     /// Navigation property to approving manager
     /// </summary>
+    [JsonIgnore]
     public virtual ApplicationUser? ApprovedByUser { get; set; }
     
     /// <summary>
     /// Navigation property to user who created this transaction
     /// </summary>
+    [JsonIgnore]
     public virtual ApplicationUser? CreatedByUser { get; set; }
     
     /// <summary>
     /// Navigation property to gold rate used
     /// </summary>
+    [JsonIgnore]
     public virtual GoldRate? GoldRate { get; set; }
     
     /// <summary>
     /// Navigation property to original transaction (for returns)
     /// </summary>
+    [JsonIgnore]
     public virtual Transaction? OriginalTransaction { get; set; }
     
     /// <summary>
     /// Navigation property to return transactions
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<Transaction> ReturnTransactions { get; set; } = new List<Transaction>();
     
     /// <summary>
     /// Navigation property to transaction items
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
     
     /// <summary>
     /// Navigation property to transaction taxes
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<TransactionTax> TransactionTaxes { get; set; } = new List<TransactionTax>();
 }

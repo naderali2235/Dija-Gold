@@ -66,4 +66,35 @@ public interface ISupplierRepository : IRepository<Supplier>
     /// <param name="additionalAmount">Additional purchase amount</param>
     /// <returns>True if within credit limit</returns>
     Task<bool> CanMakeAdditionalPurchaseAsync(int supplierId, decimal additionalAmount);
+
+    /// <summary>
+    /// Get supplier transactions with optional date filtering
+    /// </summary>
+    /// <param name="supplierId">Supplier ID</param>
+    /// <param name="fromDate">From date (optional)</param>
+    /// <param name="toDate">To date (optional)</param>
+    /// <param name="pageNumber">Page number</param>
+    /// <param name="pageSize">Page size</param>
+    /// <returns>Paged list of supplier transactions</returns>
+    Task<(List<SupplierTransaction> Transactions, int TotalCount)> GetTransactionsAsync(
+        int supplierId, 
+        DateTime? fromDate = null, 
+        DateTime? toDate = null,
+        int pageNumber = 1,
+        int pageSize = 20);
+
+    /// <summary>
+    /// Create a new supplier transaction
+    /// </summary>
+    /// <param name="transaction">Supplier transaction to create</param>
+    /// <returns>Created transaction</returns>
+    Task<SupplierTransaction> CreateTransactionAsync(SupplierTransaction transaction);
+
+    /// <summary>
+    /// Get recent transactions for a supplier
+    /// </summary>
+    /// <param name="supplierId">Supplier ID</param>
+    /// <param name="count">Number of recent transactions to return</param>
+    /// <returns>List of recent transactions</returns>
+    Task<List<SupplierTransaction>> GetRecentTransactionsAsync(int supplierId, int count = 10);
 }

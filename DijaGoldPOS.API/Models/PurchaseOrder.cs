@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace DijaGoldPOS.API.Models;
 
@@ -90,15 +91,18 @@ public class PurchaseOrder : BaseEntity
     /// <summary>
     /// Navigation property to supplier
     /// </summary>
+    [JsonIgnore]
     public virtual Supplier Supplier { get; set; } = null!;
     
     /// <summary>
     /// Navigation property to branch
     /// </summary>
+    [JsonIgnore]
     public virtual Branch Branch { get; set; } = null!;
     
     /// <summary>
     /// Navigation property to purchase order items
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<PurchaseOrderItem> PurchaseOrderItems { get; set; } = new List<PurchaseOrderItem>();
 }

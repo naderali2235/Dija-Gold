@@ -52,7 +52,6 @@ import {
   XCircle,
   Building,
   CreditCard,
-  FileText,
   ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
@@ -141,18 +140,9 @@ export default function Suppliers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isNewSupplierOpen, setIsNewSupplierOpen] = useState(false);
-  const [isNewPOOpen, setIsNewPOOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierDto | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [supplierForm, setSupplierForm] = useState<SupplierFormData>(defaultSupplierForm);
-  
-  // Purchase Order form state
-  const [poForm, setPOForm] = useState({
-    supplierId: '',
-    expectedDelivery: '',
-    notes: '',
-    items: [{ description: '', quantity: '', unitPrice: '', total: '' }],
-  });
   
   // Balance update form
   const [isBalanceUpdateOpen, setIsBalanceUpdateOpen] = useState(false);
@@ -367,25 +357,7 @@ export default function Suppliers() {
     }
   };
 
-  const handleCreatePO = () => {
-    if (!isManager) {
-      toast.error('Only managers can create purchase orders');
-      return;
-    }
-    console.log('Creating PO:', poForm);
-    toast.success('Purchase order created successfully');
-    setIsNewPOOpen(false);
-    resetPOForm();
-  };
 
-  const resetPOForm = () => {
-    setPOForm({
-      supplierId: '',
-      expectedDelivery: '',
-      notes: '',
-      items: [{ description: '', quantity: '', unitPrice: '', total: '' }],
-    });
-  };
 
   const resetForm = () => {
     setSupplierForm(defaultSupplierForm);
@@ -473,75 +445,13 @@ export default function Suppliers() {
           <p className="text-muted-foreground">Manage suppliers and purchase orders</p>
         </div>
         {isManager && (
-          <div className="flex gap-3">
-            <Dialog open={isNewPOOpen} onOpenChange={setIsNewPOOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="touch-target">
-                  <FileText className="mr-2 h-4 w-4" />
-                  New Purchase Order
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl">
-                <DialogHeader>
-                  <DialogTitle>Create Purchase Order</DialogTitle>
-                  <DialogDescription>
-                    Create a new purchase order for supplier
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Supplier</Label>
-                      <Select value={poForm.supplierId} onValueChange={(value) => setPOForm({...poForm, supplierId: value})}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select supplier" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {suppliersData?.items?.filter(s => s.isActive).map(supplier => (
-                            <SelectItem key={supplier.id} value={supplier.id.toString()}>
-                              {supplier.companyName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Expected Delivery</Label>
-                      <Input
-                        type="date"
-                        value={poForm.expectedDelivery}
-                        onChange={(e) => setPOForm({...poForm, expectedDelivery: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Notes</Label>
-                    <Textarea
-                      value={poForm.notes}
-                      onChange={(e) => setPOForm({...poForm, notes: e.target.value})}
-                      placeholder="Additional notes for this purchase order"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button variant="outline" onClick={() => setIsNewPOOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreatePO} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                    Create PO
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            
-            <Button 
-              onClick={() => setIsNewSupplierOpen(true)}
-              className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Supplier
-            </Button>
-          </div>
+          <Button 
+            onClick={() => setIsNewSupplierOpen(true)}
+            className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Supplier
+          </Button>
         )}
       </div>
 

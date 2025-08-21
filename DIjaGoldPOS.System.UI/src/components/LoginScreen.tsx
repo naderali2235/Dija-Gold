@@ -40,14 +40,14 @@ export default function LoginScreen() {
       setIsLoading(false);
     }
   };
-
+/*
   const quickLogin = (role: 'manager' | 'cashier') => {
     setUsername(role);
     // Demo credentials use a shared password defined in AuthContext mock: 'password'
     setPassword('password');
     setError('');
   };
-
+*/
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0D1B2A] via-[#1A2B3D] to-[#0D1B2A] flex items-center justify-center p-4">
       {/* Background pattern */}
@@ -158,47 +158,6 @@ export default function LoginScreen() {
             </Button>
           </form>
 
-          {/* Demo Accounts */}
-          <div className="space-y-3">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-[#0D1B2A]/10" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-[#0D1B2A]/60">
-                  Demo Accounts
-                </span>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={() => quickLogin('manager')}
-                disabled={isLoading}
-                className="h-16 flex flex-col items-center gap-1 border-[#D4AF37]/30 hover:border-[#D4AF37] hover:bg-[#D4AF37]/5 transition-colors"
-              >
-                <Shield className="h-4 w-4 text-[#D4AF37]" />
-                <span className="text-xs font-medium">Manager</span>
-                <Badge variant="outline" className="text-xs border-[#D4AF37]/50 text-[#D4AF37]">
-                  Full Access
-                </Badge>
-              </Button>
-              
-              <Button
-                variant="outline"
-                onClick={() => quickLogin('cashier')}
-                disabled={isLoading}
-                className="h-16 flex flex-col items-center gap-1 border-[#0D1B2A]/20 hover:border-[#0D1B2A]/40 hover:bg-[#0D1B2A]/5 transition-colors"
-              >
-                <User className="h-4 w-4 text-[#0D1B2A]" />
-                <span className="text-xs font-medium">Cashier</span>
-                <Badge variant="outline" className="text-xs">
-                  Limited Access
-                </Badge>
-              </Button>
-            </div>
-          </div>
 
           {/* Footer */}
           <div className="text-center pt-4 border-t border-[#0D1B2A]/10">

@@ -53,6 +53,22 @@ public interface IPricingService
     /// <param name="userId">User performing the update</param>
     /// <returns>Success status</returns>
     Task<bool> UpdateMakingChargesAsync(MakingChargesUpdate makingChargesUpdate, string userId);
+    
+    /// <summary>
+    /// Update tax configuration (Manager only)
+    /// </summary>
+    /// <param name="taxConfigurationUpdate">Tax configuration update</param>
+    /// <param name="userId">User performing the update</param>
+    /// <returns>Success status</returns>
+    Task<bool> UpdateTaxConfigurationAsync(TaxConfigurationUpdate taxConfigurationUpdate, string userId);
+
+    /// <summary>
+    /// Create new version of tax configuration (Manager only)
+    /// </summary>
+    /// <param name="taxConfigurationUpdate">Tax configuration update</param>
+    /// <param name="userId">User performing the update</param>
+    /// <returns>Success status</returns>
+    Task<bool> CreateTaxConfigurationVersionAsync(TaxConfigurationUpdate taxConfigurationUpdate, string userId);
 }
 
 /// <summary>
@@ -107,4 +123,19 @@ public class MakingChargesUpdate
     public ChargeType ChargeType { get; set; }
     public decimal ChargeValue { get; set; }
     public DateTime EffectiveFrom { get; set; }
+}
+
+/// <summary>
+/// Tax configuration update model
+/// </summary>
+public class TaxConfigurationUpdate
+{
+    public int? Id { get; set; } // Null for new, Id for update
+    public string TaxName { get; set; } = string.Empty;
+    public string TaxCode { get; set; } = string.Empty;
+    public ChargeType TaxType { get; set; }
+    public decimal TaxRate { get; set; }
+    public bool IsMandatory { get; set; } = true;
+    public DateTime EffectiveFrom { get; set; }
+    public int DisplayOrder { get; set; } = 1;
 }

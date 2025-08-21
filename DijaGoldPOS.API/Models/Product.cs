@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace DijaGoldPOS.API.Models;
 
@@ -106,15 +107,18 @@ public class Product : BaseEntity
     /// <summary>
     /// Navigation property to supplier
     /// </summary>
+    [JsonIgnore]
     public virtual Supplier? Supplier { get; set; }
     
     /// <summary>
     /// Navigation property to inventory records
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<Inventory> InventoryRecords { get; set; } = new List<Inventory>();
     
     /// <summary>
     /// Navigation property to transaction items
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
 }

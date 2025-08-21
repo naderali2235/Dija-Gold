@@ -3,8 +3,9 @@
  * Provides convenient hooks for data fetching with loading states and error handling
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import api, { ApiResponse } from '../services/api';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import api, { ApiResponse, GoldRate, MakingCharges, TaxConfigurationDto } from '../services/api';
+import { EnumLookupDto } from '../types/enums';
 
 // Generic hook for API state management
 export interface ApiState<T> {
@@ -97,9 +98,13 @@ export function useDeleteProduct() {
   return useApiCall(api.products.deleteProduct);
 }
 
+export function useProductPricing() {
+  return useApiCall(api.products.getProductPricing);
+}
+
 // Pricing hooks
 export function useGoldRates() {
-  const [state, { setData, setLoading, setError }] = useApiState<any[]>([]);
+  const [state, { setData, setLoading, setError }] = useApiState<GoldRate[]>([]);
 
   const fetchRates = useCallback(async () => {
     try {
@@ -118,16 +123,15 @@ export function useGoldRates() {
   }, [setData, setLoading, setError]);
 
   const updateRates = useCallback(async (rates: Array<{
-    karat: string;
-    buyRate: number;
-    sellRate: number;
+    karatType: number;
+    ratePerGram: number;
+    effectiveFrom: string;
   }>) => {
     try {
       setLoading(true);
       setError(null);
       await api.pricing.updateGoldRates(rates);
-      // Refresh rates after update
-      await fetchRates();
+      // Don't auto-refresh here - let the calling component handle refresh
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update gold rates';
       setError(errorMessage);
@@ -135,17 +139,117 @@ export function useGoldRates() {
     } finally {
       setLoading(false);
     }
-  }, [fetchRates, setLoading, setError]);
+  }, [setLoading, setError]);
 
-  // Auto-fetch on mount
-  useEffect(() => {
-    fetchRates();
-  }, [fetchRates]);
+  // Don't auto-fetch on mount - only fetch when explicitly called
 
   return {
     ...state,
     fetchRates,
     updateRates,
+  };
+}
+
+export function useMakingCharges() {
+  const [state, { setData, setLoading, setError }] = useApiState<MakingCharges[]>([]);
+
+  const fetchCharges = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const charges = await api.pricing.getMakingCharges();
+      setData(charges);
+      return charges;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch making charges';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setData, setLoading, setError]);
+
+  const updateCharges = useCallback(async (charges: {
+    id?: number;
+    name: string;
+    productCategory: number;
+    subCategory?: string;
+    chargeType: number;
+    chargeValue: number;
+    effectiveFrom: string;
+  }) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await api.pricing.updateMakingCharges(charges);
+      // Don't auto-refresh here - let the calling component handle refresh
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update making charges';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+
+  // Don't auto-fetch on mount - only fetch when explicitly called
+
+  return {
+    ...state,
+    fetchCharges,
+    updateCharges,
+  };
+}
+
+export function useTaxConfigurations() {
+  const [state, { setData, setLoading, setError }] = useApiState<TaxConfigurationDto[]>([]);
+
+  const fetchTaxConfigurations = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const taxConfigurations = await api.pricing.getTaxConfigurations();
+      setData(taxConfigurations);
+      return taxConfigurations;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tax configurations';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setData, setLoading, setError]);
+
+  const updateTaxConfiguration = useCallback(async (taxConfig: {
+    id?: number;
+    taxName: string;
+    taxCode: string;
+    taxType: number;
+    taxRate: number;
+    isMandatory: boolean;
+    effectiveFrom: string;
+    displayOrder: number;
+  }) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await api.pricing.updateTaxConfiguration(taxConfig);
+      // Don't auto-refresh here - let the calling component handle refresh
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update tax configuration';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+
+  // Don't auto-fetch on mount - only fetch when explicitly called
+
+  return {
+    ...state,
+    fetchTaxConfigurations,
+    updateTaxConfiguration,
   };
 }
 
@@ -224,12 +328,18 @@ export function usePaginatedApi<T>(
   }>({ items: [], totalCount: 0, pageNumber: 1, pageSize: 20, totalPages: 0 });
 
   const [params, setParams] = useState(initialParams);
+  const paramsRef = useRef(params);
+  
+  // Keep ref in sync with params
+  useEffect(() => {
+    paramsRef.current = params;
+  }, [params]);
 
   const fetchData = useCallback(async (newParams?: any) => {
     try {
       setLoading(true);
       setError(null);
-      const finalParams = newParams || params;
+      const finalParams = newParams || paramsRef.current;
       const result = await apiFunction(finalParams);
       setData(result);
       return result;
@@ -240,11 +350,11 @@ export function usePaginatedApi<T>(
     } finally {
       setLoading(false);
     }
-  }, [apiFunction, params, setData, setLoading, setError]);
+  }, [apiFunction, setData, setLoading, setError]);
 
   const updateParams = useCallback((newParams: any) => {
-    setParams({ ...params, ...newParams });
-  }, [params]);
+    setParams((prevParams: any) => ({ ...prevParams, ...newParams }));
+  }, []);
 
   const nextPage = useCallback(() => {
     const newPage = (state.data?.pageNumber || 1) + 1;
@@ -262,8 +372,8 @@ export function usePaginatedApi<T>(
 
   // Fetch data when params change
   useEffect(() => {
-    fetchData(params);
-  }, [params]);
+    fetchData();
+  }, [params]); // fetchData is stable, only depend on params
 
   return {
     ...state,
@@ -563,16 +673,87 @@ export function useTransactionStatuses() {
 }
 
 export function useKaratTypes() {
-  return useApiCall(api.lookups.getKaratTypes);
+  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+
+  const fetchKaratTypes = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const karatTypes = await api.lookups.getKaratTypes();
+      setData(karatTypes);
+      return karatTypes;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch karat types';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setData, setLoading, setError]);
+
+  // Don't auto-fetch on mount - only fetch when explicitly called
+
+  return {
+    ...state,
+    fetchKaratTypes,
+  };
 }
 
 export function useProductCategoryTypes() {
-  return useApiCall(api.lookups.getProductCategoryTypes);
+  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const categories = await api.lookups.getProductCategoryTypes();
+      setData(categories);
+      return categories;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch product category types';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setData, setLoading, setError]);
+
+  // Don't auto-fetch on mount - only fetch when explicitly called
+
+  return {
+    ...state,
+    fetchCategories,
+  };
 }
 
 export function useChargeTypes() {
-  return useApiCall(api.lookups.getChargeTypes);
+  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+
+  const fetchChargeTypes = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const chargeTypes = await api.lookups.getChargeTypes();
+      setData(chargeTypes);
+      return chargeTypes;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch charge types';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [setData, setLoading, setError]);
+
+  // Don't auto-fetch on mount - only fetch when explicitly called
+
+  return {
+    ...state,
+    fetchChargeTypes,
+  };
 }
+
+
 
 // Purchase Orders hooks
 export function useCreatePurchaseOrder() {

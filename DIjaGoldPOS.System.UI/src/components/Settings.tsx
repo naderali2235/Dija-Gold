@@ -1,35 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Shield, Save, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Shield, Save, AlertTriangle } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { useGoldRates } from '../hooks/useApi';
 import { PricingSettings } from './settings/PricingSettings';
 import { SystemSettings } from './settings/SystemSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
 import { NotificationSettings } from './settings/NotificationSettings';
-import { HardwareSettings } from './settings/HardwareSettings';
 import {
-  DEFAULT_GOLD_RATES,
   DEFAULT_TAX_SETTINGS,
   DEFAULT_SYSTEM_SETTINGS,
   DEFAULT_SECURITY_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
-  DEFAULT_HARDWARE_SETTINGS,
 } from './settings/constants';
 
 export default function Settings() {
   const { isManager } = useAuth();
   const [activeTab, setActiveTab] = useState('pricing');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const { data: goldRatesData, updateRates, fetchRates } = useGoldRates();
+
+  // Original values to compare against for detecting changes
+  const [originalGoldRates, setOriginalGoldRates] = useState<Record<string, string>>({
+    '24k': '0',
+    '22k': '0',
+    '21k': '0',
+    '18k': '0'
+  });
+  const [originalTaxSettings, setOriginalTaxSettings] = useState(DEFAULT_TAX_SETTINGS);
+  const [originalSystemSettings, setOriginalSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
+  const [originalSecuritySettings, setOriginalSecuritySettings] = useState(DEFAULT_SECURITY_SETTINGS);
+  const [originalNotificationSettings, setOriginalNotificationSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS);
 
   // Settings states
-  const [goldRates, setGoldRates] = useState(DEFAULT_GOLD_RATES);
+  const [goldRates, setGoldRates] = useState<Record<string, string>>({
+    '24k': '0',
+    '22k': '0',
+    '21k': '0',
+    '18k': '0'
+  });
   const [taxSettings, setTaxSettings] = useState(DEFAULT_TAX_SETTINGS);
   const [systemSettings, setSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
   const [securitySettings, setSecuritySettings] = useState(DEFAULT_SECURITY_SETTINGS);
   const [notificationSettings, setNotificationSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS);
-  const [hardwareSettings] = useState(DEFAULT_HARDWARE_SETTINGS);
+
+  const [resetManuallyEditedTrigger, setResetManuallyEditedTrigger] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Function to check if there are any unsaved changes
+  const checkForChanges = useCallback(() => {
+    const goldRatesChanged = JSON.stringify(goldRates) !== JSON.stringify(originalGoldRates);
+    const taxSettingsChanged = JSON.stringify(taxSettings) !== JSON.stringify(originalTaxSettings);
+    const systemSettingsChanged = JSON.stringify(systemSettings) !== JSON.stringify(originalSystemSettings);
+    const securitySettingsChanged = JSON.stringify(securitySettings) !== JSON.stringify(originalSecuritySettings);
+    const notificationSettingsChanged = JSON.stringify(notificationSettings) !== JSON.stringify(originalNotificationSettings);
+    
+    const hasChanges = goldRatesChanged || taxSettingsChanged || systemSettingsChanged || 
+                      securitySettingsChanged || notificationSettingsChanged;
+    
+    setHasUnsavedChanges(hasChanges);
+  }, [goldRates, originalGoldRates, taxSettings, originalTaxSettings, systemSettings, originalSystemSettings, securitySettings, originalSecuritySettings, notificationSettings, originalNotificationSettings]);
+
+  // Transform API gold rates to the format expected by the component
+  const transformGoldRates = (apiRates: any[]): Record<string, string> => {
+    const transformed: Record<string, string> = {
+      '24k': '0',
+      '22k': '0', 
+      '21k': '0',
+      '18k': '0'
+    };
+
+    apiRates?.forEach(rate => {
+      const karatKey = `${rate.karatType}k`;
+      if (transformed.hasOwnProperty(karatKey)) {
+        transformed[karatKey] = rate.ratePerGram.toString();
+      }
+    });
+
+    return transformed;
+  };
+
+  // Fetch data when component mounts
+  useEffect(() => {
+    if (isManager) {
+      fetchRates();
+    }
+  }, [isManager]); // Only depend on isManager, fetchRates is stable
+
+  // Update gold rates when API data is fetched
+  useEffect(() => {
+    if (goldRatesData && goldRatesData.length > 0) {
+      const transformedRates = transformGoldRates(goldRatesData);
+      setGoldRates(transformedRates);
+      setOriginalGoldRates(transformedRates);
+    }
+  }, [goldRatesData]);
+
+  // Check for changes whenever any setting changes
+  useEffect(() => {
+    checkForChanges();
+  }, [checkForChanges]);
+
+  // Handler functions - must be defined before any conditional returns
+  const handleGoldRateChange = useCallback((karat: string, value: string) => {
+    setGoldRates(prev => ({ ...prev, [karat]: value }));
+  }, []);
+
+  const handleTaxSettingChange = useCallback((setting: string, value: string) => {
+    setTaxSettings({ ...taxSettings, [setting]: value });
+  }, [taxSettings]);
+
+  const handleSystemSettingChange = useCallback((setting: string, value: string | boolean) => {
+    setSystemSettings({ ...systemSettings, [setting]: value });
+  }, [systemSettings]);
+
+  const handleSecuritySettingChange = useCallback((setting: string, value: string | boolean) => {
+    setSecuritySettings({ ...securitySettings, [setting]: value });
+  }, [securitySettings]);
+
+  const handleNotificationSettingChange = useCallback((setting: string, value: boolean) => {
+    setNotificationSettings({ ...notificationSettings, [setting]: value });
+  }, [notificationSettings]);
 
   if (!isManager) {
     return (
@@ -47,54 +140,48 @@ export default function Settings() {
     );
   }
 
-  const handleGoldRateChange = (karat: string, value: string) => {
-    setGoldRates({ ...goldRates, [karat]: value });
-    setHasUnsavedChanges(true);
-  };
+  const handleSaveSettings = async () => {
+    try {
+      setIsSaving(true);
+      
+      // Convert gold rates to the format expected by the API
+      const goldRateUpdates = Object.entries(goldRates).map(([karat, rate]) => ({
+        karatType: parseInt(karat.replace('k', '')),
+        ratePerGram: parseFloat(rate),
+        effectiveFrom: new Date().toISOString()
+      }));
 
-  const handleTaxSettingChange = (setting: string, value: string) => {
-    setTaxSettings({ ...taxSettings, [setting]: value });
-    setHasUnsavedChanges(true);
-  };
+      // Save gold rates to API
+      await updateRates(goldRateUpdates);
 
-  const handleSystemSettingChange = (setting: string, value: string | boolean) => {
-    setSystemSettings({ ...systemSettings, [setting]: value });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleSecuritySettingChange = (setting: string, value: string | boolean) => {
-    setSecuritySettings({ ...securitySettings, [setting]: value });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleNotificationSettingChange = (setting: string, value: boolean) => {
-    setNotificationSettings({ ...notificationSettings, [setting]: value });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleSaveSettings = () => {
-    console.log('Saving settings:', {
-      goldRates,
-      taxSettings,
-      systemSettings,
-      securitySettings,
-      notificationSettings,
-    });
-    setHasUnsavedChanges(false);
-    alert('Settings saved successfully!');
-  };
-
-  const resetToDefaults = () => {
-    if (window.confirm('Are you sure you want to reset to default settings? This action cannot be undone.')) {
-      setGoldRates(DEFAULT_GOLD_RATES);
-      setTaxSettings(DEFAULT_TAX_SETTINGS);
-      setSystemSettings(DEFAULT_SYSTEM_SETTINGS);
-      setSecuritySettings(DEFAULT_SECURITY_SETTINGS);
-      setNotificationSettings(DEFAULT_NOTIFICATION_SETTINGS);
+      console.log('Settings saved successfully:', {
+        goldRates,
+        taxSettings,
+        systemSettings,
+        securitySettings,
+        notificationSettings,
+      });
+      
+      // Update original values to current values after successful save
+      setOriginalGoldRates({ ...goldRates });
+      setOriginalTaxSettings({ ...taxSettings });
+      setOriginalSystemSettings({ ...systemSettings });
+      setOriginalSecuritySettings({ ...securitySettings });
+      setOriginalNotificationSettings({ ...notificationSettings });
+      
       setHasUnsavedChanges(false);
-      alert('Settings reset to defaults!');
+      // Trigger refresh of rates from database after saving
+      setResetManuallyEditedTrigger(prev => prev + 1);
+      alert('Settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
+
+
 
   return (
     <div className="space-y-6">
@@ -104,18 +191,14 @@ export default function Settings() {
           <p className="text-muted-foreground">Configure system preferences and business rules</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="touch-target hover:bg-[#F4E9B1] transition-colors" onClick={resetToDefaults}>
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset to Defaults
-          </Button>
           <Button 
             onClick={handleSaveSettings}
-            disabled={!hasUnsavedChanges}
+            disabled={!hasUnsavedChanges || isSaving}
             className="touch-target"
             variant="golden"
           >
             <Save className="mr-2 h-4 w-4" />
-            Save Changes
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
       </div>
@@ -137,12 +220,11 @@ export default function Settings() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="system">System</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="hardware">Hardware</TabsTrigger>
         </TabsList>
         
         <TabsContent value="pricing">
@@ -151,6 +233,7 @@ export default function Settings() {
             taxSettings={taxSettings}
             onGoldRateChange={handleGoldRateChange}
             onTaxSettingChange={handleTaxSettingChange}
+            onResetManuallyEdited={() => resetManuallyEditedTrigger}
           />
         </TabsContent>
         
@@ -173,10 +256,6 @@ export default function Settings() {
             notificationSettings={notificationSettings}
             onNotificationSettingChange={handleNotificationSettingChange}
           />
-        </TabsContent>
-        
-        <TabsContent value="hardware">
-          <HardwareSettings hardwareSettings={hardwareSettings} />
         </TabsContent>
       </Tabs>
     </div>

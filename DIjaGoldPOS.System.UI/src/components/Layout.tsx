@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from './ui/sidebar';
 
 import {
@@ -29,6 +30,7 @@ import {
   Settings,
   LogOut,
   Bell,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import DijaLogo, { DijaLogoWithText } from './DijaLogo';
@@ -39,8 +41,9 @@ interface LayoutProps {
   onPageChange: (page: string) => void;
 }
 
-export default function Layout({ children, currentPage, onPageChange }: LayoutProps) {
+function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
   const { user, logout, isManager } = useAuth();
+  const { open } = useSidebar();
 
   const menuItems = [
     {
@@ -55,13 +58,14 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
       id: 'sales',
       badge: null,
     },
-    {
-      title: 'Returns',
-      icon: RotateCcw,
-      id: 'returns',
-      badge: { text: '2', variant: 'secondary' as const },
-      managerOnly: false,
-    },
+    // Returns functionality hidden per user request
+    // {
+    //   title: 'Returns',
+    //   icon: RotateCcw,
+    //   id: 'returns',
+    //   badge: { text: '2', variant: 'secondary' as const },
+    //   managerOnly: false,
+    // },
     {
       title: 'Repairs',
       icon: Wrench,
@@ -115,6 +119,12 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
       managerOnly: true,
     },
     {
+      title: 'Cash Drawer',
+      icon: Wallet,
+      id: 'cash-drawer',
+      managerOnly: true,
+    },
+    {
       title: 'Users',
       icon: UserCog,
       id: 'users',
@@ -160,8 +170,7 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
   );
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full bg-background">
         {/* Sidebar */}
         <Sidebar className="border-r border-sidebar-border bg-sidebar">
           <SidebarHeader className="border-b border-sidebar-border p-6">
@@ -211,7 +220,9 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
         </Sidebar>
 
         {/* Main content */}
-        <main className="flex-1 flex flex-col md:ml-[var(--sidebar-width)]">
+        <main className={`flex-1 flex flex-col transition-all duration-300 ease-in-out ${
+          open ? 'md:ml-[var(--sidebar-width)]' : 'md:ml-0'
+        }`}>
           {/* Top bar */}
           <header className="flex items-center justify-between px-6 py-4 bg-card border-b border-border">
             <div className="flex items-center gap-4">
@@ -257,6 +268,13 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
           </div>
         </main>
       </div>
+  );
+}
+
+export default function Layout(props: LayoutProps) {
+  return (
+    <SidebarProvider>
+      <LayoutContent {...props} />
     </SidebarProvider>
   );
 }

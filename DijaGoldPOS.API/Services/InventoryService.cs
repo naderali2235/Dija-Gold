@@ -95,57 +95,73 @@ public class InventoryService : IInventoryService
         {
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                foreach (var item in transactionItems)
-                {
-                    var inventory = await _unitOfWork.Inventory.GetByProductAndBranchAsync(item.ProductId, branchId);
-                    if (inventory == null)
-                    {
-                        _logger.LogError("Inventory not found for product {ProductId} at branch {BranchId}", 
-                            item.ProductId, branchId);
-                        return false;
-                    }
-
-                    if (inventory.QuantityOnHand < item.Quantity)
-                    {
-                        _logger.LogError("Insufficient stock for product {ProductId}. Available: {Available}, Required: {Required}", 
-                            item.ProductId, inventory.QuantityOnHand, item.Quantity);
-                        return false;
-                    }
-
-                    // Update inventory
-                    inventory.QuantityOnHand -= item.Quantity;
-                    inventory.WeightOnHand -= item.TotalWeight;
-                    _unitOfWork.Inventory.Update(inventory);
-
-                    // Create inventory movement record
-                    var movement = new InventoryMovement
-                    {
-                        InventoryId = inventory.Id,
-                        MovementType = "Sale",
-                        QuantityChange = -item.Quantity,
-                        WeightChange = -item.TotalWeight,
-                        QuantityBalance = inventory.QuantityOnHand,
-                        WeightBalance = inventory.WeightOnHand,
-                        MovementDate = DateTime.UtcNow,
-                        ReferenceNumber = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                        Notes = $"Reserved for transaction by user {userId}",
-                        CreatedBy = userId
-                    };
-
-                    await _unitOfWork.InventoryMovements.AddAsync(movement);
-
-                    // Log audit trail
-                    await _auditService.LogAsync(userId, "Reserve", "Inventory", inventory.Id.ToString(), 
-                        $"Reserved {item.Quantity} units, {item.TotalWeight}g for transaction", null, null, null, null, branchId);
-                }
-
-                await _unitOfWork.SaveChangesAsync();
-                return true;
+                return await ReserveInventoryInternalAsync(transactionItems, branchId, userId);
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reserving inventory for branch {BranchId}", branchId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reserve inventory for a transaction (decrease stock) - internal method that works within existing transaction
+    /// </summary>
+    public async Task<bool> ReserveInventoryInternalAsync(List<TransactionItem> transactionItems, int branchId, string userId)
+    {
+        try
+        {
+            foreach (var item in transactionItems)
+            {
+                var inventory = await _unitOfWork.Inventory.GetByProductAndBranchAsync(item.ProductId, branchId);
+                if (inventory == null)
+                {
+                    _logger.LogError("Inventory not found for product {ProductId} at branch {BranchId}", 
+                        item.ProductId, branchId);
+                    return false;
+                }
+
+                if (inventory.QuantityOnHand < item.Quantity)
+                {
+                    _logger.LogError("Insufficient stock for product {ProductId}. Available: {Available}, Required: {Required}", 
+                        item.ProductId, inventory.QuantityOnHand, item.Quantity);
+                    return false;
+                }
+
+                // Update inventory
+                inventory.QuantityOnHand -= item.Quantity;
+                inventory.WeightOnHand -= item.TotalWeight;
+                _unitOfWork.Inventory.Update(inventory);
+
+                // Create inventory movement record
+                var movement = new InventoryMovement
+                {
+                    InventoryId = inventory.Id,
+                    MovementType = "Sale",
+                    QuantityChange = -item.Quantity,
+                    WeightChange = -item.TotalWeight,
+                    QuantityBalance = inventory.QuantityOnHand,
+                    WeightBalance = inventory.WeightOnHand,
+                    MovementDate = DateTime.UtcNow,
+                    ReferenceNumber = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                    Notes = $"Reserved for transaction by user {userId}",
+                    CreatedBy = userId
+                };
+
+                await _unitOfWork.InventoryMovements.AddAsync(movement);
+
+                // Log audit trail
+                await _auditService.LogAsync(userId, "Reserve", "Inventory", inventory.Id.ToString(), 
+                    $"Reserved {item.Quantity} units, {item.TotalWeight}g for transaction", null, null, null, null, branchId);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in internal inventory reservation for branch {BranchId}", branchId);
             throw;
         }
     }

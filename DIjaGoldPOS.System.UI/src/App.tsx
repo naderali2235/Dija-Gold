@@ -4,7 +4,7 @@ import LoginScreen from './components/LoginScreen';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Sales from './components/Sales';
-import Returns from './components/Returns';
+// import Returns from './components/Returns'; // Hidden per user request
 import Repairs from './components/Repairs';
 import Products from './components/Products';
 import Inventory from './components/Inventory';
@@ -12,6 +12,7 @@ import Customers from './components/Customers';
 import Suppliers from './components/Suppliers';
 import PurchaseOrders from './components/PurchaseOrders';
 import Reports from './components/Reports';
+import CashDrawer from './components/CashDrawer';
 import Users from './components/Users';
 import Settings from './components/Settings';
 import { Toaster } from './components/ui/sonner';
@@ -49,8 +50,8 @@ function AppContent() {
         return <Dashboard onNavigate={setCurrentPage} />;
       case 'sales':
         return <Sales />;
-      case 'returns':
-        return <Returns />;
+      // case 'returns': // Hidden per user request
+      //   return <Returns />;
       case 'repairs':
         return <Repairs />;
       case 'products':
@@ -65,6 +66,8 @@ function AppContent() {
         return <PurchaseOrders />;
       case 'reports':
         return <Reports />;
+      case 'cash-drawer':
+        return <CashDrawer />;
       case 'users':
         return <Users />;
       case 'settings':

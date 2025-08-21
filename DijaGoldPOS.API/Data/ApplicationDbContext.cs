@@ -41,8 +41,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     
+    // Supplier Transactions
+    public DbSet<SupplierTransaction> SupplierTransactions { get; set; }
+    
     // Audit
     public DbSet<AuditLog> AuditLogs { get; set; }
+    
+    // Cash Management
+    public DbSet<CashDrawerBalance> CashDrawerBalances { get; set; }
+    
+    // Repair Jobs
+    public DbSet<RepairJob> RepairJobs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -97,6 +106,30 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(s => s.CompanyName).IsRequired().HasMaxLength(200);
             entity.Property(s => s.CreditLimit).HasColumnType("decimal(18,2)");
             entity.Property(s => s.CurrentBalance).HasColumnType("decimal(18,2)");
+        });
+
+        // Configure SupplierTransaction
+        builder.Entity<SupplierTransaction>(entity =>
+        {
+            entity.HasIndex(st => st.TransactionNumber).IsUnique();
+            entity.Property(st => st.TransactionNumber).IsRequired().HasMaxLength(50);
+            entity.Property(st => st.TransactionType).IsRequired().HasMaxLength(50);
+            entity.Property(st => st.Amount).HasColumnType("decimal(18,2)");
+            entity.Property(st => st.BalanceAfterTransaction).HasColumnType("decimal(18,2)");
+            entity.Property(st => st.ReferenceNumber).HasMaxLength(100);
+            entity.Property(st => st.Notes).HasMaxLength(1000);
+            entity.Property(st => st.CreatedByUserId).IsRequired().HasMaxLength(450);
+
+            // Relationships
+            entity.HasOne(st => st.Supplier)
+                  .WithMany()
+                  .HasForeignKey(st => st.SupplierId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(st => st.Branch)
+                  .WithMany()
+                  .HasForeignKey(st => st.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Configure GoldRate
@@ -320,6 +353,52 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Configure CashDrawerBalance
+        builder.Entity<CashDrawerBalance>(entity =>
+        {
+            entity.HasIndex(cdb => new { cdb.BranchId, cdb.BalanceDate }).IsUnique();
+            entity.HasIndex(cdb => cdb.BalanceDate);
+            entity.HasIndex(cdb => cdb.Status);
+
+            entity.Property(cdb => cdb.OpeningBalance).HasColumnType("decimal(18,2)");
+            entity.Property(cdb => cdb.ExpectedClosingBalance).HasColumnType("decimal(18,2)");
+            entity.Property(cdb => cdb.ActualClosingBalance).HasColumnType("decimal(18,2)");
+
+            entity.HasOne(cdb => cdb.Branch)
+                  .WithMany()
+                  .HasForeignKey(cdb => cdb.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure RepairJob
+        builder.Entity<RepairJob>(entity =>
+        {
+            entity.HasIndex(rj => rj.TransactionId).IsUnique();
+            entity.HasIndex(rj => rj.Status);
+            entity.HasIndex(rj => rj.Priority);
+            entity.HasIndex(rj => rj.AssignedTechnicianId);
+
+            entity.Property(rj => rj.TechnicianNotes).HasMaxLength(2000);
+            entity.Property(rj => rj.MaterialsUsed).HasMaxLength(1000);
+            entity.Property(rj => rj.ActualCost).HasColumnType("decimal(18,2)");
+            entity.Property(rj => rj.HoursSpent).HasColumnType("decimal(5,2)");
+
+            entity.HasOne(rj => rj.Transaction)
+                  .WithOne()
+                  .HasForeignKey<RepairJob>(rj => rj.TransactionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rj => rj.AssignedTechnician)
+                  .WithMany()
+                  .HasForeignKey(rj => rj.AssignedTechnicianId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(rj => rj.QualityChecker)
+                  .WithMany()
+                  .HasForeignKey(rj => rj.QualityCheckedBy)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
         // Configure soft delete filter for BaseEntity
         builder.Entity<Branch>().HasQueryFilter(e => e.IsActive);
         builder.Entity<Product>().HasQueryFilter(e => e.IsActive);
@@ -335,6 +414,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<InventoryMovement>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrder>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrderItem>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<CashDrawerBalance>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<RepairJob>().HasQueryFilter(e => e.IsActive);
     }
 
     /// <summary>

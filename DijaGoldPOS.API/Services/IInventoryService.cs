@@ -49,6 +49,15 @@ public interface IInventoryService
     Task<bool> ReserveInventoryAsync(List<TransactionItem> transactionItems, int branchId, string userId);
 
     /// <summary>
+    /// Reserve inventory for a transaction (decrease stock) - internal method that works within existing transaction
+    /// </summary>
+    /// <param name="transactionItems">List of transaction items</param>
+    /// <param name="branchId">Branch ID</param>
+    /// <param name="userId">User performing the action</param>
+    /// <returns>Success status</returns>
+    Task<bool> ReserveInventoryInternalAsync(List<TransactionItem> transactionItems, int branchId, string userId);
+
+    /// <summary>
     /// Release reserved inventory (return to stock)
     /// </summary>
     /// <param name="transactionItems">List of transaction items</param>

@@ -300,7 +300,10 @@ public class ProductsController : ControllerBase
             }
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
-            var oldValues = System.Text.Json.JsonSerializer.Serialize(product);
+            
+            // Create DTO for old values to avoid circular references
+            var oldValuesDto = _mapper.Map<ProductDto>(product);
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(oldValuesDto);
 
             // Update product properties
             product.ProductCode = request.ProductCode;
@@ -335,28 +338,7 @@ public class ProductsController : ControllerBase
                 System.Text.Json.JsonSerializer.Serialize(request)
             );
 
-            var productDto = new ProductDto
-            {
-                Id = product.Id,
-                ProductCode = product.ProductCode,
-                Name = product.Name,
-                CategoryType = product.CategoryType,
-                KaratType = product.KaratType,
-                Weight = product.Weight,
-                Brand = product.Brand,
-                DesignStyle = product.DesignStyle,
-                SubCategory = product.SubCategory,
-                Shape = product.Shape,
-                PurityCertificateNumber = product.PurityCertificateNumber,
-                CountryOfOrigin = product.CountryOfOrigin,
-                YearOfMinting = product.YearOfMinting,
-                FaceValue = product.FaceValue,
-                HasNumismaticValue = product.HasNumismaticValue,
-                MakingChargesApplicable = product.MakingChargesApplicable,
-                SupplierId = product.SupplierId,
-                CreatedAt = product.CreatedAt,
-                IsActive = product.IsActive
-            };
+            var productDto = _mapper.Map<ProductDto>(product);
 
             _logger.LogInformation("Product updated: {ProductId} by user {UserId}", product.Id, userId);
 

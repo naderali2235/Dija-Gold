@@ -100,7 +100,7 @@ const defaultUserForm: UserFormData = {
   isActive: true,
 };
 
-const availableRoles = ['Admin', 'Manager', 'Cashier'];
+const availableRoles = ['Manager', 'Cashier'];
 
 export default function Users() {
   const { user: currentUser, isManager } = useAuth();
@@ -403,9 +403,9 @@ export default function Users() {
               <SelectContent className="bg-white border-gray-200 shadow-lg">
                 <SelectItem value="all" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">All Branches</SelectItem>
                 {branchesLoading ? (
-                  <SelectItem value="" disabled>Loading branches...</SelectItem>
+                  <SelectItem value="loading" disabled>Loading branches...</SelectItem>
                 ) : branchesError ? (
-                  <SelectItem value="" disabled>Error loading branches</SelectItem>
+                  <SelectItem value="error" disabled>Error loading branches</SelectItem>
                 ) : branchesData?.items?.map((branch: BranchDto) => (
                   <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                     {branch.name}
@@ -674,9 +674,9 @@ export default function Users() {
                 <SelectContent className="bg-white border-gray-200 shadow-lg">
                   <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">No Branch</SelectItem>
                   {branchesLoading ? (
-                    <SelectItem value="" disabled>Loading branches...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading branches...</SelectItem>
                   ) : branchesError ? (
-                    <SelectItem value="" disabled>Error loading branches</SelectItem>
+                    <SelectItem value="error" disabled>Error loading branches</SelectItem>
                   ) : branchesData?.items?.map((branch: BranchDto) => (
                     <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                       {branch.name}
@@ -815,9 +815,9 @@ export default function Users() {
                         <SelectContent className="bg-white border-gray-200 shadow-lg">
                           <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">No Branch</SelectItem>
                           {branchesLoading ? (
-                            <SelectItem value="" disabled>Loading branches...</SelectItem>
+                            <SelectItem value="loading" disabled>Loading branches...</SelectItem>
                           ) : branchesError ? (
-                            <SelectItem value="" disabled>Error loading branches</SelectItem>
+                            <SelectItem value="error" disabled>Error loading branches</SelectItem>
                           ) : branchesData?.items?.map((branch: BranchDto) => (
                             <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
                               {branch.name}

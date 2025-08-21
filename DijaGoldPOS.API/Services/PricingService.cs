@@ -124,8 +124,16 @@ public class PricingService : IPricingService
             // Calculate final total
             result.FinalTotal = result.TaxableAmount + result.TotalTaxAmount;
 
-            _logger.LogInformation("Price calculated for product {ProductCode}: {FinalTotal} EGP", 
-                product.ProductCode, result.FinalTotal);
+            _logger.LogInformation("=== PRICING SERVICE DEBUG for {ProductCode} ===", product.ProductCode);
+            _logger.LogInformation("Gold Value: {GoldValue:F2} (Weight: {Weight:F3}g × Rate: {Rate:F2})", 
+                result.GoldValue, totalWeight, goldRate);
+            _logger.LogInformation("Making Charges: {MakingCharges:F2}", result.MakingChargesAmount);
+            _logger.LogInformation("SubTotal: {SubTotal:F2}", result.SubTotal);
+            _logger.LogInformation("Customer Discount: {Discount:F2}", result.DiscountAmount);
+            _logger.LogInformation("Taxable Amount: {TaxableAmount:F2}", result.TaxableAmount);
+            _logger.LogInformation("Total Tax: {TotalTax:F2}", result.TotalTaxAmount);
+            _logger.LogInformation("Final Total: {FinalTotal:F2}", result.FinalTotal);
+            _logger.LogInformation("=== END PRICING DEBUG ===");
 
             return result;
         }
@@ -142,7 +150,7 @@ public class PricingService : IPricingService
     public async Task<GoldRate?> GetCurrentGoldRateAsync(KaratType karatType)
     {
         return await _context.GoldRates
-            .Where(gr => gr.KaratType == karatType && gr.IsCurrent)
+            .Where(gr => gr.KaratType == karatType && gr.EffectiveTo == null)
             .OrderByDescending(gr => gr.EffectiveFrom)
             .FirstOrDefaultAsync();
     }
@@ -322,6 +330,167 @@ public class PricingService : IPricingService
         {
             await transaction.RollbackAsync();
             _logger.LogError(ex, "Error updating making charges for user {UserId}", userId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Update tax configuration (Manager only)
+    /// </summary>
+    public async Task<bool> UpdateTaxConfigurationAsync(TaxConfigurationUpdate update, string userId)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            // Business logic validation: Check for overlapping effective dates for the same tax code
+            var overlappingConfigs = await _context.TaxConfigurations
+                .Where(tc => tc.TaxCode == update.TaxCode && 
+                           tc.Id != (update.Id ?? 0) && // Exclude current record if updating
+                           tc.EffectiveTo == null && // Only check current/active configurations
+                           tc.EffectiveFrom <= update.EffectiveFrom) // Check for overlap
+                .ToListAsync();
+
+            if (overlappingConfigs.Any())
+            {
+                _logger.LogWarning("Tax code {TaxCode} already has an active configuration with overlapping effective dates", update.TaxCode);
+                return false;
+            }
+
+            if (update.Id.HasValue)
+            {
+                // Update existing configuration
+                var existing = await _context.TaxConfigurations.FindAsync(update.Id.Value);
+                if (existing == null)
+                    return false;
+
+                // Store old values for audit
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(existing);
+
+                // Update the existing configuration
+                existing.TaxName = update.TaxName;
+                existing.TaxType = update.TaxType;
+                existing.TaxRate = update.TaxRate;
+                existing.IsMandatory = update.IsMandatory;
+                existing.EffectiveFrom = update.EffectiveFrom;
+                existing.DisplayOrder = update.DisplayOrder;
+                existing.ModifiedBy = userId;
+                existing.ModifiedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                // Log audit trail
+                await _auditService.LogAsync(
+                    userId,
+                    "UPDATE_TAX_CONFIGURATION",
+                    "TaxConfiguration",
+                    existing.Id.ToString(),
+                    $"Updated tax configuration for {update.TaxName} ({update.TaxCode})",
+                    oldValues: oldValues,
+                    newValues: System.Text.Json.JsonSerializer.Serialize(existing)
+                );
+            }
+            else
+            {
+                // Create new configuration
+                var newConfig = new TaxConfiguration
+                {
+                    TaxName = update.TaxName,
+                    TaxCode = update.TaxCode,
+                    TaxType = update.TaxType,
+                    TaxRate = update.TaxRate,
+                    IsMandatory = update.IsMandatory,
+                    EffectiveFrom = update.EffectiveFrom,
+                    DisplayOrder = update.DisplayOrder,
+                    IsCurrent = true,
+                    CreatedBy = userId,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _context.TaxConfigurations.AddAsync(newConfig);
+                await _context.SaveChangesAsync();
+
+                // Log audit trail
+                await _auditService.LogAsync(
+                    userId,
+                    "CREATE_TAX_CONFIGURATION",
+                    "TaxConfiguration",
+                    newConfig.Id.ToString(),
+                    $"Created new tax configuration for {update.TaxName} ({update.TaxCode})",
+                    newValues: System.Text.Json.JsonSerializer.Serialize(newConfig)
+                );
+            }
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("Tax configuration updated by user {UserId}", userId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error updating tax configuration for user {UserId}", userId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Create new version of tax configuration (Manager only)
+    /// </summary>
+    public async Task<bool> CreateTaxConfigurationVersionAsync(TaxConfigurationUpdate update, string userId)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            // End current active configuration with the same tax code
+            var currentConfigs = await _context.TaxConfigurations
+                .Where(tc => tc.TaxCode == update.TaxCode && tc.IsCurrent)
+                .ToListAsync();
+
+            foreach (var currentConfig in currentConfigs)
+            {
+                currentConfig.IsCurrent = false;
+                currentConfig.EffectiveTo = update.EffectiveFrom.AddMinutes(-1);
+                currentConfig.ModifiedBy = userId;
+                currentConfig.ModifiedAt = DateTime.UtcNow;
+            }
+
+            // Create new version
+            var newConfig = new TaxConfiguration
+            {
+                TaxName = update.TaxName,
+                TaxCode = update.TaxCode,
+                TaxType = update.TaxType,
+                TaxRate = update.TaxRate,
+                IsMandatory = update.IsMandatory,
+                EffectiveFrom = update.EffectiveFrom,
+                DisplayOrder = update.DisplayOrder,
+                IsCurrent = true,
+                CreatedBy = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _context.TaxConfigurations.AddAsync(newConfig);
+            await _context.SaveChangesAsync();
+
+            // Log audit trail
+            await _auditService.LogAsync(
+                userId,
+                "CREATE_TAX_CONFIGURATION_VERSION",
+                "TaxConfiguration",
+                newConfig.Id.ToString(),
+                $"Created new version of tax configuration for {update.TaxName} ({update.TaxCode})",
+                newValues: System.Text.Json.JsonSerializer.Serialize(newConfig)
+            );
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("New tax configuration version created by user {UserId}", userId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error creating tax configuration version for user {UserId}", userId);
             return false;
         }
     }

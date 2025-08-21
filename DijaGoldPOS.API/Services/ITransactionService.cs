@@ -105,6 +105,14 @@ public interface ITransactionService
     /// <param name="transactionType">Transaction type</param>
     /// <returns>Next transaction number</returns>
     Task<string> GenerateTransactionNumberAsync(int branchId, TransactionType transactionType);
+
+    /// <summary>
+    /// Debug method to calculate transaction totals without saving
+    /// </summary>
+    /// <param name="saleRequest">Sale transaction request</param>
+    /// <param name="userId">User ID</param>
+    /// <returns>Debug calculation information</returns>
+    Task<object> DebugCalculateTransactionTotalsAsync(SaleTransactionRequest saleRequest, string userId);
 }
 
 /// <summary>

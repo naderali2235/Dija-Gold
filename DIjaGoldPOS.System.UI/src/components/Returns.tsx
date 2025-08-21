@@ -51,7 +51,7 @@ interface Transaction {
   customerName: string;
   items: TransactionItem[];
   total: number;
-  status: 'completed' | 'returned' | 'partially_returned';
+  status: 'completed' | 'returned' | 'partially_returned' | 'pending' | 'other';
   canReturn: boolean;
 }
 
@@ -93,7 +93,7 @@ export default function Returns() {
           const result = await searchTransactions({
             branchId: user.branch.id,
             transactionType: 'Sale',
-            status: 'Completed',
+            // Remove status filter to show all transactions (Pending, Completed, etc.)
             pageSize: 50,
           });
           
@@ -104,8 +104,12 @@ export default function Returns() {
             date: apiTransaction.transactionDate,
             customerName: apiTransaction.customerName || 'Walk-in Customer',
             total: apiTransaction.totalAmount,
-            status: apiTransaction.status.toLowerCase() as 'completed' | 'returned' | 'partially_returned',
-            canReturn: apiTransaction.status === 'Completed',
+            status: (typeof apiTransaction.status === 'string' ? apiTransaction.status.toLowerCase() : 
+                     apiTransaction.status === 2 ? 'completed' : 
+                     apiTransaction.status === 1 ? 'pending' :
+                     'other') as 'completed' | 'returned' | 'partially_returned' | 'pending' | 'other',
+            canReturn: (typeof apiTransaction.status === 'string' && apiTransaction.status === 'Completed') || 
+                      (typeof apiTransaction.status === 'number' && apiTransaction.status === 2),
             items: apiTransaction.items.map((item, index) => ({
               id: item.id.toString(),
               name: item.productName,

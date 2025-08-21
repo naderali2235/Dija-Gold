@@ -136,6 +136,9 @@ public class UpdateSupplierBalanceRequestDto
     [Required(ErrorMessage = "Transaction type is required")]
     public string TransactionType { get; set; } = string.Empty; // "payment", "adjustment", "credit"
 
+    [StringLength(100, ErrorMessage = "Reference number cannot exceed 100 characters")]
+    public string? ReferenceNumber { get; set; }
+
     [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters")]
     public string? Notes { get; set; }
 }

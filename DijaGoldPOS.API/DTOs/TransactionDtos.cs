@@ -27,6 +27,7 @@ public class TransactionDto
     public decimal ChangeGiven { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public TransactionStatus Status { get; set; }
+    public string StatusDisplayName => Status.ToString();
     public string? ReturnReason { get; set; }
     public string? RepairDescription { get; set; }
     public DateTime? EstimatedCompletionDate { get; set; }
@@ -232,4 +233,40 @@ public class TransactionReceiptDto
     public string ReceiptContent { get; set; } = string.Empty;
     public bool PrintedSuccessfully { get; set; }
     public string? PrintError { get; set; }
+}
+
+/// <summary>
+/// Void transaction request DTO
+/// </summary>
+public class VoidTransactionRequestDto
+{
+    [Required(ErrorMessage = "Void reason is required")]
+    [StringLength(500, ErrorMessage = "Reason cannot exceed 500 characters")]
+    public string Reason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Refund transaction request DTO
+/// </summary>
+public class RefundTransactionRequestDto
+{
+    [Required(ErrorMessage = "Original transaction ID is required")]
+    public int OriginalTransactionId { get; set; }
+
+    [Required(ErrorMessage = "Refund amount is required")]
+    [Range(0.01, double.MaxValue, ErrorMessage = "Refund amount must be greater than 0")]
+    public decimal RefundAmount { get; set; }
+
+    [Required(ErrorMessage = "Refund reason is required")]
+    [StringLength(500, ErrorMessage = "Reason cannot exceed 500 characters")]
+    public string Reason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Can void response DTO
+/// </summary>
+public class CanVoidResponseDto
+{
+    public bool CanVoid { get; set; }
+    public string? ErrorMessage { get; set; }
 }

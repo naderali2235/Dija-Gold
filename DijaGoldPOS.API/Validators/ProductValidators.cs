@@ -16,7 +16,7 @@ public class CreateProductRequestDtoValidator : AbstractValidator<CreateProductR
             .MaximumLength(200);
 
         RuleFor(x => x.Weight)
-            .GreaterThan(0).WithMessage("Weight must be greater than 0");
+            .InclusiveBetween(0.001m, 999999.999m).WithMessage("Weight must be between 0.001 and 999999.999 grams");
 
         RuleFor(x => x.Brand)
             .MaximumLength(100)

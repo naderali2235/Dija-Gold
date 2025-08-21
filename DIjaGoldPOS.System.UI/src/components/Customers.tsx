@@ -116,6 +116,38 @@ export default function Customers() {
     fetchTransactionStatuses();
   }, [fetchTransactionTypes, fetchTransactionStatuses]);
 
+  // Function to get transaction type display name
+  const getTransactionTypeName = (type: string | number): 'sale' | 'return' | 'repair' => {
+    // If it's already a string, it might be the display name
+    if (typeof type === 'string') {
+      // Check if it's a numeric string (enum value)
+      const numericValue = parseInt(type);
+      if (!isNaN(numericValue)) {
+        const transactionType = transactionTypesData?.find(t => t.value === numericValue);
+        const displayName = transactionType ? transactionType.displayName.toLowerCase() : type.toLowerCase();
+        return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
+          ? displayName as 'sale' | 'return' | 'repair' 
+          : 'sale';
+      }
+      // If it's already a display name, return as is if valid
+      const lowerType = type.toLowerCase();
+      return (lowerType === 'sale' || lowerType === 'return' || lowerType === 'repair') 
+        ? lowerType as 'sale' | 'return' | 'repair' 
+        : 'sale';
+    }
+    
+    // If it's a number, find the display name
+    if (typeof type === 'number') {
+      const transactionType = transactionTypesData?.find(t => t.value === type);
+      const displayName = transactionType ? transactionType.displayName.toLowerCase() : 'sale';
+      return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
+        ? displayName as 'sale' | 'return' | 'repair' 
+        : 'sale';
+    }
+    
+    return 'sale';
+  };
+
   // Function to fetch customer transactions
   const fetchCustomerTransactions = async (customerId: number) => {
     try {
@@ -130,7 +162,7 @@ export default function Customers() {
         id: transaction.id.toString(),
         transactionNumber: transaction.transactionNumber,
         date: transaction.transactionDate,
-        type: transaction.transactionType.toLowerCase(),
+        type: getTransactionTypeName(transaction.transactionType),
         amount: transaction.totalAmount,
         items: transaction.items?.length || 0,
         status: transaction.status.toLowerCase(),

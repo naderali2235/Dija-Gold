@@ -136,7 +136,10 @@ export const authApi = {
       body: JSON.stringify(credentials),
     });
     
+    console.log('Login API response:', response);
+    
     if (response.success && response.data) {
+      console.log('Login successful, user data:', response.data.user);
       setAuthToken(response.data.token);
       return response.data;
     }
@@ -157,7 +160,10 @@ export const authApi = {
   async getCurrentUser(): Promise<User> {
     const response = await apiRequest<User>('/auth/me');
     
+    console.log('getCurrentUser API response:', response);
+    
     if (response.success && response.data) {
+      console.log('User data from API:', response.data);
       return response.data;
     }
     
@@ -184,12 +190,25 @@ export const authApi = {
       method: 'POST',
     });
     
+    console.log('Refresh token API response:', response);
+    
     if (response.success && response.data) {
+      console.log('Token refreshed, user data:', response.data.user);
       setAuthToken(response.data.token);
       return response.data;
     }
     
     throw new Error(response.message || 'Failed to refresh token');
+  },
+
+  async debugUsers(): Promise<any> {
+    const response = await apiRequest('/auth/debug/users');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get debug user information');
   }
 };
 
@@ -198,8 +217,8 @@ export interface Product {
   id: number;
   productCode: string;
   name: string;
-  categoryType: 'GoldJewelry' | 'Bullion' | 'Coins';
-  karatType: '18K' | '21K' | '22K' | '24K';
+  categoryType: number; // ProductCategoryType enum value
+  karatType: number; // KaratType enum value
   weight: number;
   brand?: string;
   designStyle?: string;
@@ -225,6 +244,16 @@ export interface ProductSearchRequest {
   isActive?: boolean;
   pageNumber?: number;
   pageSize?: number;
+}
+
+export interface ProductPricingDto {
+  productId: number;
+  productName: string;
+  currentGoldRate: number;
+  estimatedBasePrice: number;
+  estimatedMakingCharges: number;
+  estimatedTotalPrice: number;
+  priceCalculatedAt: string;
 }
 
 export const productsApi = {
@@ -262,6 +291,21 @@ export const productsApi = {
     }
     
     throw new Error(response.message || 'Failed to fetch product');
+  },
+
+  async getProductPricing(id: number, quantity: number = 1, customerId?: number): Promise<ProductPricingDto> {
+    const queryParams = new URLSearchParams({
+      quantity: quantity.toString(),
+      ...(customerId && { customerId: customerId.toString() })
+    });
+    
+    const response = await apiRequest<ProductPricingDto>(`/products/${id}/pricing?${queryParams}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch product pricing');
   },
 
   async createProduct(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
@@ -304,38 +348,165 @@ export const productsApi = {
 // Pricing API
 export interface GoldRate {
   id: number;
-  karat: string;
-  buyRate: number;
-  sellRate: number;
+  karatType: number; // KaratType enum value (18, 21, 22, 24)
+  ratePerGram: number;
   effectiveFrom: string;
-  isActive: boolean;
+  effectiveTo?: string;
+  isCurrent: boolean;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface MakingCharges {
+  id: number;
+  name: string;
+  productCategory: number; // ProductCategoryType enum value
+  subCategory?: string;
+  chargeType: number; // ChargeType enum value (1 = Percentage, 2 = Fixed)
+  chargeValue: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  isCurrent: boolean;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface TaxConfigurationDto {
+  id: number;
+  taxName: string;
+  taxCode: string;
+  taxType: number; // ChargeType enum value (1 = Percentage, 2 = Fixed)
+  taxRate: number;
+  isMandatory: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  isCurrent: boolean;
+  displayOrder: number;
+  createdAt: string;
+  createdBy: string;
 }
 
 export const pricingApi = {
   async getGoldRates(): Promise<GoldRate[]> {
-    const response = await apiRequest<GoldRate[]>('/pricing/gold-rates');
+    const response = await apiRequest<any[]>('/Pricing/gold-rates');
     
     if (response.success && response.data) {
-      return response.data;
+      // Map backend response to frontend interface
+      // Backend sends KaratType (enum), frontend expects karatType (number)
+      return response.data.map((rate: any) => ({
+        id: rate.id,
+        karatType: rate.karatType || rate.KaratType, // Handle both cases
+        ratePerGram: rate.ratePerGram || rate.RatePerGram,
+        effectiveFrom: rate.effectiveFrom || rate.EffectiveFrom,
+        effectiveTo: rate.effectiveTo || rate.EffectiveTo,
+        isCurrent: rate.isCurrent !== undefined ? rate.isCurrent : rate.IsCurrent,
+        createdAt: rate.createdAt || rate.CreatedAt,
+        createdBy: rate.createdBy || rate.CreatedBy
+      }));
     }
     
     throw new Error(response.message || 'Failed to fetch gold rates');
   },
 
-  async updateGoldRates(rates: Array<{
-    karat: string;
-    buyRate: number;
-    sellRate: number;
-  }>): Promise<void> {
-    const response = await apiRequest('/pricing/gold-rates', {
+  async updateGoldRates(goldRates: {
+    karatType: number;
+    ratePerGram: number;
+    effectiveFrom: string;
+  }[]): Promise<void> {
+    const response = await apiRequest<void>('/Pricing/gold-rates', {
       method: 'POST',
-      body: JSON.stringify(rates),
+      body: JSON.stringify({ goldRates }),
     });
     
     if (!response.success) {
       throw new Error(response.message || 'Failed to update gold rates');
     }
-  }
+  },
+
+  async getMakingCharges(): Promise<MakingCharges[]> {
+    const response = await apiRequest<any[]>('/Pricing/making-charges');
+    
+    if (response.success && response.data) {
+      // Map backend response to frontend interface
+      // Backend sends ProductCategory (enum), frontend expects productCategory (number)
+      return response.data.map((charge: any) => ({
+        id: charge.id,
+        name: charge.name || charge.Name,
+        productCategory: charge.productCategory || charge.ProductCategory,
+        subCategory: charge.subCategory || charge.SubCategory,
+        chargeType: charge.chargeType || charge.ChargeType,
+        chargeValue: charge.chargeValue || charge.ChargeValue,
+        effectiveFrom: charge.effectiveFrom || charge.EffectiveFrom,
+        effectiveTo: charge.effectiveTo || charge.EffectiveTo,
+        isCurrent: charge.isCurrent !== undefined ? charge.isCurrent : charge.IsCurrent,
+        createdAt: charge.createdAt || charge.CreatedAt,
+        createdBy: charge.createdBy || charge.CreatedBy
+      }));
+    }
+    
+    throw new Error(response.message || 'Failed to fetch making charges');
+  },
+
+  async updateMakingCharges(charges: {
+    id?: number;
+    name: string;
+    productCategory: number;
+    subCategory?: string;
+    chargeType: number;
+    chargeValue: number;
+    effectiveFrom: string;
+  }): Promise<void> {
+    const response = await apiRequest<void>('/Pricing/making-charges', {
+      method: 'POST',
+      body: JSON.stringify(charges),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to update making charges');
+    }
+  },
+
+  async getTaxConfigurations(): Promise<TaxConfigurationDto[]> {
+    const response = await apiRequest<TaxConfigurationDto[]>('/Pricing/taxes');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch tax configurations');
+  },
+
+  async updateTaxConfiguration(taxConfig: {
+    id?: number;
+    taxName: string;
+    taxCode: string;
+    taxType: number;
+    taxRate: number;
+    isMandatory: boolean;
+    effectiveFrom: string;
+    displayOrder: number;
+  }): Promise<void> {
+    // Transform the data to match the backend DTO structure
+    const requestData = {
+      id: taxConfig.id,
+      taxName: taxConfig.taxName,
+      taxCode: taxConfig.taxCode,
+      taxType: taxConfig.taxType, // This should be ChargeType enum value
+      taxRate: taxConfig.taxRate,
+      isMandatory: taxConfig.isMandatory,
+      effectiveFrom: taxConfig.effectiveFrom,
+      displayOrder: taxConfig.displayOrder
+    };
+
+    const response = await apiRequest<void>('/Pricing/taxes', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to update tax configuration');
+    }
+  },
 };
 
 // User Management API interfaces
@@ -917,6 +1088,143 @@ export const inventoryApi = {
   }
 };
 
+// Cash Drawer API
+export const cashDrawerApi = {
+  async openDrawer(branchId: number, openingBalance: number, date?: string, notes?: string): Promise<CashDrawerBalance> {
+    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/open', {
+      method: 'POST',
+      body: JSON.stringify({
+        branchId,
+        openingBalance,
+        date,
+        notes
+      })
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to open cash drawer');
+  },
+
+  async closeDrawer(branchId: number, actualClosingBalance: number, date?: string, notes?: string): Promise<CashDrawerBalance> {
+    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/close', {
+      method: 'POST',
+      body: JSON.stringify({
+        branchId,
+        actualClosingBalance,
+        date,
+        notes
+      })
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to close cash drawer');
+  },
+
+  async getBalance(branchId: number, date: string): Promise<CashDrawerBalance> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString(),
+      date: date
+    }).toString();
+    
+    const response = await apiRequest<CashDrawerBalance>(`/CashDrawer/balance?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get cash drawer balance');
+  },
+
+  async getOpeningBalance(branchId: number, date: string): Promise<number> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString(),
+      date: date
+    }).toString();
+    
+    const response = await apiRequest<number>(`/CashDrawer/opening-balance?${queryString}`);
+    
+    if (response.success && response.data !== undefined) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get opening balance');
+  },
+
+  async isDrawerOpen(branchId: number, date: string): Promise<boolean> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString(),
+      date: date
+    }).toString();
+    
+    const response = await apiRequest<boolean>(`/CashDrawer/is-open?${queryString}`);
+    
+    if (response.success && response.data !== undefined) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to check drawer status');
+  },
+
+  async getBalances(branchId: number, fromDate: string, toDate: string): Promise<CashDrawerBalance[]> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString(),
+      fromDate,
+      toDate
+    }).toString();
+    
+    const response = await apiRequest<CashDrawerBalance[]>(`/CashDrawer/balances?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get cash drawer balances');
+  },
+
+  async settleShift(branchId: number, actualClosingBalance: number, settledAmount: number, date?: string, settlementNotes?: string, notes?: string): Promise<CashDrawerBalance> {
+    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/settle-shift', {
+      method: 'POST',
+      body: JSON.stringify({
+        branchId,
+        actualClosingBalance,
+        settledAmount,
+        date,
+        settlementNotes,
+        notes
+      })
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to settle shift');
+  },
+
+  async refreshExpectedClosingBalance(branchId: number, date?: string): Promise<CashDrawerBalance> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString(),
+      ...(date && { date })
+    }).toString();
+    
+    const response = await apiRequest<CashDrawerBalance>(`/CashDrawer/refresh-balance?${queryString}`, {
+      method: 'POST'
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to refresh cash drawer balance');
+  }
+};
+
 // Reports API
 export const reportsApi = {
   async getDailySalesSummary(branchId: number, date: string): Promise<DailySalesSummaryReport> {
@@ -1097,7 +1405,7 @@ export const reportsApi = {
   },
 
   async exportToExcel(request: ExportReportRequest): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/reports/export-excel`, {
+    const response = await fetch(`${API_BASE_URL}/api/reports/export/excel`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1107,14 +1415,28 @@ export const reportsApi = {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to export to Excel: ${response.statusText}`);
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // If we can't parse the error response, use the default message
+      }
+      throw new Error(`Failed to export to Excel: ${errorMessage}`);
     }
 
-    return await response.blob();
+    const blob = await response.blob();
+    if (!blob || blob.size === 0) {
+      throw new Error('Server returned empty file');
+    }
+
+    return blob;
   },
 
   async exportToPdf(request: ExportReportRequest): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/reports/export-pdf`, {
+    const response = await fetch(`${API_BASE_URL}/api/reports/export/pdf`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1124,10 +1446,24 @@ export const reportsApi = {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to export to PDF: ${response.statusText}`);
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // If we can't parse the error response, use the default message
+      }
+      throw new Error(`Failed to export to PDF: ${errorMessage}`);
     }
 
-    return await response.blob();
+    const blob = await response.blob();
+    if (!blob || blob.size === 0) {
+      throw new Error('Server returned empty file');
+    }
+
+    return blob;
   }
 };
 
@@ -1563,9 +1899,34 @@ export interface CategorySalesBreakdown {
 }
 
 export interface PaymentMethodBreakdown {
-  paymentMethod: string; // PaymentMethod enum
+  paymentMethod: number; // PaymentMethod enum value
   amount: number;
   transactionCount: number;
+}
+
+export interface CashDrawerBalance {
+  id: number;
+  branchId: number;
+  branchName?: string;
+  balanceDate: string;
+  openingBalance: number;
+  expectedClosingBalance: number;
+  actualClosingBalance?: number;
+  openedByUserId?: string;
+  closedByUserId?: string;
+  openedAt?: string;
+  closedAt?: string;
+  notes?: string;
+  status: number; // 1=Open, 2=Closed, 3=PendingReconciliation
+  cashOverShort?: number;
+  createdAt: string;
+  createdBy?: string;
+  modifiedAt?: string;
+  modifiedBy?: string;
+  isActive: boolean;
+  settledAmount?: number;
+  carriedForwardAmount?: number;
+  settlementNotes?: string;
 }
 
 export interface CashReconciliationReport {
@@ -1575,6 +1936,7 @@ export interface CashReconciliationReport {
   openingBalance: number;
   cashSales: number;
   cashReturns: number;
+  cashRepairs: number;
   expectedClosingBalance: number;
   actualClosingBalance: number;
   cashOverShort: number;
@@ -1591,7 +1953,7 @@ export interface InventoryMovementReport {
 export interface InventoryMovementSummary {
   productId: number;
   productName: string;
-  category: string; // ProductCategoryType
+  category: number; // ProductCategoryType
   openingQuantity: number;
   openingWeight: number;
   purchases: number;
@@ -1860,9 +2222,15 @@ export interface Transaction {
   totalAmount: number;
   amountPaid: number;
   changeGiven: number;
-  paymentMethod: 'Cash' | 'Card' | 'BankTransfer' | 'Cheque';
+  paymentMethod: number; // PaymentMethod enum value
   status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded';
+  statusDisplayName?: string; // Display name from backend
   items: TransactionItem[];
+  // Repair-specific fields
+  repairDescription?: string;
+  estimatedCompletionDate?: string;
+  // Return-specific fields
+  returnReason?: string;
 }
 
 export interface SaleRequest {
@@ -1874,7 +2242,27 @@ export interface SaleRequest {
     customDiscountPercentage?: number;
   }>;
   amountPaid: number;
-  paymentMethod: 'Cash' | 'Card' | 'BankTransfer' | 'Cheque';
+  paymentMethod: number; // PaymentMethod enum value (1 for Cash)
+}
+
+export interface RepairRequest {
+  branchId: number;
+  customerId?: number;
+  repairDescription: string;
+  repairAmount: number;
+  estimatedCompletionDate?: string;
+  amountPaid: number;
+  paymentMethod: number; // PaymentMethod enum value (1 for Cash)
+}
+
+export interface ReturnRequest {
+  originalTransactionId: number;
+  returnReason: string;
+  returnAmount: number;
+  items: Array<{
+    originalTransactionItemId: number;
+    returnQuantity: number;
+  }>;
 }
 
 export const transactionsApi = {
@@ -1889,6 +2277,32 @@ export const transactionsApi = {
     }
     
     throw new Error(response.message || 'Failed to process sale');
+  },
+
+  async processRepair(repair: RepairRequest): Promise<Transaction> {
+    const response = await apiRequest<Transaction>('/transactions/repair', {
+      method: 'POST',
+      body: JSON.stringify(repair),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to process repair');
+  },
+
+  async processReturn(returnRequest: ReturnRequest): Promise<Transaction> {
+    const response = await apiRequest<Transaction>('/transactions/return', {
+      method: 'POST',
+      body: JSON.stringify(returnRequest),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to process return');
   },
 
   async getTransaction(id: number): Promise<Transaction> {
@@ -2079,6 +2493,16 @@ export const lookupsApi = {
     }
     
     throw new Error(response.message || 'Failed to fetch charge types');
+  },
+
+  async getTaxConfigurations(): Promise<TaxConfigurationDto[]> {
+    const response = await apiRequest<TaxConfigurationDto[]>('/pricing/taxes');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch tax configurations');
   }
 };
 

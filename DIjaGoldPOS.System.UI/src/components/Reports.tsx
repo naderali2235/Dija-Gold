@@ -44,6 +44,7 @@ import {
   Download,
   Calendar,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   Users,
   Package,
@@ -58,6 +59,7 @@ import {
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { toast } from 'sonner';
+import { cashDrawerApi } from '../services/api';
 import {
   useDailySalesSummary,
   useCashReconciliation,
@@ -65,13 +67,14 @@ import {
   useProfitAnalysisReport,
   useCustomerAnalysisReport,
   useSupplierBalanceReport,
-  useInventoryValuationReport,
+
   useTaxReport,
   useTransactionLogReport,
   useReportTypes,
   useExportToExcel,
   useExportToPdf,
   useBranches,
+  useTransactionTypes
 } from '../hooks/useApi';
 import {
   DailySalesSummaryReport,
@@ -80,13 +83,16 @@ import {
   ProfitAnalysisReport,
   CustomerAnalysisReport,
   SupplierBalanceReport,
-  InventoryValuationReport,
+
   TaxReport,
   TransactionLogReport,
   ReportTypeDto,
   BranchDto,
   ExportReportRequest,
+  CashDrawerBalance
 } from '../services/api';
+import { EnumLookupDto } from '../types/enums';
+import { EnumMapper } from '../types/enums';
 
 const COLORS = ['#D4AF37', '#B8941F', '#0D1B2A', '#17A2B8', '#28A745', '#DC3545', '#6C757D'];
 
@@ -128,10 +134,17 @@ export default function Reports() {
   // State management
   const [activeTab, setActiveTab] = useState('sales');
   const [selectedBranchId, setSelectedBranchId] = useState<number>(1);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Helper function to format date as YYYY-MM-DD in local timezone
+  const formatDateLocal = (date: Date) => {
+    return date.getFullYear() + '-' + 
+      String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(date.getDate()).padStart(2, '0');
+  };
+
+  const [selectedDate, setSelectedDate] = useState(formatDateLocal(new Date()));
   const [dateRange, setDateRange] = useState({
-    fromDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    toDate: new Date().toISOString().split('T')[0],
+    fromDate: formatDateLocal(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+    toDate: formatDateLocal(new Date()),
   });
 
   // API Hooks
@@ -141,13 +154,14 @@ export default function Reports() {
   const { execute: fetchProfitAnalysisReport, loading: profitAnalysisLoading } = useProfitAnalysisReport();
   const { execute: fetchCustomerAnalysisReport, loading: customerAnalysisLoading } = useCustomerAnalysisReport();
   const { execute: fetchSupplierBalanceReport, loading: supplierBalanceLoading } = useSupplierBalanceReport();
-  const { execute: fetchInventoryValuationReport, loading: inventoryValuationLoading } = useInventoryValuationReport();
+
   const { execute: fetchTaxReport, loading: taxReportLoading } = useTaxReport();
   const { execute: fetchTransactionLogReport, loading: transactionLogLoading } = useTransactionLogReport();
   const { execute: fetchReportTypes, loading: reportTypesLoading } = useReportTypes();
   const { execute: exportToExcel, loading: excelExportLoading } = useExportToExcel();
   const { execute: exportToPdf, loading: pdfExportLoading } = useExportToPdf();
   const { execute: fetchBranches } = useBranches();
+  const { execute: fetchTransactionTypes, loading: transactionTypesLoading } = useTransactionTypes();
 
   // Local state for report data
   const [dailySalesReport, setDailySalesReport] = useState<DailySalesSummaryReport | null>(null);
@@ -156,28 +170,33 @@ export default function Reports() {
   const [profitAnalysisReport, setProfitAnalysisReport] = useState<ProfitAnalysisReport | null>(null);
   const [customerAnalysisReport, setCustomerAnalysisReport] = useState<CustomerAnalysisReport | null>(null);
   const [supplierBalanceReport, setSupplierBalanceReport] = useState<SupplierBalanceReport | null>(null);
-  const [inventoryValuationReport, setInventoryValuationReport] = useState<InventoryValuationReport | null>(null);
+
   const [taxReport, setTaxReport] = useState<TaxReport | null>(null);
   const [transactionLogReport, setTransactionLogReport] = useState<TransactionLogReport | null>(null);
+  const [cashDrawerBalances, setCashDrawerBalances] = useState<CashDrawerBalance[]>([]);
+  const [cashDrawerBalancesLoading, setCashDrawerBalancesLoading] = useState<boolean>(false);
   const [reportTypes, setReportTypes] = useState<ReportTypeDto[]>([]);
   const [branches, setBranches] = useState<BranchDto[]>([]);
+  const [transactionTypes, setTransactionTypes] = useState<EnumLookupDto[]>([]);
 
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [branchesResult, reportTypesResult] = await Promise.all([
-          fetchBranches(),
-          fetchReportTypes(),
-        ]);
-        setBranches(branchesResult.items || branchesResult);
-        setReportTypes(reportTypesResult);
+                 const [branchesResult, reportTypesResult, transactionTypesResult] = await Promise.all([
+           fetchBranches(),
+           fetchReportTypes(),
+           fetchTransactionTypes()
+         ]);
+         setBranches(branchesResult.items || branchesResult);
+         setReportTypes(reportTypesResult);
+         setTransactionTypes(transactionTypesResult);
       } catch (error) {
         console.error('Failed to load initial data:', error);
       }
     };
     loadInitialData();
-  }, [fetchBranches, fetchReportTypes]);
+  }, [fetchBranches, fetchReportTypes, fetchTransactionTypes]);
 
   // Load reports based on active tab
   useEffect(() => {
@@ -192,11 +211,21 @@ export default function Reports() {
             const cashRec = await fetchCashReconciliation(...apiParams.cashReconciliation(selectedBranchId, selectedDate) as [number, string]);
             setCashReconciliationReport(cashRec);
             break;
+          case 'cashdrawer':
+            setCashDrawerBalancesLoading(true);
+            try {
+              const balances = await cashDrawerApi.getBalances(selectedBranchId, dateRange.fromDate, dateRange.toDate);
+              setCashDrawerBalances(balances);
+            } catch (error) {
+              console.error('Failed to load cash drawer balances:', error);
+              toast.error('Failed to load cash drawer balances');
+            } finally {
+              setCashDrawerBalancesLoading(false);
+            }
+            break;
           case 'inventory':
-            const invMovement = await fetchInventoryMovementReport(...apiParams.inventoryMovement(selectedBranchId, dateRange.fromDate, dateRange.toDate) as [number, string, string]);
+            const invMovement = await fetchInventoryMovementReport(selectedBranchId, dateRange.fromDate, dateRange.toDate);
             setInventoryMovementReport(invMovement);
-            const invValuation = await fetchInventoryValuationReport(...apiParams.inventoryValuation(selectedBranchId) as [number]);
-            setInventoryValuationReport(invValuation);
             break;
           case 'profit':
             const profit = await fetchProfitAnalysisReport(...apiParams.profitAnalysis(selectedBranchId, dateRange.fromDate, dateRange.toDate) as [string, string, number]);
@@ -231,6 +260,11 @@ export default function Reports() {
   // Handlers
   const handleExportToExcel = async (reportData: any, reportName: string, reportType: string) => {
     try {
+      if (!reportData) {
+        toast.error('No report data available for export');
+        return;
+      }
+
       const request: ExportReportRequest = {
         reportType: reportType,
         reportName: reportName,
@@ -238,6 +272,12 @@ export default function Reports() {
       };
       
       const blob = await exportToExcel(request);
+      
+      if (!blob || blob.size === 0) {
+        toast.error('Received empty file from server');
+        return;
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -250,12 +290,19 @@ export default function Reports() {
       
       toast.success('Report exported to Excel successfully');
     } catch (error) {
-      toast.error('Failed to export to Excel');
+      console.error('Excel export error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export to Excel';
+      toast.error(`Failed to export to Excel: ${errorMessage}`);
     }
   };
 
   const handleExportToPdf = async (reportData: any, reportName: string, reportType: string) => {
     try {
+      if (!reportData) {
+        toast.error('No report data available for export');
+        return;
+      }
+
       const request: ExportReportRequest = {
         reportType: reportType,
         reportName: reportName,
@@ -263,6 +310,12 @@ export default function Reports() {
       };
       
       const blob = await exportToPdf(request);
+      
+      if (!blob || blob.size === 0) {
+        toast.error('Received empty file from server');
+        return;
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -275,7 +328,9 @@ export default function Reports() {
       
       toast.success('Report exported to PDF successfully');
     } catch (error) {
-      toast.error('Failed to export to PDF');
+      console.error('PDF export error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export to PDF';
+      toast.error(`Failed to export to PDF: ${errorMessage}`);
     }
   };
 
@@ -283,13 +338,51 @@ export default function Reports() {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'completed': return 'text-green-600';
-      case 'pending': return 'text-yellow-600';
-      case 'cancelled': return 'text-red-600';
-      default: return 'text-gray-600';
+  const getStatusColor = (status: string | number) => {
+    // Convert status to string and handle both enum values and string values
+    const statusString = typeof status === 'string' ? status : String(status);
+    
+    switch (statusString.toLowerCase()) {
+      case 'completed':
+      case '2': // TransactionStatus.Completed enum value
+        return 'text-green-600';
+      case 'pending':
+      case '1': // TransactionStatus.Pending enum value
+        return 'text-yellow-600';
+      case 'cancelled':
+      case '3': // TransactionStatus.Cancelled enum value
+        return 'text-red-600';
+      case 'refunded':
+      case '4': // TransactionStatus.Refunded enum value
+        return 'text-orange-600';
+      case 'voided':
+      case '5': // TransactionStatus.Voided enum value
+        return 'text-gray-600';
+      default: 
+        return 'text-gray-600';
     }
+  };
+
+  const getTransactionTypeName = (type: string | number) => {
+    // If it's already a string, it might be the display name
+    if (typeof type === 'string') {
+      // Check if it's a numeric string (enum value)
+      const numericValue = parseInt(type);
+      if (!isNaN(numericValue)) {
+        const transactionType = transactionTypes.find(t => t.value === numericValue);
+        return transactionType ? transactionType.displayName : type;
+      }
+      // If it's already a display name, return as is
+      return type;
+    }
+    
+    // If it's a number, find the display name
+    if (typeof type === 'number') {
+      const transactionType = transactionTypes.find(t => t.value === type);
+      return transactionType ? transactionType.displayName : String(type);
+    }
+    
+    return String(type);
   };
 
   return (
@@ -345,8 +438,8 @@ export default function Reports() {
               <Button 
                 variant="outline" 
                 onClick={() => {
-                  const today = new Date().toISOString().split('T')[0];
-                  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                          const today = formatDateLocal(new Date());
+        const thirtyDaysAgo = formatDateLocal(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
                   setSelectedDate(today);
                   setDateRange({ fromDate: thirtyDaysAgo, toDate: today });
                 }}
@@ -359,9 +452,10 @@ export default function Reports() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-9">
           <TabsTrigger value="sales">Sales</TabsTrigger>
           <TabsTrigger value="cash">Cash</TabsTrigger>
+          <TabsTrigger value="cashdrawer">Cash Drawer</TabsTrigger>
           <TabsTrigger value="inventory">Inventory</TabsTrigger>
           <TabsTrigger value="profit">Profit</TabsTrigger>
           <TabsTrigger value="customers">Customers</TabsTrigger>
@@ -425,7 +519,8 @@ export default function Reports() {
                 </Card>
 
                 <Card className="pos-card">
-                  <CardContent className="pt-6">
+                  {/* Returns information hidden per user request */}
+                  {/* <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Total Returns</p>
@@ -435,7 +530,7 @@ export default function Reports() {
                       </div>
                       <TrendingUp className="h-8 w-8 text-red-500" />
                     </div>
-                  </CardContent>
+                  </CardContent> */}
                 </Card>
 
                 <Card className="pos-card">
@@ -591,9 +686,14 @@ export default function Reports() {
                       <span className="font-semibold text-green-600">{formatCurrency(cashReconciliationReport.cashSales)}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span>Cash Repairs:</span>
+                      <span className="font-semibold text-blue-600">{formatCurrency(cashReconciliationReport.cashRepairs)}</span>
+                    </div>
+                    {/* Cash Returns line hidden per user request */}
+                    {/* <div className="flex justify-between">
                       <span>Cash Returns:</span>
                       <span className="font-semibold text-red-600">{formatCurrency(cashReconciliationReport.cashReturns)}</span>
-                    </div>
+                    </div> */}
                     <div className="flex justify-between border-t pt-2">
                       <span className="font-semibold">Expected Closing Balance:</span>
                       <span className="font-semibold">{formatCurrency(cashReconciliationReport.expectedClosingBalance)}</span>
@@ -623,6 +723,241 @@ export default function Reports() {
                       </div>
                     )}
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Cash Drawer Balances Tab */}
+        <TabsContent value="cashdrawer" className="space-y-4 max-w-full overflow-hidden">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Cash Drawer Balances</h2>
+            {cashDrawerBalances.length > 0 && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleExportToExcel(cashDrawerBalances, `Cash_Drawer_Balances_${dateRange.fromDate}_to_${dateRange.toDate}`, 'cash-drawer-balances')}
+                  disabled={excelExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button
+                  onClick={() => handleExportToPdf(cashDrawerBalances, `Cash_Drawer_Balances_${dateRange.fromDate}_to_${dateRange.toDate}`, 'cash-drawer-balances')}
+                  disabled={pdfExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {cashDrawerBalancesLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {cashDrawerBalances.length > 0 && !cashDrawerBalancesLoading && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 max-w-full">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Days</p>
+                        <p className="text-3xl font-bold">
+                          {cashDrawerBalances.length}
+                        </p>
+                      </div>
+                      <Calendar className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Settled</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {formatCurrency(cashDrawerBalances.reduce((sum, balance) => sum + (balance.settledAmount || 0), 0))}
+                        </p>
+                      </div>
+                      <CheckCircle className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Carried Forward</p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {formatCurrency(cashDrawerBalances.reduce((sum, balance) => sum + (balance.carriedForwardAmount || 0), 0))}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Over/Short</p>
+                        <p className="text-3xl font-bold text-orange-600">
+                          {formatCurrency(cashDrawerBalances.reduce((sum, balance) => sum + (balance.cashOverShort || 0), 0))}
+                        </p>
+                      </div>
+                      <AlertTriangle className="h-8 w-8 text-orange-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Cash Drawer Balances Table */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>Cash Drawer Balance History</CardTitle>
+                  <CardDescription>
+                    Daily cash drawer balances from {formatDate(dateRange.fromDate)} to {formatDate(dateRange.toDate)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <div className="min-w-full">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead className="whitespace-nowrap">Status</TableHead>
+                          <TableHead className="whitespace-nowrap">Opening</TableHead>
+                          <TableHead className="whitespace-nowrap">Expected</TableHead>
+                          <TableHead className="whitespace-nowrap">Actual</TableHead>
+                          <TableHead className="whitespace-nowrap">Over/Short</TableHead>
+                          <TableHead className="whitespace-nowrap">Settled</TableHead>
+                          <TableHead className="whitespace-nowrap">Carried</TableHead>
+                          <TableHead className="whitespace-nowrap">Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cashDrawerBalances.map((balance) => (
+                          <TableRow key={balance.id}>
+                            <TableCell className="font-medium whitespace-nowrap">
+                              {formatDate(balance.balanceDate)}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <Badge variant={
+                                balance.status === 1 ? "default" : 
+                                balance.status === 2 ? "secondary" : 
+                                balance.status === 3 ? "destructive" : "outline"
+                              }>
+                                {balance.status === 1 ? 'Open' : 
+                                 balance.status === 2 ? 'Closed' : 
+                                 balance.status === 3 ? 'Pending' : 'Unknown'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-semibold whitespace-nowrap">
+                              {formatCurrency(balance.openingBalance)}
+                            </TableCell>
+                            <TableCell className="font-semibold whitespace-nowrap">
+                              {formatCurrency(balance.expectedClosingBalance)}
+                            </TableCell>
+                            <TableCell className="font-semibold whitespace-nowrap">
+                              {balance.actualClosingBalance ? formatCurrency(balance.actualClosingBalance) : '-'}
+                            </TableCell>
+                            <TableCell className={`font-semibold whitespace-nowrap ${balance.cashOverShort && balance.cashOverShort !== 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {balance.cashOverShort ? formatCurrency(balance.cashOverShort) : '-'}
+                            </TableCell>
+                            <TableCell className="font-semibold text-orange-600 whitespace-nowrap">
+                              {balance.settledAmount ? formatCurrency(balance.settledAmount) : '-'}
+                            </TableCell>
+                            <TableCell className="font-semibold text-blue-600 whitespace-nowrap">
+                              {balance.carriedForwardAmount ? formatCurrency(balance.carriedForwardAmount) : '-'}
+                            </TableCell>
+                            <TableCell className="max-w-32">
+                              <div className="truncate" title={balance.notes || ''}>
+                                {balance.notes || '-'}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Cash Flow Chart */}
+              {cashDrawerBalances.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-full">
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Cash Flow Over Time</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={cashDrawerBalances.map(balance => ({
+                          date: formatDate(balance.balanceDate),
+                          opening: balance.openingBalance,
+                          expected: balance.expectedClosingBalance,
+                          actual: balance.actualClosingBalance || 0
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" angle={-45} textAnchor="end" height={80} />
+                          <YAxis />
+                          <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                          <Line type="monotone" dataKey="opening" stroke="#3B82F6" name="Opening Balance" />
+                          <Line type="monotone" dataKey="expected" stroke="#10B981" name="Expected Closing" />
+                          <Line type="monotone" dataKey="actual" stroke="#EF4444" name="Actual Closing" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Settlement vs Carry Forward</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={cashDrawerBalances.map(balance => ({
+                          date: formatDate(balance.balanceDate),
+                          settled: balance.settledAmount || 0,
+                          carriedForward: balance.carriedForwardAmount || 0
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" angle={-45} textAnchor="end" height={80} />
+                          <YAxis />
+                          <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                          <Bar dataKey="settled" fill="#F59E0B" name="Settled Amount" />
+                          <Bar dataKey="carriedForward" fill="#3B82F6" name="Carried Forward" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
+
+          {cashDrawerBalances.length === 0 && !cashDrawerBalancesLoading && (
+            <Card className="pos-card">
+              <CardContent className="pt-6">
+                <div className="text-center py-8 text-muted-foreground">
+                  <Info className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p>No cash drawer balance data found for the selected period</p>
+                  <p className="text-sm mt-2">Try adjusting the date range or check if cash drawer operations were performed</p>
                 </div>
               </CardContent>
             </Card>
@@ -809,7 +1144,7 @@ export default function Reports() {
                         <TableCell>{new Date(transaction.transactionDate).toLocaleString()}</TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {transaction.transactionType}
+                            {getTransactionTypeName(transaction.transactionType)}
                           </Badge>
                         </TableCell>
                         <TableCell>{transaction.customerName || 'Walk-in'}</TableCell>
@@ -817,7 +1152,13 @@ export default function Reports() {
                         <TableCell>{formatCurrency(transaction.totalAmount)}</TableCell>
                         <TableCell>
                           <span className={getStatusColor(transaction.status)}>
-                            {transaction.status}
+                            {typeof transaction.status === 'string' ? transaction.status : 
+                             transaction.status === 1 ? 'Pending' :
+                             transaction.status === 2 ? 'Completed' :
+                             transaction.status === 3 ? 'Cancelled' :
+                             transaction.status === 4 ? 'Refunded' :
+                             transaction.status === 5 ? 'Voided' : 
+                             String(transaction.status)}
                           </span>
                         </TableCell>
                       </TableRow>
@@ -834,8 +1175,803 @@ export default function Reports() {
           )}
         </TabsContent>
 
-        {/* Additional tabs for other reports would continue here... */}
-        {/* For brevity, I'm showing the key tabs. The pattern continues for inventory, profit, suppliers, tax tabs */}
+        {/* Inventory Movement Tab */}
+        <TabsContent value="inventory" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Inventory Movement Report</h2>
+            {inventoryMovementReport && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleExportToExcel(inventoryMovementReport, `Inventory_Movement_${dateRange.fromDate}_to_${dateRange.toDate}`, 'inventory-movement')}
+                  disabled={excelExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button
+                  onClick={() => handleExportToPdf(inventoryMovementReport, `Inventory_Movement_${dateRange.fromDate}_to_${dateRange.toDate}`, 'inventory-movement')}
+                  disabled={pdfExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {inventoryMovementLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {inventoryMovementReport && !inventoryMovementLoading && (
+            <>
+              {/* Report Header */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>
+                    {inventoryMovementReport.branchName} - Inventory Movement
+                  </CardTitle>
+                  <CardDescription>
+                    From {new Date(inventoryMovementReport.fromDate).toLocaleDateString()} to {new Date(inventoryMovementReport.toDate).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Items</p>
+                        <p className="text-3xl font-bold">
+                          {inventoryMovementReport.movements?.length || 0}
+                        </p>
+                      </div>
+                      <Package className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Weight</p>
+                        <p className="text-3xl font-bold">
+                          {(inventoryMovementReport.movements?.reduce((sum, movement) => {
+                            const weight = movement?.closingWeight || 0;
+                            return sum + weight;
+                          }, 0) || 0).toFixed(2)}g
+                        </p>
+                      </div>
+                      <Package className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Sales</p>
+                        <p className="text-3xl font-bold text-red-600">
+                          {inventoryMovementReport.movements?.reduce((sum, movement) => {
+                            const sales = movement?.sales || 0;
+                            return sum + sales;
+                          }, 0) || 0}
+                        </p>
+                      </div>
+                      <TrendingDown className="h-8 w-8 text-red-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Inventory Movement Table */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>Product Movement Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Opening</TableHead>
+                        <TableHead>Purchases</TableHead>
+                        <TableHead>Sales</TableHead>
+                        <TableHead>Returns</TableHead>
+                        <TableHead>Adjustments</TableHead>
+                        <TableHead>Transfers</TableHead>
+                        <TableHead>Closing</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inventoryMovementReport.movements?.map((movement) => (
+                        <TableRow key={movement?.productId || Math.random()}>
+                          <TableCell className="font-medium">
+                            <div>
+                              <div>{movement?.productName || 'Unknown Product'}</div>
+                              <div className="text-sm text-muted-foreground">ID: {movement?.productId || 'N/A'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {movement?.category === 1 ? 'Jewelry' : 
+                               movement?.category === 2 ? 'Bullion' : 
+                               movement?.category === 3 ? 'Coins' : 
+                               `Category ${movement?.category || 'Unknown'}`}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div>Qty: {movement?.openingQuantity || 0}</div>
+                              <div className="text-sm text-muted-foreground">
+                                Weight: {(movement?.openingWeight || 0).toFixed(2)}g
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className={(movement?.purchases || 0) > 0 ? 'text-green-600' : 'text-muted-foreground'}>
+                              {movement?.purchases || 0}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className={(movement?.sales || 0) > 0 ? 'text-red-600' : 'text-muted-foreground'}>
+                              {movement?.sales || 0}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className={(movement?.returns || 0) > 0 ? 'text-blue-600' : 'text-muted-foreground'}>
+                              {movement?.returns || 0}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className={(movement?.adjustments || 0) !== 0 ? ((movement?.adjustments || 0) > 0 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}>
+                              {(movement?.adjustments || 0) > 0 ? '+' : ''}{movement?.adjustments || 0}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className={(movement?.transfers || 0) !== 0 ? ((movement?.transfers || 0) > 0 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}>
+                              {(movement?.transfers || 0) > 0 ? '+' : ''}{movement?.transfers || 0}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-semibold">Qty: {movement?.closingQuantity || 0}</div>
+                              <div className="text-sm text-muted-foreground">
+                                Weight: {(movement?.closingWeight || 0).toFixed(2)}g
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {(!inventoryMovementReport.movements || inventoryMovementReport.movements.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No inventory movements found for the selected period
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+
+            </>
+          )}
+        </TabsContent>
+
+        {/* Profit Analysis Tab */}
+        <TabsContent value="profit" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Profit Analysis</h2>
+            {profitAnalysisReport && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleExportToExcel(profitAnalysisReport, `Profit_Analysis_${dateRange.fromDate}_to_${dateRange.toDate}`, 'profit-analysis')}
+                  disabled={excelExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button
+                  onClick={() => handleExportToPdf(profitAnalysisReport, `Profit_Analysis_${dateRange.fromDate}_to_${dateRange.toDate}`, 'profit-analysis')}
+                  disabled={pdfExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {profitAnalysisLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {profitAnalysisReport && !profitAnalysisLoading && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Revenue</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {formatCurrency(profitAnalysisReport.totalRevenue)}
+                        </p>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Cost of Goods Sold</p>
+                        <p className="text-3xl font-bold text-red-600">
+                          {formatCurrency(profitAnalysisReport.totalCostOfGoodsSold)}
+                        </p>
+                      </div>
+                      <TrendingDown className="h-8 w-8 text-red-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Gross Profit</p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {formatCurrency(profitAnalysisReport.grossProfit)}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Profit Margin</p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {profitAnalysisReport.grossProfitMargin.toFixed(2)}%
+                        </p>
+                      </div>
+                      <BarChart3 className="h-8 w-8 text-purple-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Report Header */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>
+                    {profitAnalysisReport.branchName || 'All Branches'} - Profit Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    From {formatDate(profitAnalysisReport.fromDate)} to {formatDate(profitAnalysisReport.toDate)}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+
+              {/* Product Analysis Table */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>Product Profit Analysis</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Revenue</TableHead>
+                        <TableHead>Cost of Goods Sold</TableHead>
+                        <TableHead>Gross Profit</TableHead>
+                        <TableHead>Profit Margin</TableHead>
+                        <TableHead>Quantity Sold</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {profitAnalysisReport.productAnalysis.map((product) => (
+                        <TableRow key={product.productId}>
+                          <TableCell className="font-medium">
+                            <div>
+                              <div>{product.productName}</div>
+                              <div className="text-sm text-muted-foreground">ID: {product.productId}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {product.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-semibold">
+                            {formatCurrency(product.revenue)}
+                          </TableCell>
+                          <TableCell className="text-red-600 font-semibold">
+                            {formatCurrency(product.costOfGoodsSold)}
+                          </TableCell>
+                          <TableCell className={`font-semibold ${product.grossProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            {formatCurrency(product.grossProfit)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={product.grossProfitMargin >= 0 ? "default" : "destructive"}>
+                              {product.grossProfitMargin.toFixed(2)}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {product.quantitySold}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {profitAnalysisReport.productAnalysis.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No product profit data found for the selected period
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Profit Margin Chart */}
+              {profitAnalysisReport.productAnalysis.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Profit by Category</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={profitAnalysisReport.productAnalysis.reduce((acc, product) => {
+                          const existing = acc.find(item => item.category === product.category);
+                          if (existing) {
+                            existing.profit += product.grossProfit;
+                            existing.revenue += product.revenue;
+                          } else {
+                            acc.push({
+                              category: product.category,
+                              profit: product.grossProfit,
+                              revenue: product.revenue
+                            });
+                          }
+                          return acc;
+                        }, [] as Array<{category: string, profit: number, revenue: number}>)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="category" />
+                          <YAxis />
+                          <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                          <Bar dataKey="profit" fill="#3B82F6" name="Gross Profit" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Revenue vs Profit Margin</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={profitAnalysisReport.productAnalysis.map(product => ({
+                          name: product.productName,
+                          revenue: product.revenue,
+                          margin: product.grossProfitMargin
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip 
+                            formatter={(value: any, name: string) => [
+                              name === 'revenue' ? formatCurrency(value) : `${value.toFixed(2)}%`,
+                              name === 'revenue' ? 'Revenue' : 'Profit Margin %'
+                            ]}
+                          />
+                          <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#10B981" name="Revenue" />
+                          <Line yAxisId="right" type="monotone" dataKey="margin" stroke="#8B5CF6" name="Profit Margin %" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* Suppliers Tab */}
+        <TabsContent value="suppliers" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Supplier Balance Report</h2>
+            {supplierBalanceReport && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleExportToExcel(supplierBalanceReport, `Supplier_Balance_${formatDateLocal(new Date())}`, 'supplier-balance')}
+                  disabled={excelExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button
+                  onClick={() => handleExportToPdf(supplierBalanceReport, `Supplier_Balance_${formatDateLocal(new Date())}`, 'supplier-balance')}
+                  disabled={pdfExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {supplierBalanceLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {supplierBalanceReport && !supplierBalanceLoading && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Suppliers</p>
+                        <p className="text-3xl font-bold">
+                          {supplierBalanceReport.supplierBalances?.length || 0}
+                        </p>
+                      </div>
+                      <Users className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Outstanding</p>
+                        <p className="text-3xl font-bold text-red-600">
+                          {formatCurrency(supplierBalanceReport.supplierBalances?.reduce((sum: number, supplier: any) => {
+                            const outstanding = supplier?.currentBalance || 0;
+                            return sum + outstanding;
+                          }, 0) || 0)}
+                        </p>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-red-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Purchases</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {formatCurrency(supplierBalanceReport.totalPayables || 0)}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Supplier Balance Table */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>Supplier Balance Details</CardTitle>
+                  <CardDescription>
+                    Current outstanding balances and purchase history for all suppliers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Supplier Name</TableHead>
+                        <TableHead>Contact</TableHead>
+                        <TableHead>Total Purchases</TableHead>
+                        <TableHead>Total Payments</TableHead>
+                        <TableHead>Outstanding Balance</TableHead>
+                        <TableHead>Last Purchase</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {supplierBalanceReport.supplierBalances?.map((supplier: any) => (
+                        <TableRow key={supplier?.supplierId || Math.random()}>
+                          <TableCell className="font-medium">
+                            <div>
+                              <div>{supplier?.supplierName || 'Unknown Supplier'}</div>
+                              <div className="text-sm text-muted-foreground">ID: {supplier?.supplierId || 'N/A'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div>{supplier?.contactPerson || 'N/A'}</div>
+                              <div className="text-sm text-muted-foreground">{supplier?.phoneNumber || 'N/A'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-semibold">
+                            {formatCurrency(supplier?.totalPurchases || 0)}
+                          </TableCell>
+                          <TableCell className="text-blue-600 font-semibold">
+                            {formatCurrency(supplier?.totalPayments || 0)}
+                          </TableCell>
+                          <TableCell className={`font-semibold ${(supplier?.outstandingBalance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(supplier?.outstandingBalance || 0)}
+                          </TableCell>
+                          <TableCell>
+                            {supplier?.lastPurchaseDate ? formatDate(supplier.lastPurchaseDate) : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={(supplier?.outstandingBalance || 0) > 0 ? "destructive" : "default"}>
+                              {(supplier?.outstandingBalance || 0) > 0 ? 'Outstanding' : 'Paid Up'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {(!supplierBalanceReport.supplierBalances || supplierBalanceReport.supplierBalances.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No supplier balance data found
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Outstanding Balances Chart */}
+              {supplierBalanceReport.supplierBalances && supplierBalanceReport.supplierBalances.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Outstanding Balances by Supplier</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={supplierBalanceReport.supplierBalances
+                          .filter((supplier: any) => (supplier?.currentBalance || 0) > 0)
+                          .map((supplier: any, index: number) => ({
+                            name: supplier?.supplierName || 'Unknown',
+                            outstanding: supplier?.currentBalance || 0,
+                            fill: COLORS[index % COLORS.length]
+                          }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                          <YAxis />
+                          <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                          <Bar dataKey="outstanding" fill="#EF4444" name="Outstanding Balance" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="pos-card">
+                    <CardHeader>
+                      <CardTitle>Purchase vs Payment Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              {
+                                name: 'Total Purchases',
+                                value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.currentBalance || 0), 0),
+                                fill: '#10B981'
+                              },
+                              {
+                                name: 'Total Payments',
+                                value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.overdueAmount || 0), 0),
+                                fill: '#3B82F6'
+                              },
+                              {
+                                name: 'Outstanding',
+                                value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.currentBalance || 0), 0),
+                                fill: '#EF4444'
+                              }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          />
+                          <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* Tax Report Tab */}
+        <TabsContent value="tax" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Tax Report</h2>
+            {taxReport && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleExportToExcel(taxReport, `Tax_Report_${dateRange.fromDate}_to_${dateRange.toDate}`, 'tax-report')}
+                  disabled={excelExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button
+                  onClick={() => handleExportToPdf(taxReport, `Tax_Report_${dateRange.fromDate}_to_${dateRange.toDate}`, 'tax-report')}
+                  disabled={pdfExportLoading}
+                  variant="outline"
+                  size="sm"
+                  className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {taxReportLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {taxReport && !taxReportLoading && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Tax Collected</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {formatCurrency(taxReport.totalTaxCollected)}
+                        </p>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Sales</p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {formatCurrency(taxReport.totalTaxCollected || 0)}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Tax Rate</p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {taxReport.taxSummaries && taxReport.taxSummaries.length > 0 
+                            ? (taxReport.taxSummaries.reduce((sum: number, tax: any) => sum + (tax?.taxRate || 0), 0) / taxReport.taxSummaries.length).toFixed(2) 
+                            : '0.00'}%
+                        </p>
+                      </div>
+                      <BarChart3 className="h-8 w-8 text-purple-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tax Report Table */}
+              <Card className="pos-card">
+                <CardHeader>
+                  <CardTitle>Tax Summary</CardTitle>
+                  <CardDescription>
+                    Tax breakdown from {taxReport.fromDate ? new Date(taxReport.fromDate).toLocaleDateString() : 'N/A'} to {taxReport.toDate ? new Date(taxReport.toDate).toLocaleDateString() : 'N/A'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tax Name</TableHead>
+                        <TableHead>Tax Code</TableHead>
+                        <TableHead>Tax Rate</TableHead>
+                        <TableHead>Taxable Amount</TableHead>
+                        <TableHead>Tax Amount</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Effective Rate</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {taxReport.taxSummaries?.map((tax: any) => (
+                        <TableRow key={`${tax?.taxCode}-${tax?.taxName}` || Math.random()}>
+                          <TableCell className="font-medium">
+                            {tax?.taxName || 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{tax?.taxCode || 'N/A'}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold">{tax?.taxRate || 0}%</span>
+                          </TableCell>
+                          <TableCell>
+                            {formatCurrency(tax?.taxableAmount || 0)}
+                          </TableCell>
+                          <TableCell className="text-green-600 font-semibold">
+                            {formatCurrency(tax?.taxAmount || 0)}
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency((tax?.taxableAmount || 0) + (tax?.taxAmount || 0))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {tax?.taxRate || 0}%
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {(!taxReport.taxSummaries || taxReport.taxSummaries.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No tax data found for the selected period
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
 
       </Tabs>
     </div>

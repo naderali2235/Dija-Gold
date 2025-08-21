@@ -1,9 +1,11 @@
+using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace DijaGoldPOS.API.Controllers;
@@ -21,18 +23,22 @@ public class AuthController : ControllerBase
     private readonly IAuditService _auditService;
     private readonly ILogger<AuthController> _logger;
 
+    private readonly ApplicationDbContext _context;
+
     public AuthController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         ITokenService tokenService,
         IAuditService auditService,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        ApplicationDbContext context)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
         _auditService = auditService;
         _logger = logger;
+        _context = context;
     }
 
     /// <summary>
@@ -53,8 +59,9 @@ public class AuthController : ControllerBase
                 return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
             }
 
-            var user = await _userManager.FindByNameAsync(request.Username) 
-                ?? await _userManager.FindByEmailAsync(request.Username);
+            var user = await _context.Users
+                .Include(u => u.Branch)
+                .FirstOrDefaultAsync(u => u.UserName == request.Username || u.Email == request.Username);
 
             if (user == null || !user.IsActive)
             {
@@ -259,7 +266,10 @@ public class AuthController : ControllerBase
                 return Unauthorized(ApiResponse.ErrorResponse("User not authenticated"));
             }
 
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await _context.Users
+                .Include(u => u.Branch)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+                
             if (user == null)
             {
                 return Unauthorized(ApiResponse.ErrorResponse("User not found"));
@@ -312,7 +322,10 @@ public class AuthController : ControllerBase
                 return Unauthorized(ApiResponse.ErrorResponse("User not authenticated"));
             }
 
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await _context.Users
+                .Include(u => u.Branch)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+                
             if (user == null || !user.IsActive)
             {
                 return Unauthorized(ApiResponse.ErrorResponse("User not found or inactive"));
@@ -374,4 +387,36 @@ public class AuthController : ControllerBase
     }
 
     #endregion
+
+    /// <summary>
+    /// Debug endpoint to check user branch assignments (development only)
+    /// </summary>
+    [HttpGet("debug/users")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> DebugUsers()
+    {
+        try
+        {
+            var users = await _context.Users
+                .Include(u => u.Branch)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.UserName,
+                    u.FullName,
+                    u.Email,
+                    u.BranchId,
+                    BranchName = u.Branch != null ? u.Branch.Name : "No Branch",
+                    BranchCode = u.Branch != null ? u.Branch.Code : "N/A"
+                })
+                .ToListAsync();
+
+            return Ok(ApiResponse.SuccessResponse(users, "User branch assignments"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting debug user information");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving debug information"));
+        }
+    }
 }

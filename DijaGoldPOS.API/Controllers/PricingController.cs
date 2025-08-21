@@ -4,6 +4,7 @@ using DijaGoldPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using DijaGoldPOS.API.Models;
 
 namespace DijaGoldPOS.API.Controllers;
 
@@ -249,6 +250,56 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
+    /// Update tax configurations (Manager only)
+    /// </summary>
+    /// <param name="request">Tax configuration updates</param>
+    /// <returns>Success message</returns>
+    [HttpPost("taxes")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateTaxConfigurations([FromBody] UpdateTaxConfigurationRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            var taxConfigurationUpdate = new TaxConfigurationUpdate
+            {
+                Id = request.Id,
+                TaxName = request.TaxName,
+                TaxCode = request.TaxCode,
+                TaxType = request.TaxType,
+                TaxRate = request.TaxRate,
+                IsMandatory = request.IsMandatory,
+                EffectiveFrom = request.EffectiveFrom,
+                DisplayOrder = request.DisplayOrder
+            };
+
+            var success = await _pricingService.UpdateTaxConfigurationAsync(taxConfigurationUpdate, userId);
+
+            if (!success)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Failed to update tax configurations"));
+            }
+
+            _logger.LogInformation("Tax configurations updated by user {UserId}", userId);
+
+            return Ok(ApiResponse.SuccessResponse("Tax configurations updated successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating tax configurations");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while updating tax configurations"));
+        }
+    }
+
+    /// <summary>
     /// Calculate price for a product
     /// </summary>
     /// <param name="request">Price calculation request</param>
@@ -378,6 +429,21 @@ public class UpdateMakingChargesRequestDto
     public ChargeType ChargeType { get; set; }
     public decimal ChargeValue { get; set; }
     public DateTime EffectiveFrom { get; set; }
+}
+
+/// <summary>
+/// Update tax configuration request DTO
+/// </summary>
+public class UpdateTaxConfigurationRequestDto
+{
+    public int? Id { get; set; }
+    public string TaxName { get; set; } = string.Empty;
+    public string TaxCode { get; set; } = string.Empty;
+    public ChargeType TaxType { get; set; }
+    public decimal TaxRate { get; set; }
+    public bool IsMandatory { get; set; } = true;
+    public DateTime EffectiveFrom { get; set; }
+    public int DisplayOrder { get; set; } = 1;
 }
 
 /// <summary>

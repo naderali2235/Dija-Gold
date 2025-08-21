@@ -64,6 +64,7 @@ import {
   useTransferInventory,
   usePaginatedInventoryMovements,
   useBranches,
+  useProducts,
 } from '../hooks/useApi';
 import {
   InventoryDto,
@@ -72,6 +73,7 @@ import {
   TransferInventoryRequest,
   InventoryMovementDto,
   BranchDto,
+  Product,
 } from '../services/api';
 
 interface InventoryFormData {
@@ -137,7 +139,7 @@ export default function Inventory() {
   
   // State management
   const [activeTab, setActiveTab] = useState('inventory');
-  const [selectedBranchId, setSelectedBranchId] = useState(1);
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [includeZeroStock, setIncludeZeroStock] = useState(false);
@@ -160,6 +162,7 @@ export default function Inventory() {
   const { execute: adjustInventory, loading: adjustLoading } = useAdjustInventory();
   const { execute: transferInventory, loading: transferLoading } = useTransferInventory();
   const { execute: fetchBranches, loading: branchesLoading } = useBranches();
+  const { execute: fetchProducts, loading: productsLoading } = useProducts();
 
   const {
     data: movementsData,
@@ -171,9 +174,9 @@ export default function Inventory() {
     hasPrevPage,
     nextPage,
     prevPage,
-  } = usePaginatedInventoryMovements({
-    branchId: selectedBranchId,
-  }) as {
+  } = usePaginatedInventoryMovements(
+    selectedBranchId ? { branchId: selectedBranchId } : {}
+  ) as {
     data: { items: InventoryMovementDto[]; totalCount: number; pageNumber: number; pageSize: number } | null;
     loading: boolean;
     error: string | null;
@@ -189,23 +192,35 @@ export default function Inventory() {
   const [inventoryItems, setInventoryItems] = useState<InventoryDto[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryDto[]>([]);
   const [branches, setBranches] = useState<BranchDto[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  // Load branches on mount
+  // Load branches and products on mount
   useEffect(() => {
-    const loadBranches = async () => {
+    const loadInitialData = async () => {
       try {
-        const branchesResult = await fetchBranches();
+        const [branchesResult, productsResult] = await Promise.all([
+          fetchBranches(),
+          fetchProducts({ isActive: true, pageSize: 1000 }), // Get all active products
+        ]);
         setBranches(branchesResult.items);
+        setProducts(productsResult.items);
+        
+        // Set default branch if not already set
+        if (selectedBranchId === null && branchesResult.items.length > 0) {
+          setSelectedBranchId(branchesResult.items[0].id);
+        }
       } catch (error) {
-        console.error('Failed to load branches:', error);
+        console.error('Failed to load initial data:', error);
       }
     };
-    loadBranches();
-  }, [fetchBranches]);
+    loadInitialData();
+  }, [fetchBranches, fetchProducts, selectedBranchId]);
 
   // Load inventory data when branch changes
   useEffect(() => {
     const loadInventoryData = async () => {
+      if (!selectedBranchId) return;
+      
       try {
         const [inventory, lowStock] = await Promise.all([
           fetchBranchInventory(selectedBranchId, includeZeroStock),
@@ -219,17 +234,23 @@ export default function Inventory() {
       }
     };
     
-    if (selectedBranchId) {
-      loadInventoryData();
-    }
+    loadInventoryData();
   }, [selectedBranchId, includeZeroStock, fetchBranchInventory, fetchLowStockItems]);
 
   // Update movements when branch changes
   useEffect(() => {
-    updateMovementsParams({
-      branchId: selectedBranchId,
-      pageNumber: 1,
-    });
+    if (selectedBranchId) {
+      updateMovementsParams({
+        branchId: selectedBranchId,
+        pageNumber: 1,
+      });
+    } else {
+      // Clear movements when no branch is selected
+      updateMovementsParams({
+        branchId: undefined,
+        pageNumber: 1,
+      });
+    }
   }, [selectedBranchId, updateMovementsParams]);
 
   // Filter inventory items
@@ -332,6 +353,8 @@ export default function Inventory() {
   };
 
   const refreshInventoryData = async () => {
+    if (!selectedBranchId) return;
+    
     try {
       const [inventory, lowStock] = await Promise.all([
         fetchBranchInventory(selectedBranchId, includeZeroStock),
@@ -346,15 +369,15 @@ export default function Inventory() {
   };
 
   const resetInventoryForm = () => {
-    setInventoryForm({ ...defaultInventoryForm, branchId: selectedBranchId });
+    setInventoryForm({ ...defaultInventoryForm, branchId: selectedBranchId || 1 });
   };
 
   const resetAdjustmentForm = () => {
-    setAdjustmentForm({ ...defaultAdjustmentForm, branchId: selectedBranchId });
+    setAdjustmentForm({ ...defaultAdjustmentForm, branchId: selectedBranchId || 1 });
   };
 
   const resetTransferForm = () => {
-    setTransferForm({ ...defaultTransferForm, fromBranchId: selectedBranchId });
+    setTransferForm({ ...defaultTransferForm, fromBranchId: selectedBranchId || 1 });
   };
 
   const formatDate = (dateString: string) => {
@@ -390,17 +413,23 @@ export default function Inventory() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl text-[#0D1B2A]">Inventory Management</h1>
         <div className="flex space-x-2">
-          <Select value={selectedBranchId.toString()} onValueChange={(value: string) => setSelectedBranchId(parseInt(value))}>
+          <Select value={selectedBranchId?.toString() || ''} onValueChange={(value: string) => setSelectedBranchId(parseInt(value))}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Select Branch" />
+              <SelectValue placeholder={branchesLoading ? "Loading branches..." : "Select Branch"} />
             </SelectTrigger>
-            <SelectContent className="bg-white border-gray-200 shadow-lg">
-              {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
-                  {branch.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
+                            <SelectContent className="bg-white border-gray-200 shadow-lg">
+                  {branchesLoading ? (
+                    <SelectItem value="loading" disabled>Loading branches...</SelectItem>
+                  ) : branches.length === 0 ? (
+                    <SelectItem value="no-branches" disabled>No branches available</SelectItem>
+                  ) : (
+                    branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
+                        {branch.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
           </Select>
           {isManager && (
             <>
@@ -543,13 +572,20 @@ export default function Inventory() {
         <TabsContent value="inventory" className="space-y-4">
           <Card className="pos-card">
             <CardContent className="p-0">
-              {inventoryLoading && (
+              {!selectedBranchId && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p>Please select a branch to view inventory</p>
+                </div>
+              )}
+
+              {selectedBranchId && inventoryLoading && (
                 <div className="flex justify-center items-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
               )}
 
-              {inventoryError && (
+              {selectedBranchId && inventoryError && (
                 <div className="text-center py-12 text-red-600">
                   <p>Error loading inventory: {inventoryError}</p>
                   <Button onClick={refreshInventoryData} className="mt-4">
@@ -558,7 +594,7 @@ export default function Inventory() {
                 </div>
               )}
 
-              {!inventoryLoading && !inventoryError && (
+              {selectedBranchId && !inventoryLoading && !inventoryError && (
                 <>
                   <Table>
                     <TableHeader>
@@ -642,13 +678,20 @@ export default function Inventory() {
         <TabsContent value="movements" className="space-y-4">
           <Card className="pos-card">
             <CardContent className="p-0">
-              {movementsLoading && (
+              {!selectedBranchId && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p>Please select a branch to view movements</p>
+                </div>
+              )}
+
+              {selectedBranchId && movementsLoading && (
                 <div className="flex justify-center items-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
               )}
 
-              {movementsError && (
+              {selectedBranchId && movementsError && (
                 <div className="text-center py-12 text-red-600">
                   <p>Error loading movements: {movementsError}</p>
                   <Button onClick={refetchMovements} className="mt-4">
@@ -657,7 +700,7 @@ export default function Inventory() {
                 </div>
               )}
 
-              {movementsData && movementsData.items && (
+              {selectedBranchId && movementsData && movementsData.items && (
                 <>
                   <Table>
                     <TableHeader>
@@ -774,13 +817,20 @@ export default function Inventory() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {lowStockLoading && (
+              {!selectedBranchId && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p>Please select a branch to view alerts</p>
+                </div>
+              )}
+
+              {selectedBranchId && lowStockLoading && (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               )}
 
-              {!lowStockLoading && lowStockItems.length > 0 ? (
+              {selectedBranchId && !lowStockLoading && lowStockItems.length > 0 ? (
                 <div className="space-y-4">
                   {lowStockItems.map((item) => (
                     <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
@@ -802,12 +852,12 @@ export default function Inventory() {
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : selectedBranchId && !lowStockLoading && lowStockItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
                   <p>All items are adequately stocked!</p>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -825,14 +875,30 @@ export default function Inventory() {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="productId">Product ID *</Label>
-              <Input
-                id="productId"
-                type="number"
-                value={inventoryForm.productId}
-                onChange={(e) => setInventoryForm({...inventoryForm, productId: parseInt(e.target.value) || 0})}
-                placeholder="Enter product ID"
-              />
+              <Label htmlFor="productId">Product *</Label>
+              <Select 
+                value={inventoryForm.productId.toString()} 
+                onValueChange={(value: string) => setInventoryForm({...inventoryForm, productId: parseInt(value) || 0})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-gray-200 shadow-lg max-h-60">
+                  {productsLoading ? (
+                    <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                  ) : (
+                    products.map((product) => (
+                      <SelectItem 
+                        key={product.id} 
+                        value={product.id.toString()} 
+                        className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
+                      >
+                        {product.productCode} - {product.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="movementType">Movement Type</Label>
@@ -931,14 +997,30 @@ export default function Inventory() {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="adjustProductId">Product ID *</Label>
-              <Input
-                id="adjustProductId"
-                type="number"
-                value={adjustmentForm.productId}
-                onChange={(e) => setAdjustmentForm({...adjustmentForm, productId: parseInt(e.target.value) || 0})}
-                placeholder="Enter product ID"
-              />
+              <Label htmlFor="adjustProductId">Product *</Label>
+              <Select 
+                value={adjustmentForm.productId.toString()} 
+                onValueChange={(value: string) => setAdjustmentForm({...adjustmentForm, productId: parseInt(value) || 0})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-gray-200 shadow-lg max-h-60">
+                  {productsLoading ? (
+                    <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                  ) : (
+                    products.map((product) => (
+                      <SelectItem 
+                        key={product.id} 
+                        value={product.id.toString()} 
+                        className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
+                      >
+                        {product.productCode} - {product.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="reason">Reason *</Label>
@@ -982,10 +1064,10 @@ export default function Inventory() {
             <Button 
               onClick={handleAdjustInventory} 
               disabled={adjustLoading}
-              variant="destructive"
+              variant="golden"
             >
               {adjustLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adjust Inventory
+              Save Changes
             </Button>
           </div>
         </DialogContent>
@@ -1003,14 +1085,30 @@ export default function Inventory() {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="transferProductId">Product ID *</Label>
-              <Input
-                id="transferProductId"
-                type="number"
-                value={transferForm.productId}
-                onChange={(e) => setTransferForm({...transferForm, productId: parseInt(e.target.value) || 0})}
-                placeholder="Enter product ID"
-              />
+              <Label htmlFor="transferProductId">Product *</Label>
+              <Select 
+                value={transferForm.productId.toString()} 
+                onValueChange={(value: string) => setTransferForm({...transferForm, productId: parseInt(value) || 0})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-gray-200 shadow-lg max-h-60">
+                  {productsLoading ? (
+                    <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                  ) : (
+                    products.map((product) => (
+                      <SelectItem 
+                        key={product.id} 
+                        value={product.id.toString()} 
+                        className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
+                      >
+                        {product.productCode} - {product.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="transferNumber">Transfer Number *</Label>

@@ -45,7 +45,7 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ProcessSale([FromBody] SaleTransactionRequestDto request)
-    {
+        {
         try
         {
             if (!ModelState.IsValid)
@@ -466,6 +466,149 @@ public class TransactionsController : ControllerBase
         {
             _logger.LogError(ex, "Error generating transaction summary");
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while generating transaction summary"));
+        }
+    }
+
+    /// <summary>
+    /// Debug endpoint to test transaction calculation without processing
+    /// </summary>
+    [HttpPost("debug-calculation")]
+    [Authorize(Policy = "CashierOrManager")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DebugTransactionCalculation([FromBody] SaleTransactionRequestDto request)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            // Convert DTO to service request
+            var saleRequest = new SaleTransactionRequest
+            {
+                BranchId = request.BranchId,
+                CustomerId = request.CustomerId,
+                AmountPaid = request.AmountPaid,
+                PaymentMethod = request.PaymentMethod,
+                Items = request.Items.Select(i => new SaleItemRequest
+                {
+                    ProductId = i.ProductId,
+                    Quantity = i.Quantity,
+                    CustomDiscountPercentage = i.CustomDiscountPercentage
+                }).ToList()
+            };
+
+            // Just calculate totals without saving
+            var debugInfo = await _transactionService.DebugCalculateTransactionTotalsAsync(saleRequest, userId);
+            
+            return Ok(ApiResponse<object>.SuccessResponse(debugInfo, "Debug calculation completed"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in debug calculation");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred during debug calculation"));
+        }
+    }
+
+    /// <summary>
+    /// Void a pending transaction (Manager only)
+    /// </summary>
+    [HttpPut("{id}/void")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VoidTransaction(int id, [FromBody] VoidTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            var result = await _transactionService.VoidTransactionAsync(id, request.Reason, userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(ApiResponse.ErrorResponse(result.Message ?? "Failed to void transaction"));
+            }
+
+            _logger.LogInformation("Transaction {TransactionId} voided by user {UserId}: {Reason}", 
+                id, userId, request.Reason);
+
+            return Ok(ApiResponse.SuccessResponse("Transaction voided successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error voiding transaction {TransactionId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while voiding the transaction"));
+        }
+    }
+
+    /// <summary>
+    /// Refund a completed transaction (Manager only)
+    /// </summary>
+    [HttpPost("refund")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<TransactionDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RefundTransaction([FromBody] RefundTransactionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            var result = await _transactionService.CreateReverseTransactionAsync(request.OriginalTransactionId, request.Reason, userId, userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(ApiResponse.ErrorResponse(result.Message ?? "Failed to process refund"));
+            }
+
+            var transactionDto = _mapper.Map<TransactionDto>(result.Transaction);
+
+            _logger.LogInformation("Refund transaction {TransactionNumber} created for original transaction {OriginalTransactionId} by user {UserId}", 
+                result.TransactionNumber, request.OriginalTransactionId, userId);
+
+            return CreatedAtAction(nameof(GetTransaction), new { id = result.TransactionId }, 
+                ApiResponse<TransactionDto>.SuccessResponse(transactionDto, "Refund transaction created successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing refund for transaction {TransactionId}", request.OriginalTransactionId);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while processing the refund"));
+        }
+    }
+
+    /// <summary>
+    /// Check if transaction can be voided
+    /// </summary>
+    [HttpGet("{id}/can-void")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<CanVoidResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CanVoidTransaction(int id)
+    {
+        try
+        {
+            var (canVoid, errorMessage) = await _transactionService.CanVoidTransactionAsync(id);
+
+            var response = new CanVoidResponseDto
+            {
+                CanVoid = canVoid,
+                ErrorMessage = errorMessage
+            };
+
+            return Ok(ApiResponse<CanVoidResponseDto>.SuccessResponse(response));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking void eligibility for transaction {TransactionId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while checking void eligibility"));
         }
     }
 

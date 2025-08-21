@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -47,6 +47,9 @@ import {
   Phone,
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
+import { useAuth } from './AuthContext';
+import api, { transactionsApi, customersApi, RepairRequest, Transaction } from '../services/api';
+import { toast } from 'sonner';
 
 interface RepairJob {
   id: string;
@@ -67,13 +70,16 @@ interface RepairJob {
 }
 
 export default function Repairs() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [isNewRepairOpen, setIsNewRepairOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
+  const [customers, setCustomers] = useState<any[]>([]);
 
   // Form state for new repair
   const [newRepair, setNewRepair] = useState({
+    customerId: '',
     customerName: '',
     customerPhone: '',
     itemDescription: '',
@@ -82,72 +88,144 @@ export default function Repairs() {
     estimatedCost: '',
     estimatedCompletion: '',
     notes: '',
+    amountPaid: '',
+    paymentMethod: '1', // Cash
   });
 
-  // State for repair jobs (will be replaced with API data when available)
+  // State for repair jobs - now using real transactions
   const [repairJobs, setRepairJobs] = useState<RepairJob[]>([]);
   const [repairJobsLoading, setRepairJobsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // TODO: Replace with actual repair API when available
-  // const { execute: fetchRepairJobs, loading: repairJobsLoading } = useRepairJobs();
-  
-  // Mock data for now - will be replaced with API call
-  React.useEffect(() => {
-    setRepairJobsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      const mockJobs: RepairJob[] = [
-        {
-          id: '1',
-          jobNumber: 'REP-2024-001',
-          customerName: 'Rajesh Kumar',
-          customerPhone: '+91 98765 43210',
-          itemDescription: 'Gold chain with broken clasp',
-          repairType: 'Clasp Repair',
-          status: 'in_progress',
-          priority: 'medium',
-          estimatedCost: 800,
-          receivedDate: '2024-01-15T10:00:00Z',
-          estimatedCompletion: '2024-01-20T10:00:00Z',
-          notes: 'Customer wants original clasp design maintained',
-        },
-        {
-          id: '2',
-          jobNumber: 'REP-2024-002',
-          customerName: 'Priya Sharma',
-          customerPhone: '+91 87654 32109',
-          itemDescription: 'Ring resizing from 16 to 18',
-          repairType: 'Resizing',
-          status: 'completed',
-          priority: 'high',
-          estimatedCost: 1200,
-          actualCost: 1100,
-          receivedDate: '2024-01-12T14:30:00Z',
-          estimatedCompletion: '2024-01-18T14:30:00Z',
-          completedDate: '2024-01-17T16:45:00Z',
-          notes: 'Ring resized successfully, customer satisfied',
-        },
-        {
-          id: '3',
-          jobNumber: 'REP-2024-003',
-          customerName: 'Amit Patel',
-          customerPhone: '+91 76543 21098',
-          itemDescription: 'Earring back replacement',
-          repairType: 'Component Replacement',
-          status: 'ready_for_pickup',
-          priority: 'low',
-          estimatedCost: 300,
-          actualCost: 250,
-          receivedDate: '2024-01-14T11:15:00Z',
-          estimatedCompletion: '2024-01-16T11:15:00Z',
-          completedDate: '2024-01-16T09:30:00Z',
-          notes: 'New earring backs fitted, matching originals',
-        },
-      ];
-      setRepairJobs(mockJobs);
+  // Fetch repair transactions from API
+  const fetchRepairJobs = async () => {
+    try {
+      setRepairJobsLoading(true);
+      
+      // Search for repair transactions
+      const result = await transactionsApi.searchTransactions({
+        transactionType: 'Repair',
+        branchId: user?.branch?.id,
+        pageSize: 100, // Get all repairs for now
+      });
+
+      // Get unique customer IDs for phone number lookup
+      const customerIds = result.items
+        .filter(t => t.customerId)
+        .map(t => t.customerId!)
+        .filter((id, index, arr) => arr.indexOf(id) === index);
+      
+      // Fetch customer details for phone numbers
+      const customerDetails = new Map<number, any>();
+      if (customerIds.length > 0) {
+        try {
+          const customersResult = await customersApi.getCustomers({ pageSize: 1000 });
+          customersResult.items.forEach(customer => {
+            if (customerIds.includes(customer.id)) {
+              customerDetails.set(customer.id, customer);
+            }
+          });
+        } catch (error) {
+          console.warn('Failed to fetch customer details for phone numbers:', error);
+        }
+      }
+
+      // Convert Transaction objects to RepairJob format
+      const jobs: RepairJob[] = result.items.map((transaction: Transaction) => {
+        // Parse repair description to extract repair type
+        const repairDescription = transaction.repairDescription || 'General Repair';
+        const parts = repairDescription.split(' - ');
+        const itemDescription = parts[0] || 'Repair Service';
+        const repairTypePart = parts[1] || '';
+        
+        // Extract repair type from description
+        let repairType = 'General Repair';
+        if (repairTypePart.includes('cleaning')) repairType = 'Cleaning & Polishing';
+        else if (repairTypePart.includes('resizing')) repairType = 'Ring Resizing';
+        else if (repairTypePart.includes('clasp')) repairType = 'Clasp Repair';
+        else if (repairTypePart.includes('chain')) repairType = 'Chain Repair';
+        else if (repairTypePart.includes('stone')) repairType = 'Stone Setting';
+        else if (repairTypePart.includes('prong')) repairType = 'Prong Repair';
+        else if (repairTypePart.includes('component')) repairType = 'Component Replacement';
+        
+        // Extract notes from description
+        const notesPart = repairDescription.split(' | Notes: ')[1] || '';
+        
+        // Get customer phone from fetched details
+        const customerDetail = transaction.customerId ? customerDetails.get(transaction.customerId) : null;
+        const customerPhone = customerDetail?.mobileNumber || customerDetail?.phone || '';
+        
+        // Determine priority based on repair type (enhanced logic)
+        let priority: 'low' | 'medium' | 'high' = 'medium';
+        if (repairTypePart.includes('prong') || repairTypePart.includes('stone')) {
+          priority = 'high'; // Structural repairs are high priority
+        } else if (repairTypePart.includes('cleaning') || repairTypePart.includes('polishing')) {
+          priority = 'low'; // Cosmetic repairs are lower priority
+        }
+        
+        return {
+          id: transaction.id.toString(),
+          jobNumber: transaction.transactionNumber,
+          customerName: transaction.customerName || 'Walk-in Customer',
+          customerPhone: customerPhone,
+          itemDescription: itemDescription,
+          repairType: repairType,
+          status: mapTransactionStatusToJobStatus(transaction.status),
+          priority: priority,
+          estimatedCost: transaction.totalAmount,
+          actualCost: transaction.amountPaid > 0 ? transaction.totalAmount : undefined,
+          receivedDate: transaction.transactionDate,
+          estimatedCompletion: transaction.estimatedCompletionDate || transaction.transactionDate,
+          completedDate: transaction.status === 'Completed' ? transaction.transactionDate : undefined,
+          notes: notesPart,
+        };
+      });
+
+      setRepairJobs(jobs);
+    } catch (error) {
+      console.error('Failed to fetch repair jobs:', error);
+      
+      toast.error('Failed to Load Repair Jobs', {
+        description: 'Unable to fetch repair jobs. Please check your connection and try again.',
+        duration: 5000
+      });
+      
+      // Fall back to empty array
+      setRepairJobs([]);
+    } finally {
       setRepairJobsLoading(false);
-    }, 1000);
-  }, []);
+    }
+  };
+
+  // Fetch customers for dropdown
+  const fetchCustomers = async () => {
+    try {
+      const result = await customersApi.getCustomers({ pageSize: 100 });
+      setCustomers(result.items);
+    } catch (error) {
+      console.error('Failed to fetch customers:', error);
+      
+      toast.warning('Customer List Unavailable', {
+        description: 'Unable to load customer list. You can still create repairs for walk-in customers.',
+        duration: 4000
+      });
+    }
+  };
+
+  // Map transaction status to repair job status
+  const mapTransactionStatusToJobStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'ready_for_pickup' | 'delivered' => {
+    switch (status) {
+      case 'Pending': return 'pending';
+      case 'Completed': return 'completed';
+      case 'Cancelled': return 'pending'; // Could be mapped differently
+      default: return 'pending';
+    }
+  };
+
+  useEffect(() => {
+    fetchRepairJobs();
+    fetchCustomers();
+  }, [user?.branch?.id]);
 
   const filteredJobs = repairJobs.filter(job => {
     const matchesSearch = job.jobNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -192,28 +270,82 @@ export default function Repairs() {
     );
   };
 
+  const validateRepairForm = () => {
+    const errors: string[] = [];
+    
+    if (!newRepair.itemDescription.trim()) {
+      errors.push('Item description is required');
+    }
+    
+    if (!newRepair.repairType) {
+      errors.push('Repair type is required');
+    }
+    
+    if (!newRepair.estimatedCost || parseFloat(newRepair.estimatedCost) <= 0) {
+      errors.push('Valid estimated cost is required (must be greater than 0)');
+    }
+    
+    if (!newRepair.amountPaid || parseFloat(newRepair.amountPaid) < 0) {
+      errors.push('Amount paid is required (cannot be negative)');
+    }
+    
+    if (parseFloat(newRepair.amountPaid || '0') > parseFloat(newRepair.estimatedCost || '0')) {
+      errors.push('Amount paid cannot exceed estimated cost');
+    }
+    
+    if (newRepair.estimatedCompletion) {
+      const completionDate = new Date(newRepair.estimatedCompletion);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (completionDate < today) {
+        errors.push('Estimated completion date cannot be in the past');
+      }
+    }
+    
+    return errors;
+  };
+
   const handleNewRepairSubmit = async () => {
     try {
-      // TODO: Replace with actual repair API when available
-      // const repairRequest = {
-      //   customerName: newRepair.customerName,
-      //   customerPhone: newRepair.customerPhone,
-      //   itemDescription: newRepair.itemDescription,
-      //   repairType: newRepair.repairType,
-      //   priority: newRepair.priority,
-      //   estimatedCost: parseFloat(newRepair.estimatedCost),
-      //   estimatedCompletion: newRepair.estimatedCompletion,
-      //   notes: newRepair.notes,
-      //   branchId: user?.branch?.id,
-      // };
-      // await createRepairJob(repairRequest);
+      setIsSubmitting(true);
       
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Validate form
+      const validationErrors = validateRepairForm();
+      if (validationErrors.length > 0) {
+        toast.error('Validation Failed', {
+          description: validationErrors.join('\n'),
+          duration: 5000
+        });
+        return;
+      }
+
+      // Prepare repair request for API
+      const repairRequest: RepairRequest = {
+        branchId: user?.branch?.id || 1, // Default to branch 1 if not available
+        customerId: newRepair.customerId ? parseInt(newRepair.customerId) : undefined,
+        repairDescription: `${newRepair.itemDescription} - ${newRepair.repairType}${newRepair.notes ? ` | Notes: ${newRepair.notes}` : ''}`,
+        repairAmount: parseFloat(newRepair.estimatedCost),
+        estimatedCompletionDate: newRepair.estimatedCompletion ? new Date(newRepair.estimatedCompletion).toISOString() : undefined,
+        amountPaid: parseFloat(newRepair.amountPaid || '0'),
+        paymentMethod: parseInt(newRepair.paymentMethod), // 1 = Cash
+      };
+
+      console.log('Submitting repair request:', repairRequest);
       
-      console.log('New repair submitted:', newRepair);
+      // Call the repair API
+      const result = await transactionsApi.processRepair(repairRequest);
+      
+      console.log('Repair transaction created:', result);
+      
+      toast.success('Success!', {
+        description: `Repair job ${result.transactionNumber} created successfully!`,
+        duration: 4000
+      });
+      
       setIsNewRepairOpen(false);
       setNewRepair({
+        customerId: '',
         customerName: '',
         customerPhone: '',
         itemDescription: '',
@@ -222,32 +354,42 @@ export default function Repairs() {
         estimatedCost: '',
         estimatedCompletion: '',
         notes: '',
+        amountPaid: '',
+        paymentMethod: '1',
       });
       
       // Refresh repair jobs list
-      // await fetchRepairJobs();
+      await fetchRepairJobs();
     } catch (error) {
       console.error('Failed to create repair job:', error);
-      alert('Failed to create repair job. Please try again.');
+      
+      toast.error('Failed to Create Repair Job', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
+        duration: 6000
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleStatusUpdate = async (jobId: string, newStatus: string) => {
     try {
-      // TODO: Replace with actual repair API when available
-      // await updateRepairJobStatus(jobId, newStatus);
+      // Since repairs are now transactions, status updates would require
+      // additional API endpoints for repair job management
+      // For now, we'll show a message that this feature needs backend support
+      toast.info('Status Update Noted', {
+        description: `Status update to "${newStatus.replace('_', ' ')}" has been noted. Enhanced status tracking will be available in a future update.`,
+        duration: 5000
+      });
       
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log(`Updating job ${jobId} to status ${newStatus}`);
-      alert(`Job status updated to ${newStatus}`);
-      
-      // Refresh repair jobs list
-      // await fetchRepairJobs();
+      console.log(`Status update requested for job ${jobId} to ${newStatus}`);
     } catch (error) {
       console.error('Failed to update repair job status:', error);
-      alert('Failed to update job status. Please try again.');
+      
+      toast.error('Status Update Failed', {
+        description: 'Failed to update job status. Please try again.',
+        duration: 4000
+      });
     }
   };
 
@@ -269,18 +411,46 @@ export default function Repairs() {
             <DialogHeader>
               <DialogTitle>Create New Repair Job</DialogTitle>
               <DialogDescription>
-                Fill in the details for the new repair job
+                Fill in the details for the new repair job. Fields marked with <span className="text-red-500">*</span> are required.
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="customerName">Customer Name</Label>
-                <Input
-                  id="customerName"
-                  value={newRepair.customerName}
-                  onChange={(e) => setNewRepair({...newRepair, customerName: e.target.value})}
-                  placeholder="Enter customer name"
-                />
+                <Label htmlFor="customer">Customer (Optional)</Label>
+                <Select value={newRepair.customerId} onValueChange={(value) => {
+                  if (value === 'walk-in') {
+                    setNewRepair({
+                      ...newRepair, 
+                      customerId: value,
+                      customerName: 'Walk-in Customer',
+                      customerPhone: ''
+                    });
+                  } else {
+                    const customer = customers.find(c => c.id.toString() === value);
+                    setNewRepair({
+                      ...newRepair, 
+                      customerId: value,
+                      customerName: customer?.fullName || '',
+                      customerPhone: customer?.mobileNumber || ''
+                    });
+                  }
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select customer (optional)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
+                    <SelectItem value="walk-in" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Walk-in Customer</SelectItem>
+                    {customers.map((customer) => (
+                      <SelectItem 
+                        key={customer.id} 
+                        value={customer.id.toString()}
+                        className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
+                      >
+                        {customer.fullName} - {customer.mobileNumber}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="customerPhone">Customer Phone</Label>
@@ -289,19 +459,21 @@ export default function Repairs() {
                   value={newRepair.customerPhone}
                   onChange={(e) => setNewRepair({...newRepair, customerPhone: e.target.value})}
                   placeholder="Enter phone number"
+                  disabled={!!newRepair.customerId}
                 />
               </div>
               <div className="col-span-2 space-y-2">
-                <Label htmlFor="itemDescription">Item Description</Label>
+                <Label htmlFor="itemDescription">Item Description <span className="text-red-500">*</span></Label>
                 <Textarea
                   id="itemDescription"
                   value={newRepair.itemDescription}
                   onChange={(e) => setNewRepair({...newRepair, itemDescription: e.target.value})}
-                  placeholder="Describe the item to be repaired"
+                  placeholder="e.g., Gold ring with loose stone, Chain with broken clasp"
+                  rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="repairType">Repair Type</Label>
+                <Label htmlFor="repairType">Repair Type <span className="text-red-500">*</span></Label>
                 <Select value={newRepair.repairType} onValueChange={(value) => setNewRepair({...newRepair, repairType: value})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select repair type" />
@@ -332,13 +504,15 @@ export default function Repairs() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="estimatedCost">Estimated Cost (EGP)</Label>
+                <Label htmlFor="estimatedCost">Estimated Cost (EGP) <span className="text-red-500">*</span></Label>
                 <Input
                   id="estimatedCost"
                   type="number"
                   value={newRepair.estimatedCost}
                   onChange={(e) => setNewRepair({...newRepair, estimatedCost: e.target.value})}
                   placeholder="0"
+                  step="0.01"
+                  min="0.01"
                 />
               </div>
               <div className="space-y-2">
@@ -348,7 +522,36 @@ export default function Repairs() {
                   type="date"
                   value={newRepair.estimatedCompletion}
                   onChange={(e) => setNewRepair({...newRepair, estimatedCompletion: e.target.value})}
+                  min={new Date().getFullYear() + '-' + 
+                    String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(new Date().getDate()).padStart(2, '0')}
+                  title="Select the estimated completion date for this repair"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amountPaid">Amount Paid (EGP) <span className="text-red-500">*</span></Label>
+                <Input
+                  id="amountPaid"
+                  type="number"
+                  value={newRepair.amountPaid}
+                  onChange={(e) => setNewRepair({...newRepair, amountPaid: e.target.value})}
+                  placeholder="0"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="paymentMethod">Payment Method</Label>
+                <Select value={newRepair.paymentMethod} onValueChange={(value) => setNewRepair({...newRepair, paymentMethod: value})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
+                    <SelectItem value="1" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Cash</SelectItem>
+                    <SelectItem value="2" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Card</SelectItem>
+                    <SelectItem value="3" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="notes">Notes</Label>
@@ -356,7 +559,8 @@ export default function Repairs() {
                   id="notes"
                   value={newRepair.notes}
                   onChange={(e) => setNewRepair({...newRepair, notes: e.target.value})}
-                  placeholder="Additional notes or special instructions"
+                  placeholder="Special handling instructions, customer preferences, etc."
+                  rows={2}
                 />
               </div>
             </div>
@@ -364,8 +568,18 @@ export default function Repairs() {
               <Button variant="outline" className="touch-target" onClick={() => setIsNewRepairOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleNewRepairSubmit} variant="golden">
-                Create Job
+              <Button 
+                onClick={handleNewRepairSubmit} 
+                variant="golden" 
+                disabled={isSubmitting || !newRepair.itemDescription.trim() || !newRepair.repairType || !newRepair.estimatedCost || !newRepair.amountPaid}
+                className="touch-target"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                    Creating...
+                  </>
+                ) : 'Create Job'}
               </Button>
             </div>
           </DialogContent>
@@ -407,10 +621,26 @@ export default function Repairs() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredJobs.length === 0 ? (
+              {repairJobsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin h-8 w-8 border-2 border-[#D4AF37] border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading repair jobs...</p>
+                </div>
+              ) : filteredJobs.length === 0 ? (
                 <div className="text-center py-8">
                   <Wrench className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No repair jobs found</p>
+                  <p className="text-muted-foreground">
+                    {searchQuery ? 'No repair jobs match your search' : 'No repair jobs found'}
+                  </p>
+                  {searchQuery && (
+                    <Button 
+                      variant="outline" 
+                      className="mt-4"
+                      onClick={() => setSearchQuery('')}
+                    >
+                      Clear Search
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <Table>

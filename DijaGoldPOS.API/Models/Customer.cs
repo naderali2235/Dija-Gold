@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace DijaGoldPOS.API.Models;
 
@@ -91,5 +92,6 @@ public class Customer : BaseEntity
     /// <summary>
     /// Navigation property to customer transactions
     /// </summary>
+    [JsonIgnore]
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
 }

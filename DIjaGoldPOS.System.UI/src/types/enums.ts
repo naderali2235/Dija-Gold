@@ -79,7 +79,10 @@ export class EnumMapper {
   }
 
   static karatStringToEnum(karatString: KaratTypeString): KaratType {
-    switch (karatString) {
+    // Handle both "21K" and "K21" formats
+    const normalizedString = karatString.replace(/^K(\d+)$/, '$1K');
+    
+    switch (normalizedString) {
       case '18K': return KaratType.K18;
       case '21K': return KaratType.K21;
       case '22K': return KaratType.K22;
@@ -171,10 +174,18 @@ export class EnumMapper {
 
   // Helper to convert lookup data to simple arrays for dropdowns
   static lookupToSelectOptions(lookupData: EnumLookupDto[]): Array<{value: string, label: string}> {
-    return lookupData.map(item => ({
-      value: item.name,
-      label: item.displayName
-    }));
+    return lookupData.map(item => {
+      // Convert backend karat format (K21) to frontend format (21K) for consistency
+      let value = item.name;
+      if (item.name.match(/^K\d+$/)) {
+        value = item.name.replace(/^K(\d+)$/, '$1K');
+      }
+      
+      return {
+        value: value,
+        label: item.displayName
+      };
+    });
   }
 
   static lookupToSelectOptionsWithValues(lookupData: EnumLookupDto[]): Array<{value: number, label: string, code: string}> {
@@ -183,6 +194,15 @@ export class EnumMapper {
       label: item.displayName,
       code: item.name
     }));
+  }
+
+  // Helper to convert frontend karat format to backend format
+  static karatToBackendFormat(karatString: string): string {
+    // Convert "21K" to "K21" format for backend
+    if (karatString.match(/^\d+K$/)) {
+      return karatString.replace(/^(\d+)K$/, 'K$1');
+    }
+    return karatString;
   }
 }
 

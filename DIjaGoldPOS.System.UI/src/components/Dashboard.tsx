@@ -10,13 +10,14 @@ import {
   TrendingDown,
   AlertTriangle,
   DollarSign,
-  RotateCcw,
+  // RotateCcw, // Removed - returns functionality hidden
   Wrench,
   Loader2,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { formatCurrency, GOLD_RATES_EGP } from './utils/currency';
-import { useGoldRates, useDailySalesSummary, useTransactionLogReport } from '../hooks/useApi';
+import { formatCurrency } from './utils/currency';
+import { useGoldRates, useDailySalesSummary, useTransactionLogReport, useTransactionTypes, useLowStockItems } from '../hooks/useApi';
+import { EnumLookupDto } from '../types/enums';
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
@@ -33,12 +34,14 @@ interface GoldRatesMap {
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const { user, isManager } = useAuth();
-  const { data: goldRatesData, loading: goldRatesLoading, error: goldRatesError } = useGoldRates();
+  const { user, isManager, isLoading } = useAuth();
+  const { data: goldRatesData, loading: goldRatesLoading, error: goldRatesError, fetchRates } = useGoldRates();
   
   // Dashboard data hooks
   const { execute: fetchDailySalesSummary, loading: dailySalesLoading } = useDailySalesSummary();
   const { execute: fetchTransactionLogReport, loading: transactionLogLoading } = useTransactionLogReport();
+  const { data: transactionTypesData, execute: fetchTransactionTypes } = useTransactionTypes();
+  const { execute: fetchLowStockItems, loading: lowStockLoading } = useLowStockItems();
   
   // State for dashboard data
   const [todayStats, setTodayStats] = React.useState({
@@ -54,13 +57,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   // Transform API gold rates to dashboard format
   const goldRates: GoldRatesMap = React.useMemo(() => {
     if (!goldRatesData || goldRatesData.length === 0) {
-      // Fallback to default rates if API data not available
-      return {
-        '24k': { rate: GOLD_RATES_EGP['24k'], change: 0, changePercent: 0 },
-        '22k': { rate: GOLD_RATES_EGP['22k'], change: 0, changePercent: 0 },
-        '18k': { rate: GOLD_RATES_EGP['18k'], change: 0, changePercent: 0 },
-        '14k': { rate: GOLD_RATES_EGP['14k'], change: 0, changePercent: 0 },
-      };
+      // Return empty rates if API data not available
+      return {};
     }
 
     const rates: GoldRatesMap = {};
@@ -88,43 +86,117 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     return rates;
   }, [goldRatesData]);
 
+  // Function to get transaction type display name
+  const getTransactionTypeName = (type: string | number): 'sale' | 'return' | 'repair' => {
+    // If it's already a string, it might be the display name
+    if (typeof type === 'string') {
+      // Check if it's a numeric string (enum value)
+      const numericValue = parseInt(type);
+      if (!isNaN(numericValue)) {
+        const transactionType = transactionTypesData?.find(t => t.value === numericValue);
+        const displayName = transactionType ? transactionType.displayName.toLowerCase() : type.toLowerCase();
+        return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
+          ? displayName as 'sale' | 'return' | 'repair' 
+          : 'sale';
+      }
+      // If it's already a display name, return as is if valid
+      const lowerType = type.toLowerCase();
+      return (lowerType === 'sale' || lowerType === 'return' || lowerType === 'repair') 
+        ? lowerType as 'sale' | 'return' | 'repair' 
+        : 'sale';
+    }
+    
+    // If it's a number, find the display name
+    if (typeof type === 'number') {
+      const transactionType = transactionTypesData?.find(t => t.value === type);
+      const displayName = transactionType ? transactionType.displayName.toLowerCase() : 'sale';
+      return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
+        ? displayName as 'sale' | 'return' | 'repair' 
+        : 'sale';
+    }
+    
+    return 'sale';
+  };
+
   // Fetch dashboard data on component mount
   React.useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setDashboardLoading(true);
-        const today = new Date().toISOString().split('T')[0];
+        // Format date as YYYY-MM-DD in local timezone
+        const today = new Date().getFullYear() + '-' + 
+          String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
+          String(new Date().getDate()).padStart(2, '0');
         const branchId = user?.branch?.id || 1; // Default to branch 1 if user branch not available
+        
+        console.log('Fetching dashboard data for branch:', branchId, 'date:', today);
+        
+        // Fetch transaction types lookup data
+        await fetchTransactionTypes();
+        
+        // Fetch gold rates
+        await fetchRates();
         
         // Fetch daily sales summary
         const dailySales = await fetchDailySalesSummary(branchId, today);
+        console.log('Daily sales data received:', dailySales);
+        
+        // Fetch low stock items
+        const lowStockItems = await fetchLowStockItems(branchId);
+        console.log('Low stock items data received:', lowStockItems);
+        
+        // Ensure we have valid data with fallbacks
+        const transactionCount = dailySales?.transactionCount ?? 0;
+        const totalSales = dailySales?.totalSales ?? 0;
+        const totalReturns = dailySales?.totalReturns ?? 0;
+        const lowStockCount = lowStockItems?.length ?? 0;
+        
+        console.log('Processed sales data:', { transactionCount, totalSales, totalReturns });
+        console.log('Low stock count:', lowStockCount);
+        
         setTodayStats({
           sales: { 
-            count: dailySales.transactionCount, 
-            amount: dailySales.totalSales 
+            count: transactionCount, 
+            amount: totalSales
           },
           returns: { 
             count: 0, // This would need to be calculated from transaction data
-            amount: dailySales.totalReturns 
+            amount: totalReturns
           },
           repairs: { 
             count: 0, // This would need to be calculated from transaction data
             amount: 0 
           },
-          lowStock: 0, // This would need to be fetched from inventory API
+          lowStock: lowStockCount,
         });
         
         // Fetch recent transactions
         const transactionLog = await fetchTransactionLogReport(branchId, today);
-        const activities = transactionLog.transactions.slice(0, 5).map((transaction: any) => ({
-          type: transaction.transactionType.toLowerCase(),
-          id: transaction.transactionNumber,
-          amount: transaction.totalAmount,
-          time: new Date(transaction.transactionDate).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }),
-        }));
+        console.log('Transaction log data received:', transactionLog);
+        
+        const transactions = transactionLog?.transactions || [];
+        console.log('Transactions array:', transactions);
+        console.log('Transaction count:', transactions.length);
+        console.log('Transaction statuses:', transactions.map(t => ({ number: t.transactionNumber, status: t.status, type: typeof t.status })));
+        
+        const activities = transactions.slice(0, 5).map((transaction: any) => {
+          // Handle transactionType using lookup data
+          const transactionType = getTransactionTypeName(transaction.transactionType);
+          
+          const activity = {
+            type: transactionType,
+            id: transaction.transactionNumber || 'N/A',
+            amount: transaction.totalAmount || 0,
+            time: new Date(transaction.transactionDate).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }),
+          };
+          console.log('Processed activity:', activity);
+          return activity;
+        });
+        
+        console.log('Final activities array:', activities);
         setRecentActivities(activities);
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -141,15 +213,20 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       }
     };
 
-    if (user?.branch?.id) {
+    // Fetch data if user is authenticated, regardless of branch assignment
+    if (user) {
       fetchDashboardData();
+    } else if (!isLoading) {
+      // If no user and auth is not loading, set loading to false and show empty state
+      setDashboardLoading(false);
     }
-  }, [user?.branch?.id, fetchDailySalesSummary, fetchTransactionLogReport]);
+    // If auth is still loading, keep dashboard loading state as true
+  }, [user, isLoading, fetchDailySalesSummary, fetchTransactionLogReport, fetchLowStockItems]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'sale': return <ShoppingCart className="h-4 w-4 text-green-600" />;
-      case 'return': return <RotateCcw className="h-4 w-4 text-orange-600" />;
+      // case 'return': return <RotateCcw className="h-4 w-4 text-orange-600" />; // Hidden per user request
       case 'repair': return <Wrench className="h-4 w-4 text-blue-600" />;
       default: return <Package className="h-4 w-4" />;
     }
@@ -163,7 +240,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <h1 className="text-3xl text-[#0D1B2A]">
             Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}, {user?.fullName}
           </h1>
-          <p className="text-muted-foreground">Here's what's happening at your store today.</p>
+          <p className="text-muted-foreground">
+            Here's what's happening at your store today.
+            {(dashboardLoading || lowStockLoading) && (
+              <span className="ml-2 text-sm text-blue-600">
+                <Loader2 className="inline h-4 w-4 animate-spin mr-1" />
+                Loading data...
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-3">
           <Button 
@@ -256,7 +341,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </CardContent>
         </Card>
 
-        <Card 
+        {/* Returns card hidden per user request */}
+        {/* <Card 
           className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
           onClick={() => onNavigate?.('returns')}
         >
@@ -279,7 +365,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
 
         <Card 
           className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
@@ -315,7 +401,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            {dashboardLoading ? (
+            {(dashboardLoading || lowStockLoading) ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-300 rounded mb-2"></div>
                 <div className="h-3 bg-gray-300 rounded w-3/4"></div>
@@ -374,14 +460,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <ShoppingCart className="h-6 w-6" />
                 New Sale
               </Button>
-              <Button 
+                            {/* Returns button hidden per user request */}
+              {/* <Button
                 variant="outline" 
                 className="touch-target h-20 flex-col gap-2"
                 onClick={() => onNavigate?.('returns')}
               >
                 <RotateCcw className="h-6 w-6" />
                 Process Return
-              </Button>
+              </Button> */}
               <Button 
                 variant="outline" 
                 className="touch-target h-20 flex-col gap-2"

@@ -1,6 +1,8 @@
+using AutoMapper;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,17 +20,23 @@ namespace DijaGoldPOS.API.Controllers;
 public class SuppliersController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly ISupplierRepository _supplierRepository;
     private readonly IAuditService _auditService;
     private readonly ILogger<SuppliersController> _logger;
+    private readonly IMapper _mapper;
 
     public SuppliersController(
         ApplicationDbContext context,
+        ISupplierRepository supplierRepository,
         IAuditService auditService,
-        ILogger<SuppliersController> logger)
+        ILogger<SuppliersController> logger,
+        IMapper mapper)
     {
         _context = context;
+        _supplierRepository = supplierRepository;
         _auditService = auditService;
         _logger = logger;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -580,7 +588,25 @@ public class SuppliersController : ControllerBase
 
             await _context.SaveChangesAsync();
 
+            // Create supplier transaction record
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+            var branchId = User.FindFirst("BranchId")?.Value;
+            
+            var supplierTransaction = new SupplierTransaction
+            {
+                SupplierId = supplier.Id,
+                TransactionDate = DateTime.UtcNow,
+                TransactionType = request.TransactionType.ToLower(),
+                Amount = request.Amount,
+                BalanceAfterTransaction = supplier.CurrentBalance,
+                ReferenceNumber = request.ReferenceNumber,
+                Notes = request.Notes,
+                CreatedByUserId = userId,
+                BranchId = !string.IsNullOrEmpty(branchId) ? int.Parse(branchId) : 1 // Default to branch 1 if not specified
+            };
+
+            await _supplierRepository.CreateTransactionAsync(supplierTransaction);
+
             await _auditService.LogAsync(
                 userId,
                 "UPDATE",
@@ -588,6 +614,10 @@ public class SuppliersController : ControllerBase
                 supplier.Id.ToString(),
                 $"Updated balance for supplier: {supplier.CompanyName} - {request.TransactionType}: {request.Amount:C}, Old Balance: {oldBalance:C}, New Balance: {supplier.CurrentBalance:C}"
             );
+
+            // Get recent transactions for the balance DTO
+            var recentTransactions = await _supplierRepository.GetRecentTransactionsAsync(supplier.Id, 5);
+            var recentTransactionDtos = _mapper.Map<List<SupplierTransactionDto>>(recentTransactions);
 
             // Calculate available credit
             var availableCredit = supplier.CreditLimit - supplier.CurrentBalance;
@@ -602,7 +632,7 @@ public class SuppliersController : ControllerBase
                 PaymentTermsDays = supplier.PaymentTermsDays,
                 CreditLimitEnforced = supplier.CreditLimitEnforced,
                 LastTransactionDate = supplier.LastTransactionDate,
-                RecentTransactions = new List<SupplierTransactionDto>() // Placeholder
+                RecentTransactions = recentTransactionDtos
             };
 
             return Ok(ApiResponse<SupplierBalanceDto>.SuccessResponse(balanceDto));
@@ -620,15 +650,19 @@ public class SuppliersController : ControllerBase
     /// <param name="id">Supplier ID</param>
     /// <param name="fromDate">From date (optional)</param>
     /// <param name="toDate">To date (optional)</param>
+    /// <param name="pageNumber">Page number (default: 1)</param>
+    /// <param name="pageSize">Page size (default: 20)</param>
     /// <returns>Supplier transaction history</returns>
     [HttpGet("{id}/transactions")]
     [Authorize(Policy = "ManagerOnly")]
-    [ProducesResponseType(typeof(ApiResponse<List<SupplierTransactionDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<SupplierTransactionDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSupplierTransactions(
         int id,
         [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
     {
         try
         {
@@ -638,11 +672,24 @@ public class SuppliersController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Supplier not found"));
             }
 
-            // This would typically query a supplier transaction log table
-            // For now, returning empty list as placeholder
-            var transactions = new List<SupplierTransactionDto>();
+            // Get transactions from repository
+            var (transactions, totalCount) = await _supplierRepository.GetTransactionsAsync(
+                id, fromDate, toDate, pageNumber, pageSize);
 
-            return Ok(ApiResponse<List<SupplierTransactionDto>>.SuccessResponse(transactions));
+            // Map to DTOs
+            var transactionDtos = _mapper.Map<List<SupplierTransactionDto>>(transactions);
+
+            // Create paged result
+            var result = new PagedResult<SupplierTransactionDto>
+            {
+                Items = transactionDtos,
+                TotalCount = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+            };
+
+            return Ok(ApiResponse<PagedResult<SupplierTransactionDto>>.SuccessResponse(result));
         }
         catch (Exception ex)
         {

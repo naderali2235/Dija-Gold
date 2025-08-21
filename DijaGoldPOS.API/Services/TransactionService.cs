@@ -1,4 +1,5 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Models.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,8 @@ public class TransactionService : ITransactionService
     private readonly IInventoryService _inventoryService;
     private readonly IReceiptService _receiptService;
     private readonly IAuditService _auditService;
+    private readonly ICashDrawerService _cashDrawerService;
+    private readonly IRepairJobService _repairJobService;
 
     public TransactionService(
         ApplicationDbContext context,
@@ -23,7 +26,9 @@ public class TransactionService : ITransactionService
         IPricingService pricingService,
         IInventoryService inventoryService,
         IReceiptService receiptService,
-        IAuditService auditService)
+        IAuditService auditService,
+        ICashDrawerService cashDrawerService,
+        IRepairJobService repairJobService)
     {
         _context = context;
         _logger = logger;
@@ -31,6 +36,8 @@ public class TransactionService : ITransactionService
         _inventoryService = inventoryService;
         _receiptService = receiptService;
         _auditService = auditService;
+        _cashDrawerService = cashDrawerService;
+        _repairJobService = repairJobService;
     }
 
     /// <summary>
@@ -92,6 +99,9 @@ public class TransactionService : ITransactionService
             decimal totalDiscountAmount = 0;
             var allTaxes = new List<TransactionTax>();
 
+            _logger.LogInformation("=== TRANSACTION CALCULATION DEBUG ===");
+            _logger.LogInformation("Processing {ItemCount} items for transaction", saleRequest.Items.Count);
+
             foreach (var itemRequest in saleRequest.Items)
             {
                 var product = await _context.Products.FindAsync(itemRequest.ProductId);
@@ -121,14 +131,23 @@ public class TransactionService : ITransactionService
                 var priceCalculation = await _pricingService.CalculatePriceAsync(
                     product, itemRequest.Quantity, saleRequest.CustomerId);
 
-                // Apply custom discount if provided
+                _logger.LogInformation("Product {ProductId} ({ProductName}) - Quantity: {Quantity}", 
+                    product.Id, product.Name, itemRequest.Quantity);
+                _logger.LogInformation("  Gold Value: {GoldValue:F2}, Making Charges: {MakingCharges:F2}", 
+                    priceCalculation.GoldValue, priceCalculation.MakingChargesAmount);
+                _logger.LogInformation("  SubTotal: {SubTotal:F2}, Initial Taxable: {TaxableAmount:F2}", 
+                    priceCalculation.SubTotal, priceCalculation.TaxableAmount);
+                _logger.LogInformation("  Initial Discount: {DiscountAmount:F2}", priceCalculation.DiscountAmount);
+
+                // Apply custom discount if provided (additive to existing discount)
                 if (itemRequest.CustomDiscountPercentage.HasValue && itemRequest.CustomDiscountPercentage.Value > 0)
                 {
-                    var customDiscount = priceCalculation.SubTotal * (itemRequest.CustomDiscountPercentage.Value / 100m);
-                    priceCalculation.DiscountAmount = Math.Max(priceCalculation.DiscountAmount, customDiscount);
-                    priceCalculation.TaxableAmount = priceCalculation.SubTotal - priceCalculation.DiscountAmount;
+                    // Apply custom discount to the already-discounted taxable amount (like frontend)
+                    var additionalCustomDiscount = priceCalculation.TaxableAmount * (itemRequest.CustomDiscountPercentage.Value / 100m);
+                    priceCalculation.DiscountAmount += additionalCustomDiscount;
+                    priceCalculation.TaxableAmount -= additionalCustomDiscount;
                     
-                    // Recalculate taxes
+                    // Recalculate taxes on the final taxable amount
                     priceCalculation.Taxes.Clear();
                     priceCalculation.TotalTaxAmount = 0;
                     var taxConfigs = await _pricingService.GetCurrentTaxConfigurationsAsync();
@@ -149,6 +168,9 @@ public class TransactionService : ITransactionService
                         priceCalculation.TotalTaxAmount += taxAmount;
                     }
                     priceCalculation.FinalTotal = priceCalculation.TaxableAmount + priceCalculation.TotalTaxAmount;
+                    
+                    _logger.LogInformation("  After Custom Discount ({CustomDiscount:F2}%): Taxable: {TaxableAmount:F2}, Total Discount: {TotalDiscount:F2}", 
+                        itemRequest.CustomDiscountPercentage.Value, priceCalculation.TaxableAmount, priceCalculation.DiscountAmount);
                 }
 
                 var transactionItem = new TransactionItem
@@ -174,9 +196,12 @@ public class TransactionService : ITransactionService
                 await _context.TransactionItems.AddAsync(transactionItem);
 
                 // Accumulate totals
-                subtotal += priceCalculation.SubTotal;
+                subtotal += priceCalculation.GoldValue; // Only gold value for subtotal
                 totalMakingCharges += priceCalculation.MakingChargesAmount;
                 totalDiscountAmount += priceCalculation.DiscountAmount;
+                
+                _logger.LogInformation("  Final Item Taxes: {TaxAmount:F2}, Final Taxable: {TaxableAmount:F2}", 
+                    priceCalculation.TotalTaxAmount, priceCalculation.TaxableAmount);
 
                 // Create tax records
                 foreach (var tax in priceCalculation.Taxes)
@@ -204,6 +229,15 @@ public class TransactionService : ITransactionService
             transaction.TotalTaxAmount = allTaxes.Sum(t => t.TaxAmount);
             transaction.TotalAmount = subtotal + totalMakingCharges + transaction.TotalTaxAmount - totalDiscountAmount;
 
+            _logger.LogInformation("=== TRANSACTION TOTALS ===");
+            _logger.LogInformation("Subtotal (Gold Value): {Subtotal:F2}", transaction.Subtotal);
+            _logger.LogInformation("Total Making Charges: {MakingCharges:F2}", transaction.TotalMakingCharges);
+            _logger.LogInformation("Total Discount: {Discount:F2}", transaction.DiscountAmount);
+            _logger.LogInformation("Total Tax: {Tax:F2}", transaction.TotalTaxAmount);
+            _logger.LogInformation("FINAL TOTAL: {Total:F2}", transaction.TotalAmount);
+            _logger.LogInformation("Amount Paid: {AmountPaid:F2}", transaction.AmountPaid);
+            _logger.LogInformation("=== END DEBUG ===");
+
             // Validate payment
             if (transaction.AmountPaid < transaction.TotalAmount)
             {
@@ -217,8 +251,22 @@ public class TransactionService : ITransactionService
             transaction.ChangeGiven = transaction.AmountPaid - transaction.TotalAmount;
             transaction.Status = TransactionStatus.Completed;
 
-            // Reserve inventory
-            var inventoryReserved = await _inventoryService.ReserveInventoryAsync(transactionItems, saleRequest.BranchId, userId);
+            // Update cash drawer expected closing balance if this is a cash transaction
+            if (transaction.PaymentMethod == PaymentMethod.Cash)
+            {
+                try
+                {
+                    await _cashDrawerService.RefreshExpectedClosingBalanceAsync(transaction.BranchId, transaction.TransactionDate);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to update cash drawer balance after transaction {TransactionId}", transaction.Id);
+                    // Don't fail the transaction if cash drawer update fails
+                }
+            }
+
+            // Reserve inventory (using internal method to avoid nested transactions)
+            var inventoryReserved = await _inventoryService.ReserveInventoryInternalAsync(transactionItems, saleRequest.BranchId, userId);
             if (!inventoryReserved)
             {
                 return new TransactionResult
@@ -274,11 +322,27 @@ public class TransactionService : ITransactionService
         catch (Exception ex)
         {
             await dbTransaction.RollbackAsync();
-            _logger.LogError(ex, "Error processing sale transaction for user {UserId}", userId);
+            _logger.LogError(ex, "Error processing sale transaction for user {UserId}. Exception: {ExceptionType}, Message: {ExceptionMessage}", 
+                userId, ex.GetType().Name, ex.Message);
+            
+            // Provide more specific error messages based on exception type
+            var errorMessage = ex switch
+            {
+                InvalidOperationException invalidOpEx when invalidOpEx.Message.Contains("gold rate") => 
+                    "No current gold rate found. Please contact management to update gold rates.",
+                InvalidOperationException invalidOpEx when invalidOpEx.Message.Contains("transaction") => 
+                    "Database transaction error. Please try again.",
+                DbUpdateException => 
+                    "Database update failed. Please check your data and try again.",
+                ArgumentNullException => 
+                    "Required data is missing. Please check your input.",
+                _ => "An error occurred while processing the transaction. Please try again or contact support."
+            };
+
             return new TransactionResult
             {
                 IsSuccess = false,
-                ErrorMessage = "An error occurred while processing the transaction"
+                ErrorMessage = errorMessage
             };
         }
     }
@@ -344,6 +408,20 @@ public class TransactionService : ITransactionService
 
             await _context.Transactions.AddAsync(returnTransaction);
             await _context.SaveChangesAsync();
+
+            // Update cash drawer expected closing balance if this is a cash transaction
+            if (returnTransaction.PaymentMethod == PaymentMethod.Cash)
+            {
+                try
+                {
+                    await _cashDrawerService.RefreshExpectedClosingBalanceAsync(returnTransaction.BranchId, returnTransaction.TransactionDate);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to update cash drawer balance after return transaction {TransactionId}", returnTransaction.Id);
+                    // Don't fail the transaction if cash drawer update fails
+                }
+            }
 
             // Process return items
             var returnItems = new List<TransactionItem>();
@@ -485,12 +563,52 @@ public class TransactionService : ITransactionService
             await _context.Transactions.AddAsync(transaction);
             await _context.SaveChangesAsync();
 
+            // Update cash drawer expected closing balance if this is a cash transaction
+            if (transaction.PaymentMethod == PaymentMethod.Cash)
+            {
+                try
+                {
+                    await _cashDrawerService.RefreshExpectedClosingBalanceAsync(transaction.BranchId, transaction.TransactionDate);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to update cash drawer balance after repair transaction {TransactionId}", transaction.Id);
+                    // Don't fail the transaction if cash drawer update fails
+                }
+            }
+
             // Generate repair receipt
             var receipt = await _receiptService.GenerateRepairReceiptContentAsync(transaction);
             transaction.ReceiptPrinted = true;
             await _context.SaveChangesAsync();
 
             await dbTransaction.CommitAsync();
+
+            // Create repair job automatically
+            try
+            {
+                var createRepairJobRequest = new CreateRepairJobRequestDto
+                {
+                    TransactionId = transaction.Id,
+                    Priority = RepairPriority.Medium, // Default priority
+                    AssignedTechnicianId = null, // Will be assigned later
+                    TechnicianNotes = null
+                };
+
+                var (repairJobSuccess, repairJobError, _) = await _repairJobService.CreateRepairJobAsync(createRepairJobRequest, userId);
+                
+                if (!repairJobSuccess)
+                {
+                    _logger.LogWarning("Failed to create repair job for transaction {TransactionId}: {Error}", 
+                        transaction.Id, repairJobError);
+                    // Don't fail the transaction if repair job creation fails
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error creating repair job for transaction {TransactionId}", transaction.Id);
+                // Don't fail the transaction if repair job creation fails
+            }
 
             // Log audit trail
             await _auditService.LogAsync(
@@ -574,6 +692,10 @@ public class TransactionService : ITransactionService
             .Include(t => t.Branch)
             .Include(t => t.Customer)
             .Include(t => t.Cashier)
+            .Include(t => t.TransactionItems)
+                .ThenInclude(ti => ti.Product)
+            .Include(t => t.TransactionTaxes)
+                .ThenInclude(tt => tt.TaxConfiguration)
             .AsQueryable();
 
         // Apply filters
@@ -599,7 +721,16 @@ public class TransactionService : ITransactionService
             query = query.Where(t => t.TransactionDate >= searchRequest.FromDate.Value);
 
         if (searchRequest.ToDate.HasValue)
-            query = query.Where(t => t.TransactionDate <= searchRequest.ToDate.Value);
+        {
+            // If FromDate and ToDate are the same date, extend ToDate to end of day
+            var toDate = searchRequest.ToDate.Value;
+            if (searchRequest.FromDate.HasValue && 
+                searchRequest.FromDate.Value.Date == searchRequest.ToDate.Value.Date)
+            {
+                toDate = searchRequest.ToDate.Value.Date.AddDays(1).AddTicks(-1);
+            }
+            query = query.Where(t => t.TransactionDate <= toDate);
+        }
 
         if (searchRequest.MinAmount.HasValue)
             query = query.Where(t => t.TotalAmount >= searchRequest.MinAmount.Value);
@@ -1093,4 +1224,112 @@ public class TransactionService : ITransactionService
     }
 
     #endregion
+
+    /// <summary>
+    /// Debug method to calculate transaction totals without saving anything
+    /// </summary>
+    public async Task<object> DebugCalculateTransactionTotalsAsync(SaleTransactionRequest saleRequest, string userId)
+    {
+        try
+        {
+            var debugItems = new List<object>();
+            decimal subtotal = 0;
+            decimal totalMakingCharges = 0;
+            decimal totalDiscountAmount = 0;
+            decimal totalTaxAmount = 0;
+
+            _logger.LogInformation("=== DEBUG CALCULATION START ===");
+
+            foreach (var itemRequest in saleRequest.Items)
+            {
+                var product = await _context.Products.FindAsync(itemRequest.ProductId);
+                if (product == null) continue;
+
+                var priceCalculation = await _pricingService.CalculatePriceAsync(
+                    product, itemRequest.Quantity, saleRequest.CustomerId);
+
+                // Apply custom discount if provided
+                decimal finalTaxableAmount = priceCalculation.TaxableAmount;
+                decimal customDiscountAmount = 0;
+                
+                if (itemRequest.CustomDiscountPercentage.HasValue && itemRequest.CustomDiscountPercentage.Value > 0)
+                {
+                    customDiscountAmount = priceCalculation.TaxableAmount * (itemRequest.CustomDiscountPercentage.Value / 100m);
+                    finalTaxableAmount -= customDiscountAmount;
+                    priceCalculation.DiscountAmount += customDiscountAmount;
+                }
+
+                // Recalculate taxes if custom discount was applied
+                decimal itemTaxAmount = 0;
+                if (itemRequest.CustomDiscountPercentage.HasValue && itemRequest.CustomDiscountPercentage.Value > 0)
+                {
+                    var taxConfigs = await _pricingService.GetCurrentTaxConfigurationsAsync();
+                    foreach (var taxConfig in taxConfigs.Where(t => t.IsMandatory))
+                    {
+                        var taxAmount = taxConfig.TaxType == ChargeType.Percentage ?
+                            finalTaxableAmount * (taxConfig.TaxRate / 100m) :
+                            taxConfig.TaxRate * itemRequest.Quantity;
+                        itemTaxAmount += taxAmount;
+                    }
+                }
+                else
+                {
+                    itemTaxAmount = priceCalculation.TotalTaxAmount;
+                }
+
+                debugItems.Add(new
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name,
+                    Weight = product.Weight,
+                    Quantity = itemRequest.Quantity,
+                    GoldValue = priceCalculation.GoldValue,
+                    MakingCharges = priceCalculation.MakingChargesAmount,
+                    SubTotal = priceCalculation.SubTotal,
+                    CustomerDiscount = priceCalculation.DiscountAmount - customDiscountAmount,
+                    CustomDiscount = customDiscountAmount,
+                    TotalDiscount = priceCalculation.DiscountAmount,
+                    TaxableAmount = finalTaxableAmount,
+                    TaxAmount = itemTaxAmount,
+                    ItemTotal = finalTaxableAmount + itemTaxAmount
+                });
+
+                subtotal += priceCalculation.GoldValue;
+                totalMakingCharges += priceCalculation.MakingChargesAmount;
+                totalDiscountAmount += priceCalculation.DiscountAmount;
+                totalTaxAmount += itemTaxAmount;
+            }
+
+            var calculatedTotal = subtotal + totalMakingCharges + totalTaxAmount - totalDiscountAmount;
+
+            var result = new
+            {
+                Items = debugItems,
+                Subtotal = subtotal,
+                TotalMakingCharges = totalMakingCharges,
+                TotalDiscount = totalDiscountAmount,
+                TotalTax = totalTaxAmount,
+                CalculatedTotal = calculatedTotal,
+                AmountPaid = saleRequest.AmountPaid,
+                PaymentDifference = saleRequest.AmountPaid - calculatedTotal,
+                IsPaymentSufficient = saleRequest.AmountPaid >= calculatedTotal
+            };
+
+            _logger.LogInformation("=== DEBUG TOTALS ===");
+            _logger.LogInformation("Subtotal: {Subtotal:F2}", subtotal);
+            _logger.LogInformation("Making Charges: {MakingCharges:F2}", totalMakingCharges);
+            _logger.LogInformation("Discount: {Discount:F2}", totalDiscountAmount);
+            _logger.LogInformation("Tax: {Tax:F2}", totalTaxAmount);
+            _logger.LogInformation("CALCULATED TOTAL: {Total:F2}", calculatedTotal);
+            _logger.LogInformation("Amount Paid: {AmountPaid:F2}", saleRequest.AmountPaid);
+            _logger.LogInformation("=== DEBUG END ===");
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in debug calculation");
+            throw;
+        }
+    }
 }
