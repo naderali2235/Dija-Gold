@@ -70,7 +70,7 @@ public class AuditService : IAuditService
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
                 BranchId = branchId ?? user.BranchId,
-                TransactionId = transactionId,
+                FinancialTransactionId = transactionId,
                 IsSuccess = isSuccess,
                 ErrorMessage = errorMessage,
                 Timestamp = DateTime.UtcNow
@@ -86,6 +86,24 @@ public class AuditService : IAuditService
             _logger.LogError(ex, "Error creating audit log for user {UserId}, action {Action}", userId, action);
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Log user action for audit trail (alias for LogAsync)
+    /// </summary>
+    public async Task<long> LogActionAsync(
+        string userId,
+        string action,
+        string? entityType = null,
+        string? entityId = null,
+        string? description = null)
+    {
+        return await LogAsync(
+            userId,
+            action,
+            entityType,
+            entityId,
+            description);
     }
 
     /// <summary>

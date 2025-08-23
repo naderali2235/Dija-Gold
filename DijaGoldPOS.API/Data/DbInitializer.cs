@@ -1,5 +1,4 @@
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,38 +17,42 @@ public static class DbInitializer
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager)
     {
-        // Ensure database is created
-        await context.Database.EnsureCreatedAsync();
+        //// Check if database was just created
+        //var wasDatabaseCreated = await context.Database.EnsureCreatedAsync();
+        
+        //// Run any pending migrations
+        //if (context.Database.GetPendingMigrations().Any())
+        //{
+        //    await context.Database.MigrateAsync();
+        //}
 
-        // Run any pending migrations
-        if (context.Database.GetPendingMigrations().Any())
-        {
-            await context.Database.MigrateAsync();
+        // Only seed data if database was just created (fresh database)
+            // Seed lookup tables first
+            await LookupTableSeeder.SeedLookupTablesAsync(context);
+
+            // Seed roles
+            await SeedRolesAsync(roleManager);
+
+            // Seed branches
+            await SeedBranchesAsync(context);
+
+            // Seed users
+            await SeedUsersAsync(userManager, context);
+
+            // Seed tax configurations
+            await SeedTaxConfigurationsAsync(context);
+
+            // Seed gold rates
+            await SeedGoldRatesAsync(context);
+
+            // Seed making charges
+            await SeedMakingChargesAsync(context);
+
+            // Seed sample products
+            await SeedProductsAsync(context);
+
+            await context.SaveChangesAsync();
         }
-
-        // Seed roles
-        await SeedRolesAsync(roleManager);
-
-        // Seed branches
-        await SeedBranchesAsync(context);
-
-        // Seed users
-        await SeedUsersAsync(userManager, context);
-
-        // Seed tax configurations
-        await SeedTaxConfigurationsAsync(context);
-
-        // Seed gold rates
-        await SeedGoldRatesAsync(context);
-
-        // Seed making charges
-        await SeedMakingChargesAsync(context);
-
-        // Seed sample products
-        await SeedProductsAsync(context);
-
-        await context.SaveChangesAsync();
-    }
 
     /// <summary>
     /// Seed application roles
@@ -187,13 +190,15 @@ public static class DbInitializer
     {
         if (!await context.TaxConfigurations.AnyAsync())
         {
+            var percentageChargeType = await context.ChargeTypeLookups.FirstAsync(ct => ct.Name == "Percentage");
+            
             var taxes = new List<TaxConfiguration>
             {
                 new TaxConfiguration
                 {
                     TaxName = "Value Added Tax",
                     TaxCode = "VAT",
-                    TaxType = ChargeType.Percentage,
+                    TaxTypeId = percentageChargeType.Id,
                     TaxRate = 14.00m, // 14% VAT in Egypt
                     IsMandatory = true,
                     EffectiveFrom = DateTime.UtcNow.Date,
@@ -216,11 +221,16 @@ public static class DbInitializer
     {
         if (!await context.GoldRates.AnyAsync())
         {
+            var k18Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 18);
+            var k21Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 21);
+            var k22Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 22);
+            var k24Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 24);
+            
             var goldRates = new List<GoldRate>
             {
                 new GoldRate
                 {
-                    KaratType = KaratType.K18,
+                    KaratTypeId = k18Karat.Id,
                     RatePerGram = 1450.00m, // Sample rate in EGP per gram
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -229,7 +239,7 @@ public static class DbInitializer
                 },
                 new GoldRate
                 {
-                    KaratType = KaratType.K21,
+                    KaratTypeId = k21Karat.Id,
                     RatePerGram = 1650.00m, // Sample rate in EGP per gram
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -238,7 +248,7 @@ public static class DbInitializer
                 },
                 new GoldRate
                 {
-                    KaratType = KaratType.K22,
+                    KaratTypeId = k22Karat.Id,
                     RatePerGram = 1750.00m, // Sample rate in EGP per gram
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -247,7 +257,7 @@ public static class DbInitializer
                 },
                 new GoldRate
                 {
-                    KaratType = KaratType.K24,
+                    KaratTypeId = k24Karat.Id,
                     RatePerGram = 1900.00m, // Sample rate in EGP per gram
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -268,13 +278,19 @@ public static class DbInitializer
     {
         if (!await context.MakingCharges.AnyAsync())
         {
+            var goldJewelryCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Gold Jewelry");
+            var bullionCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Bullion");
+            var coinsCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Gold Coins");
+            var percentageChargeType = await context.ChargeTypeLookups.FirstAsync(ct => ct.Name == "Percentage");
+            var fixedAmountChargeType = await context.ChargeTypeLookups.FirstAsync(ct => ct.Name == "Fixed Amount");
+            
             var makingCharges = new List<MakingCharges>
             {
                 new MakingCharges
                 {
                     Name = "Jewelry Making Charges",
-                    ProductCategory = ProductCategoryType.GoldJewelry,
-                    ChargeType = ChargeType.Percentage,
+                    ProductCategoryId = goldJewelryCategory.Id,
+                    ChargeTypeId = percentageChargeType.Id,
                     ChargeValue = 12.00m, // 12% of gold value
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -284,9 +300,9 @@ public static class DbInitializer
                 new MakingCharges
                 {
                     Name = "Ring Making Charges",
-                    ProductCategory = ProductCategoryType.GoldJewelry,
+                    ProductCategoryId = goldJewelryCategory.Id,
                     SubCategory = "Rings",
-                    ChargeType = ChargeType.Percentage,
+                    ChargeTypeId = percentageChargeType.Id,
                     ChargeValue = 15.00m, // 15% of gold value for rings
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -296,8 +312,8 @@ public static class DbInitializer
                 new MakingCharges
                 {
                     Name = "Bullion Processing Charges",
-                    ProductCategory = ProductCategoryType.Bullion,
-                    ChargeType = ChargeType.FixedAmount,
+                    ProductCategoryId = bullionCategory.Id,
+                    ChargeTypeId = fixedAmountChargeType.Id,
                     ChargeValue = 50.00m, // 50 EGP fixed charge
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -307,8 +323,8 @@ public static class DbInitializer
                 new MakingCharges
                 {
                     Name = "Coin Processing Charges",
-                    ProductCategory = ProductCategoryType.Coins,
-                    ChargeType = ChargeType.FixedAmount,
+                    ProductCategoryId = coinsCategory.Id,
+                    ChargeTypeId = fixedAmountChargeType.Id,
                     ChargeValue = 25.00m, // 25 EGP fixed charge
                     EffectiveFrom = DateTime.UtcNow.Date,
                     IsCurrent = true,
@@ -329,14 +345,22 @@ public static class DbInitializer
     {
         if (!await context.Products.AnyAsync())
         {
+            var goldJewelryCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Gold Jewelry");
+            var bullionCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Bullion");
+            var coinsCategory = await context.ProductCategoryTypeLookups.FirstAsync(pct => pct.Name == "Gold Coins");
+            var k18Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 18);
+            var k21Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 21);
+            var k22Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 22);
+            var k24Karat = await context.KaratTypeLookups.FirstAsync(kt => kt.KaratValue == 24);
+            
             var products = new List<Product>
             {
                 new Product
                 {
                     ProductCode = "JW001",
                     Name = "Gold Wedding Ring",
-                    CategoryType = ProductCategoryType.GoldJewelry,
-                    KaratType = KaratType.K18,
+                    CategoryTypeId = goldJewelryCategory.Id,
+                    KaratTypeId = k18Karat.Id,
                     Weight = 3.500m,
                     Brand = "Dija Gold",
                     DesignStyle = "Classic",
@@ -349,8 +373,8 @@ public static class DbInitializer
                 {
                     ProductCode = "JW002",
                     Name = "Gold Necklace Chain",
-                    CategoryType = ProductCategoryType.GoldJewelry,
-                    KaratType = KaratType.K21,
+                    CategoryTypeId = goldJewelryCategory.Id,
+                    KaratTypeId = k21Karat.Id,
                     Weight = 15.750m,
                     Brand = "Dija Gold",
                     DesignStyle = "Rope Chain",
@@ -363,8 +387,8 @@ public static class DbInitializer
                 {
                     ProductCode = "BL001",
                     Name = "Gold Bar 10g",
-                    CategoryType = ProductCategoryType.Bullion,
-                    KaratType = KaratType.K24,
+                    CategoryTypeId = bullionCategory.Id,
+                    KaratTypeId = k24Karat.Id,
                     Weight = 10.000m,
                     Brand = "Dija Gold",
                     Shape = "Bar",
@@ -377,8 +401,8 @@ public static class DbInitializer
                 {
                     ProductCode = "CN001",
                     Name = "Egyptian Gold Coin 1g",
-                    CategoryType = ProductCategoryType.Coins,
-                    KaratType = KaratType.K22,
+                    CategoryTypeId = coinsCategory.Id,
+                    KaratTypeId = k22Karat.Id,
                     Weight = 1.000m,
                     CountryOfOrigin = "Egypt",
                     YearOfMinting = 2024,

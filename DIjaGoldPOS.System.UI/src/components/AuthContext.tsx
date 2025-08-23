@@ -39,12 +39,12 @@ function mapApiUserToUser(apiUser: ApiUser): User {
     id: apiUser.id,
     username: apiUser.username,
     role: primaryRole,
-    branchId: apiUser.branch?.code || 'default',
+    branchId: apiUser.branch?.code || 'default', // Keep as string for backward compatibility
     fullName: apiUser.fullName,
     email: apiUser.email,
     employeeCode: apiUser.employeeCode,
     roles: apiUser.roles,
-    branch: apiUser.branch,
+    branch: apiUser.branch, // This contains the numeric ID
     lastLoginAt: apiUser.lastLoginAt,
   };
   
@@ -120,7 +120,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Login failed:', error);
       setUser(null); // Clear any existing user state on failure
-      return false;
+      
+      // Re-throw the error - no redirect on failure, let the UI handle it
+      throw error;
     } finally {
       setIsLoading(false);
     }

@@ -74,6 +74,8 @@ import {
   InventoryMovementDto,
   BranchDto,
   Product,
+  productOwnershipApi,
+  ProductOwnershipDto,
 } from '../services/api';
 
 interface InventoryFormData {
@@ -193,6 +195,11 @@ export default function Inventory() {
   const [lowStockItems, setLowStockItems] = useState<InventoryDto[]>([]);
   const [branches, setBranches] = useState<BranchDto[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  
+  // Ownership state
+  const [productOwnership, setProductOwnership] = useState<{[key: number]: ProductOwnershipDto[]}>({});
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const [ownershipValidationErrors, setOwnershipValidationErrors] = useState<{[key: number]: string}>({});
 
   // Load branches and products on mount
   useEffect(() => {
@@ -228,6 +235,14 @@ export default function Inventory() {
         ]);
         setInventoryItems(inventory);
         setLowStockItems(lowStock);
+        
+        // Fetch ownership data for all products
+        if (inventory.length > 0) {
+          const ownershipPromises = inventory.map(item => 
+            fetchProductOwnership(item.productId, selectedBranchId)
+          );
+          await Promise.all(ownershipPromises);
+        }
       } catch (error) {
         console.error('Failed to load inventory data:', error);
         toast.error('Failed to load inventory data');
@@ -253,6 +268,58 @@ export default function Inventory() {
     }
   }, [selectedBranchId, updateMovementsParams]);
 
+  // Ownership validation functions
+  const validateOwnershipForInventory = async (productId: number, branchId: number, quantity: number): Promise<boolean> => {
+    if (!currentUser?.branch?.id) return true; // Skip validation if no branch info
+    
+    try {
+      setOwnershipLoading(true);
+      const validation = await productOwnershipApi.validateOwnership({
+        productId,
+        branchId,
+        requestedQuantity: quantity
+      });
+      
+      if (!validation.canSell) {
+        setOwnershipValidationErrors(prev => ({
+          ...prev,
+          [productId]: validation.message
+        }));
+        return false;
+      }
+      
+      // Clear any previous errors for this product
+      setOwnershipValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[productId];
+        return newErrors;
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Ownership validation failed:', error);
+      setOwnershipValidationErrors(prev => ({
+        ...prev,
+        [productId]: 'Failed to validate ownership'
+      }));
+      return false;
+    } finally {
+      setOwnershipLoading(false);
+    }
+  };
+
+  const fetchProductOwnership = async (productId: number, branchId: number) => {
+    try {
+      const ownership = await productOwnershipApi.getProductOwnership(productId, branchId);
+      setProductOwnership(prev => ({
+        ...prev,
+        [productId]: ownership
+      }));
+    } catch (error) {
+      console.error('Failed to fetch product ownership:', error);
+    }
+  };
+
   // Filter inventory items
   const filteredInventoryItems = inventoryItems.filter(item => {
     const matchesSearch = searchQuery === '' || 
@@ -273,6 +340,18 @@ export default function Inventory() {
       return;
     }
 
+    // Validate ownership for inventory addition
+    const isValid = await validateOwnershipForInventory(
+      inventoryForm.productId, 
+      inventoryForm.branchId, 
+      inventoryForm.quantity
+    );
+    
+    if (!isValid) {
+      toast.error('Cannot add inventory due to ownership restrictions');
+      return;
+    }
+
     try {
       const addInventoryData: AddInventoryRequest = {
         productId: inventoryForm.productId,
@@ -290,6 +369,7 @@ export default function Inventory() {
       setIsAddInventoryOpen(false);
       resetInventoryForm();
       refreshInventoryData();
+      setOwnershipValidationErrors({}); // Clear ownership errors
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add inventory');
     }
@@ -298,6 +378,18 @@ export default function Inventory() {
   const handleAdjustInventory = async () => {
     if (!adjustmentForm.productId || !adjustmentForm.reason) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Validate ownership for inventory adjustment
+    const isValid = await validateOwnershipForInventory(
+      adjustmentForm.productId, 
+      adjustmentForm.branchId, 
+      adjustmentForm.newQuantity
+    );
+    
+    if (!isValid) {
+      toast.error('Cannot adjust inventory due to ownership restrictions');
       return;
     }
 
@@ -315,6 +407,7 @@ export default function Inventory() {
       setIsAdjustInventoryOpen(false);
       resetAdjustmentForm();
       refreshInventoryData();
+      setOwnershipValidationErrors({}); // Clear ownership errors
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to adjust inventory');
     }
@@ -328,6 +421,18 @@ export default function Inventory() {
 
     if (transferForm.fromBranchId === transferForm.toBranchId) {
       toast.error('From and To branches cannot be the same');
+      return;
+    }
+
+    // Validate ownership for inventory transfer (from branch)
+    const isValid = await validateOwnershipForInventory(
+      transferForm.productId, 
+      transferForm.fromBranchId, 
+      transferForm.quantity
+    );
+    
+    if (!isValid) {
+      toast.error('Cannot transfer inventory due to ownership restrictions');
       return;
     }
 
@@ -347,6 +452,7 @@ export default function Inventory() {
       setIsTransferInventoryOpen(false);
       resetTransferForm();
       refreshInventoryData();
+      setOwnershipValidationErrors({}); // Clear ownership errors
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to transfer inventory');
     }
@@ -604,6 +710,7 @@ export default function Inventory() {
                         <TableHead>Weight</TableHead>
                         <TableHead>Stock Levels</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Ownership</TableHead>
                         <TableHead>Last Updated</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -642,6 +749,31 @@ export default function Inventory() {
                             >
                               {getStockStatusText(item)}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {ownershipLoading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : productOwnership[item.productId]?.length > 0 ? (
+                                <div className="space-y-1">
+                                  {productOwnership[item.productId].map((ownership, index) => (
+                                    <Badge 
+                                      key={index}
+                                      variant="outline" 
+                                      className={
+                                        ownership.ownershipPercentage >= 80 ? 'bg-green-100 text-green-800' :
+                                        ownership.ownershipPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
+                                      }
+                                    >
+                                      {ownership.ownershipPercentage.toFixed(1)}%
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">No ownership</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
@@ -869,7 +1001,7 @@ export default function Inventory() {
           <DialogHeader>
             <DialogTitle>Add Inventory</DialogTitle>
             <DialogDescription>
-              Add stock for existing products through purchases, returns, or adjustments.
+              Add stock for existing products through purchases or adjustments.
             </DialogDescription>
           </DialogHeader>
           
@@ -908,7 +1040,6 @@ export default function Inventory() {
                 </SelectTrigger>
                 <SelectContent className="bg-white border-gray-200 shadow-lg">
                   <SelectItem value="Purchase" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Purchase</SelectItem>
-                  <SelectItem value="Return" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Return</SelectItem>
                   <SelectItem value="Adjustment" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Adjustment</SelectItem>
                 </SelectContent>
               </Select>
@@ -975,11 +1106,11 @@ export default function Inventory() {
             </Button>
             <Button 
               onClick={handleAddInventory} 
-              disabled={addLoading}
+              disabled={addLoading || ownershipLoading}
               variant="golden"
             >
-              {addLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Inventory
+              {(addLoading || ownershipLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {ownershipLoading ? 'Validating Ownership...' : 'Add Inventory'}
             </Button>
           </div>
         </DialogContent>
@@ -1063,11 +1194,11 @@ export default function Inventory() {
             </Button>
             <Button 
               onClick={handleAdjustInventory} 
-              disabled={adjustLoading}
+              disabled={adjustLoading || ownershipLoading}
               variant="golden"
             >
-              {adjustLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
+              {(adjustLoading || ownershipLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {ownershipLoading ? 'Validating Ownership...' : 'Adjust Inventory'}
             </Button>
           </div>
         </DialogContent>
@@ -1191,11 +1322,11 @@ export default function Inventory() {
             </Button>
             <Button 
               onClick={handleTransferInventory} 
-              disabled={transferLoading}
+              disabled={transferLoading || ownershipLoading}
               variant="golden"
             >
-              {transferLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Transfer Inventory
+              {(transferLoading || ownershipLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {ownershipLoading ? 'Validating Ownership...' : 'Transfer Inventory'}
             </Button>
           </div>
         </DialogContent>

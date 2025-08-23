@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 
 namespace DijaGoldPOS.API.Repositories;
 
@@ -18,16 +18,16 @@ public interface IProductRepository : IRepository<Product>
     /// <summary>
     /// Get products by category type
     /// </summary>
-    /// <param name="categoryType">Product category type</param>
+    /// <param name="categoryTypeId">Product category type ID</param>
     /// <returns>List of products</returns>
-    Task<List<Product>> GetByCategoryAsync(ProductCategoryType categoryType);
+    Task<List<Product>> GetByCategoryAsync(int categoryTypeId);
 
     /// <summary>
     /// Get products by karat type
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <returns>List of products</returns>
-    Task<List<Product>> GetByKaratTypeAsync(KaratType karatType);
+    Task<List<Product>> GetByKaratTypeAsync(int karatTypeId);
 
     /// <summary>
     /// Get products by supplier

@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 
 namespace DijaGoldPOS.API.Repositories;
 
@@ -11,32 +11,32 @@ public interface IGoldRateRepository : IRepository<GoldRate>
     /// <summary>
     /// Get current active gold rate for a specific karat type
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <returns>Current gold rate or null if not found</returns>
-    Task<GoldRate?> GetCurrentRateAsync(KaratType karatType);
+    Task<GoldRate?> GetCurrentRateAsync(int karatTypeId);
 
     /// <summary>
     /// Get current active gold rates for all karat types
     /// </summary>
-    /// <returns>Dictionary with karat type as key and current rate as value</returns>
-    Task<Dictionary<KaratType, GoldRate>> GetCurrentRatesAsync();
+    /// <returns>Dictionary with karat type ID as key and current rate as value</returns>
+    Task<Dictionary<int, GoldRate>> GetCurrentRatesAsync();
 
     /// <summary>
     /// Get gold rate effective at a specific date and time
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <param name="effectiveDate">Effective date and time</param>
     /// <returns>Gold rate effective at the specified date or null if not found</returns>
-    Task<GoldRate?> GetRateAtDateAsync(KaratType karatType, DateTime effectiveDate);
+    Task<GoldRate?> GetRateAtDateAsync(int karatTypeId, DateTime effectiveDate);
 
     /// <summary>
     /// Get rate history for a specific karat type
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <param name="fromDate">From date (optional)</param>
     /// <param name="toDate">To date (optional)</param>
     /// <returns>List of gold rates ordered by effective date descending</returns>
-    Task<List<GoldRate>> GetRateHistoryAsync(KaratType karatType, DateTime? fromDate = null, DateTime? toDate = null);
+    Task<List<GoldRate>> GetRateHistoryAsync(int karatTypeId, DateTime? fromDate = null, DateTime? toDate = null);
 
     /// <summary>
     /// Get latest rate update by user
@@ -48,19 +48,19 @@ public interface IGoldRateRepository : IRepository<GoldRate>
     /// <summary>
     /// Check if a rate exists for the same karat type and effective date
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <param name="effectiveFrom">Effective from date</param>
     /// <param name="excludeId">Rate ID to exclude (for updates)</param>
     /// <returns>True if rate exists</returns>
-    Task<bool> RateExistsAsync(KaratType karatType, DateTime effectiveFrom, int? excludeId = null);
+    Task<bool> RateExistsAsync(int karatTypeId, DateTime effectiveFrom, int? excludeId = null);
 
     /// <summary>
     /// Deactivate previous rates when a new rate becomes effective
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <param name="newEffectiveFrom">New rate effective from date</param>
     /// <returns>Number of rates updated</returns>
-    Task<int> DeactivatePreviousRatesAsync(KaratType karatType, DateTime newEffectiveFrom);
+    Task<int> DeactivatePreviousRatesAsync(int karatTypeId, DateTime newEffectiveFrom);
 
     /// <summary>
     /// Get rate changes summary for reporting

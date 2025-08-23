@@ -90,8 +90,8 @@ public class Customer : BaseEntity
     public int TotalTransactions { get; set; } = 0;
     
     /// <summary>
-    /// Navigation property to customer transactions
+    /// Navigation property to customer orders
     /// </summary>
     [JsonIgnore]
-    public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 }

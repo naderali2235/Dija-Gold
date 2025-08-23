@@ -10,7 +10,6 @@ import {
   TrendingDown,
   AlertTriangle,
   DollarSign,
-  // RotateCcw, // Removed - returns functionality hidden
   Wrench,
   Loader2,
 } from 'lucide-react';
@@ -18,6 +17,7 @@ import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { useGoldRates, useDailySalesSummary, useTransactionLogReport, useTransactionTypes, useLowStockItems } from '../hooks/useApi';
 import { EnumLookupDto } from '../types/enums';
+import { productOwnershipApi, OwnershipAlertDto, ProductOwnershipDto } from '../services/api';
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
@@ -46,13 +46,18 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   // State for dashboard data
   const [todayStats, setTodayStats] = React.useState({
     sales: { count: 0, amount: 0 },
-    returns: { count: 0, amount: 0 },
     repairs: { count: 0, amount: 0 },
     lowStock: 0,
   });
   
   const [recentActivities, setRecentActivities] = React.useState<any[]>([]);
   const [dashboardLoading, setDashboardLoading] = React.useState(true);
+  
+  // Ownership state
+  const [ownershipAlerts, setOwnershipAlerts] = React.useState<OwnershipAlertDto[]>([]);
+  const [lowOwnershipProducts, setLowOwnershipProducts] = React.useState<ProductOwnershipDto[]>([]);
+  const [outstandingPayments, setOutstandingPayments] = React.useState<ProductOwnershipDto[]>([]);
+  const [ownershipLoading, setOwnershipLoading] = React.useState(false);
 
   // Transform API gold rates to dashboard format
   const goldRates: GoldRatesMap = React.useMemo(() => {
@@ -87,7 +92,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   }, [goldRatesData]);
 
   // Function to get transaction type display name
-  const getTransactionTypeName = (type: string | number): 'sale' | 'return' | 'repair' => {
+  const getTransactionTypeName = (type: string | number): 'sale' | 'repair' => {
     // If it's already a string, it might be the display name
     if (typeof type === 'string') {
       // Check if it's a numeric string (enum value)
@@ -95,14 +100,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       if (!isNaN(numericValue)) {
         const transactionType = transactionTypesData?.find(t => t.value === numericValue);
         const displayName = transactionType ? transactionType.displayName.toLowerCase() : type.toLowerCase();
-        return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
-          ? displayName as 'sale' | 'return' | 'repair' 
+        return (displayName === 'sale' || displayName === 'repair') 
+          ? displayName as 'sale' | 'repair' 
           : 'sale';
       }
       // If it's already a display name, return as is if valid
       const lowerType = type.toLowerCase();
-      return (lowerType === 'sale' || lowerType === 'return' || lowerType === 'repair') 
-        ? lowerType as 'sale' | 'return' | 'repair' 
+      return (lowerType === 'sale' || lowerType === 'repair') 
+        ? lowerType as 'sale' | 'repair' 
         : 'sale';
     }
     
@@ -110,8 +115,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     if (typeof type === 'number') {
       const transactionType = transactionTypesData?.find(t => t.value === type);
       const displayName = transactionType ? transactionType.displayName.toLowerCase() : 'sale';
-      return (displayName === 'sale' || displayName === 'return' || displayName === 'repair') 
-        ? displayName as 'sale' | 'return' | 'repair' 
+      return (displayName === 'sale' || displayName === 'repair') 
+        ? displayName as 'sale' | 'repair' 
         : 'sale';
     }
     
@@ -148,10 +153,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         // Ensure we have valid data with fallbacks
         const transactionCount = dailySales?.transactionCount ?? 0;
         const totalSales = dailySales?.totalSales ?? 0;
-        const totalReturns = dailySales?.totalReturns ?? 0;
         const lowStockCount = lowStockItems?.length ?? 0;
         
-        console.log('Processed sales data:', { transactionCount, totalSales, totalReturns });
+        console.log('Processed sales data:', { transactionCount, totalSales });
         console.log('Low stock count:', lowStockCount);
         
         setTodayStats({
@@ -159,16 +163,30 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             count: transactionCount, 
             amount: totalSales
           },
-          returns: { 
-            count: 0, // This would need to be calculated from transaction data
-            amount: totalReturns
-          },
           repairs: { 
             count: 0, // This would need to be calculated from transaction data
             amount: 0 
           },
           lowStock: lowStockCount,
         });
+        
+        // Fetch ownership data
+        try {
+          setOwnershipLoading(true);
+          const [alerts, lowOwnership, outstanding] = await Promise.all([
+            productOwnershipApi.getOwnershipAlerts(branchId),
+            productOwnershipApi.getLowOwnershipProducts(0.5),
+            productOwnershipApi.getProductsWithOutstandingPayments()
+          ]);
+          
+          setOwnershipAlerts(alerts);
+          setLowOwnershipProducts(lowOwnership);
+          setOutstandingPayments(outstanding);
+        } catch (error) {
+          console.error('Failed to load ownership data:', error);
+        } finally {
+          setOwnershipLoading(false);
+        }
         
         // Fetch recent transactions
         const transactionLog = await fetchTransactionLogReport(branchId, today);
@@ -203,7 +221,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         // Set fallback data on error
         setTodayStats({
           sales: { count: 0, amount: 0 },
-          returns: { count: 0, amount: 0 },
           repairs: { count: 0, amount: 0 },
           lowStock: 0,
         });
@@ -226,7 +243,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'sale': return <ShoppingCart className="h-4 w-4 text-green-600" />;
-      // case 'return': return <RotateCcw className="h-4 w-4 text-orange-600" />; // Hidden per user request
       case 'repair': return <Wrench className="h-4 w-4 text-blue-600" />;
       default: return <Package className="h-4 w-4" />;
     }
@@ -341,31 +357,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </CardContent>
         </Card>
 
-        {/* Returns card hidden per user request */}
-        {/* <Card 
-          className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => onNavigate?.('returns')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Returns</CardTitle>
-            <RotateCcw className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            {dashboardLoading ? (
-              <div className="animate-pulse">
-                <div className="h-8 bg-gray-300 rounded mb-2"></div>
-                <div className="h-3 bg-gray-300 rounded w-3/4"></div>
-              </div>
-            ) : (
-              <>
-                <div className="text-2xl text-[#0D1B2A]">{todayStats.returns.count}</div>
-                <p className="text-xs text-muted-foreground">
-                  {formatCurrency(todayStats.returns.amount)} total
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card> */}
+
 
         <Card 
           className="pos-card cursor-pointer hover:shadow-lg transition-shadow"
@@ -418,6 +410,91 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </Card>
       </div>
 
+      {/* Ownership Alerts */}
+      {(ownershipAlerts.length > 0 || lowOwnershipProducts.length > 0 || outstandingPayments.length > 0) && (
+        <Card className="pos-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Ownership Alerts
+            </CardTitle>
+            <CardDescription>Products requiring attention due to ownership issues</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Ownership Alerts */}
+              {ownershipAlerts.slice(0, 3).map((alert, index) => (
+                <div key={`alert-${index}`} className="flex items-center justify-between p-3 border rounded-lg bg-orange-50">
+                  <div className="flex items-center space-x-3">
+                    <AlertTriangle className="h-5 w-5 text-orange-500" />
+                    <div>
+                      <h4 className="font-medium text-sm">{alert.productName}</h4>
+                      <p className="text-xs text-muted-foreground">{alert.message}</p>
+                    </div>
+                  </div>
+                  <Badge 
+                    variant="outline" 
+                    className={
+                      alert.severity.toLowerCase() === 'high' ? 'bg-red-100 text-red-800' :
+                      alert.severity.toLowerCase() === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }
+                  >
+                    {alert.severity}
+                  </Badge>
+                </div>
+              ))}
+
+              {/* Low Ownership Products */}
+              {lowOwnershipProducts.slice(0, 2).map((product, index) => (
+                <div key={`low-${index}`} className="flex items-center justify-between p-3 border rounded-lg bg-red-50">
+                  <div className="flex items-center space-x-3">
+                    <Package className="h-5 w-5 text-red-500" />
+                    <div>
+                      <h4 className="font-medium text-sm">{product.productName}</h4>
+                      <p className="text-xs text-muted-foreground">Low ownership: {product.ownershipPercentage.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-red-100 text-red-800">
+                    Low Ownership
+                  </Badge>
+                </div>
+              ))}
+
+              {/* Outstanding Payments */}
+              {outstandingPayments.slice(0, 2).map((product, index) => (
+                <div key={`outstanding-${index}`} className="flex items-center justify-between p-3 border rounded-lg bg-yellow-50">
+                  <div className="flex items-center space-x-3">
+                    <DollarSign className="h-5 w-5 text-yellow-600" />
+                    <div>
+                      <h4 className="font-medium text-sm">{product.productName}</h4>
+                      <p className="text-xs text-muted-foreground">Outstanding: {formatCurrency(product.outstandingAmount)}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                    Payment Due
+                  </Badge>
+                </div>
+              ))}
+
+              {/* View All Button */}
+              {(ownershipAlerts.length > 3 || lowOwnershipProducts.length > 2 || outstandingPayments.length > 2) && (
+                <div className="pt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => onNavigate?.('product-ownership')}
+                  >
+                    View All Ownership Issues
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Recent Activities & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activities */}
@@ -460,15 +537,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <ShoppingCart className="h-6 w-6" />
                 New Sale
               </Button>
-                            {/* Returns button hidden per user request */}
-              {/* <Button
-                variant="outline" 
-                className="touch-target h-20 flex-col gap-2"
-                onClick={() => onNavigate?.('returns')}
-              >
-                <RotateCcw className="h-6 w-6" />
-                Process Return
-              </Button> */}
               <Button 
                 variant="outline" 
                 className="touch-target h-20 flex-col gap-2"

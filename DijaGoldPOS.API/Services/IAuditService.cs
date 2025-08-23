@@ -38,6 +38,22 @@ public interface IAuditService
         string? errorMessage = null);
 
     /// <summary>
+    /// Log user action for audit trail (alias for LogAsync)
+    /// </summary>
+    /// <param name="userId">User performing the action</param>
+    /// <param name="action">Action performed</param>
+    /// <param name="entityType">Entity type affected</param>
+    /// <param name="entityId">Entity ID affected</param>
+    /// <param name="description">Description of the action</param>
+    /// <returns>Audit log ID</returns>
+    Task<long> LogActionAsync(
+        string userId,
+        string action,
+        string? entityType = null,
+        string? entityId = null,
+        string? description = null);
+
+    /// <summary>
     /// Log user login
     /// </summary>
     /// <param name="userId">User ID</param>

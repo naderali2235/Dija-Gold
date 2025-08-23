@@ -772,6 +772,60 @@ export function useReceivePurchaseOrder() {
   return useApiCall(api.purchaseOrders.receivePurchaseOrder);
 }
 
+// Orders hooks (new architecture)
+export function useCreateSaleOrder() {
+  return useApiCall(api.orders.createSaleOrder);
+}
+
+export function useCreateRepairOrder() {
+  return useApiCall(api.orders.createRepairOrder);
+}
+
+export function useOrder() {
+  return useApiCall(api.orders.getOrder);
+}
+
+export function useSearchOrders() {
+  return useApiCall(api.orders.searchOrders);
+}
+
+export function useOrderSummary() {
+  return useApiCall(api.orders.getOrderSummary);
+}
+
+export function useCustomerOrders() {
+  return useApiCall(api.orders.getCustomerOrders);
+}
+
+export function useCashierOrders() {
+  return useApiCall(api.orders.getCashierOrders);
+}
+
+export function useUpdateOrder() {
+  return useApiCall(api.orders.updateOrder);
+}
+
+// Financial Transactions hooks (new architecture)
+export function useFinancialTransaction() {
+  return useApiCall(api.financialTransactions.getFinancialTransaction);
+}
+
+export function useSearchFinancialTransactions() {
+  return useApiCall(api.financialTransactions.searchFinancialTransactions);
+}
+
+export function useVoidFinancialTransaction() {
+  return useApiCall(api.financialTransactions.voidFinancialTransaction);
+}
+
+export function useMarkReceiptPrinted() {
+  return useApiCall(api.financialTransactions.markReceiptPrinted);
+}
+
+export function useGenerateBrowserReceipt() {
+  return useApiCall(api.financialTransactions.generateBrowserReceipt);
+}
+
 export default {
   useApiState,
   useApiCall,
@@ -782,6 +836,19 @@ export default {
   useDeleteProduct,
   useGoldRates,
   useProcessSale,
+  useCreateSaleOrder,
+  useCreateRepairOrder,
+  useOrder,
+  useSearchOrders,
+  useOrderSummary,
+  useCustomerOrders,
+  useCashierOrders,
+  useUpdateOrder,
+  useFinancialTransaction,
+  useSearchFinancialTransactions,
+  useVoidFinancialTransaction,
+  useMarkReceiptPrinted,
+  useGenerateBrowserReceipt,
   useTransaction,
   useSearchTransactions,
   useLogin,

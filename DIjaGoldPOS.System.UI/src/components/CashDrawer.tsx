@@ -482,7 +482,7 @@ export default function CashDrawer() {
                   <strong>Expected Closing Balance:</strong> {formatCurrency(currentBalance?.expectedClosingBalance || 0)}
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  This is calculated based on opening balance + cash sales + cash repairs - cash returns
+                  This is calculated based on opening balance + cash sales + cash repairs
                 </p>
               </div>
               

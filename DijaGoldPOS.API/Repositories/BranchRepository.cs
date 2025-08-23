@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;
@@ -68,11 +68,11 @@ public class BranchRepository : Repository<Branch>, IBranchRepository
         var startOfDay = date.Date;
         var endOfDay = startOfDay.AddDays(1);
 
-        var branchSales = await _context.Transactions
+        var branchSales = await _context.FinancialTransactions
             .Include(t => t.Branch)
             .Where(t => t.TransactionDate >= startOfDay && 
                        t.TransactionDate < endOfDay &&
-                       t.TransactionType == TransactionType.Sale)
+                       t.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale)
             .GroupBy(t => t.Branch)
             .Select(g => new
             {
@@ -114,17 +114,24 @@ public class BranchRepository : Repository<Branch>, IBranchRepository
     /// </summary>
     public async Task<(decimal TotalSales, int TransactionCount, int ProductsSold, decimal AverageTransactionValue)> GetPerformanceMetricsAsync(int branchId, DateTime fromDate, DateTime toDate)
     {
-        var transactions = await _context.Transactions
-            .Include(t => t.TransactionItems)
+        var financialTransactions = await _context.FinancialTransactions
             .Where(t => t.BranchId == branchId &&
                        t.TransactionDate >= fromDate &&
                        t.TransactionDate <= toDate &&
-                       t.TransactionType == TransactionType.Sale)
+                       t.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale)
             .ToListAsync();
 
-        var totalSales = transactions.Sum(t => t.TotalAmount);
-        var transactionCount = transactions.Count;
-        var productsSold = transactions.SelectMany(t => t.TransactionItems).Sum(ti => (int)ti.Quantity);
+        var orders = await _context.Orders
+            .Include(o => o.OrderItems)
+            .Where(o => o.BranchId == branchId &&
+                       o.OrderDate >= fromDate &&
+                       o.OrderDate <= toDate &&
+                       o.OrderTypeId == LookupTableConstants.OrderTypeSale)
+            .ToListAsync();
+
+        var totalSales = financialTransactions.Sum(t => t.TotalAmount);
+        var transactionCount = financialTransactions.Count;
+        var productsSold = orders.SelectMany(o => o.OrderItems).Sum(oi => (int)oi.Quantity);
         var averageTransactionValue = transactionCount > 0 ? totalSales / transactionCount : 0;
 
         return (totalSales, transactionCount, productsSold, averageTransactionValue);

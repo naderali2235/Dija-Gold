@@ -138,6 +138,7 @@ export default function Products() {
     faceValue: '',
     hasNumismaticValue: false,
     makingChargesApplicable: true,
+    useProductMakingCharges: false,
     supplierId: 'none',
   });
 
@@ -197,6 +198,7 @@ export default function Products() {
       faceValue: '',
       hasNumismaticValue: false,
       makingChargesApplicable: true,
+      useProductMakingCharges: false,
       supplierId: 'none',
     });
   };
@@ -208,8 +210,8 @@ export default function Products() {
     const formData = {
       productCode: product.productCode,
       name: product.name,
-      categoryType: EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType),
-      karatType: EnumMapper.karatEnumToString(product.karatType as KaratType),
+      categoryType: EnumMapper.productCategoryEnumToString(product.categoryType),
+      karatType: EnumMapper.karatEnumToString(product.karatType),
       weight: product.weight.toString(),
       brand: product.brand || '',
       designStyle: product.designStyle || '',
@@ -221,6 +223,7 @@ export default function Products() {
       faceValue: product.faceValue?.toString() || '',
       hasNumismaticValue: product.hasNumismaticValue || false,
       makingChargesApplicable: product.makingChargesApplicable,
+      useProductMakingCharges: product.useProductMakingCharges,
       supplierId: product.supplierId?.toString() || 'none',
     };
     
@@ -282,6 +285,7 @@ export default function Products() {
         faceValue: productForm.faceValue ? parseFloat(productForm.faceValue) : undefined,
         hasNumismaticValue: productForm.hasNumismaticValue,
         makingChargesApplicable: productForm.makingChargesApplicable,
+        useProductMakingCharges: productForm.useProductMakingCharges,
         supplierId: productForm.supplierId && productForm.supplierId !== '' && productForm.supplierId !== 'none' ? parseInt(productForm.supplierId) : undefined,
         isActive: true,
       };
@@ -670,12 +674,12 @@ export default function Products() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p>{categoryDisplayNames[EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType) as keyof typeof categoryDisplayNames]}</p>
+                          <p>{categoryDisplayNames[EnumMapper.productCategoryEnumToString(product.categoryType) as keyof typeof categoryDisplayNames]}</p>
                           {product.subCategory && <p className="text-sm text-muted-foreground">{product.subCategory}</p>}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType as KaratType)}</Badge>
+                        <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType)}</Badge>
                       </TableCell>
                       <TableCell>{product.weight}g</TableCell>
                       <TableCell>

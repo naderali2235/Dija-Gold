@@ -1,36 +1,47 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using DijaGoldPOS.API.Models.Enums;
-using System.ComponentModel;
-using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.LookupTables;
 
 namespace DijaGoldPOS.API.Controllers;
 
 /// <summary>
-/// Controller for managing lookup data and enum values
+/// Controller for managing lookup data (enums, categories, etc.)
 /// </summary>
-[Route("api/[controller]")]
 [ApiController]
+[Route("api/[controller]")]
 [Authorize]
 public class LookupsController : ControllerBase
 {
+    private readonly ApplicationDbContext _context;
+    private readonly ILogger<LookupsController> _logger;
+
+    public LookupsController(ApplicationDbContext context, ILogger<LookupsController> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
     /// <summary>
-    /// Get all available enum values for the application
+    /// Get all lookup data
     /// </summary>
-    /// <returns>Lookup data for all enums</returns>
     [HttpGet]
-    public ActionResult<object> GetLookups()
+    public async Task<IActionResult> GetAllLookups()
     {
         try
         {
             var lookups = new
             {
-                TransactionTypes = GetEnumLookup<TransactionType>(),
-                PaymentMethods = GetEnumLookup<PaymentMethod>(),
-                TransactionStatuses = GetEnumLookup<TransactionStatus>(),
-                ChargeTypes = GetEnumLookup<ChargeType>(),
-                KaratTypes = GetEnumLookup<KaratType>(),
-                ProductCategoryTypes = GetEnumLookup<ProductCategoryType>()
+                TransactionTypes = await GetLookupTableData<FinancialTransactionTypeLookup>(),
+                PaymentMethods = await GetLookupTableData<PaymentMethodLookup>(),
+                TransactionStatuses = await GetLookupTableData<FinancialTransactionStatusLookup>(),
+                ChargeTypes = await GetLookupTableData<ChargeTypeLookup>(),
+                KaratTypes = await GetLookupTableData<KaratTypeLookup>(),
+                ProductCategoryTypes = await GetLookupTableData<ProductCategoryTypeLookup>(),
+                RepairStatuses = await GetLookupTableData<RepairStatusLookup>(),
+                RepairPriorities = await GetLookupTableData<RepairPriorityLookup>()
             };
 
             return Ok(new { success = true, data = lookups });
@@ -45,11 +56,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for transaction types
     /// </summary>
     [HttpGet("transaction-types")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetTransactionTypes()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetTransactionTypes()
     {
         try
         {
-            var data = GetEnumLookup<TransactionType>();
+            var data = await GetLookupTableData<FinancialTransactionTypeLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -62,11 +73,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for payment methods
     /// </summary>
     [HttpGet("payment-methods")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetPaymentMethods()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetPaymentMethods()
     {
         try
         {
-            var data = GetEnumLookup<PaymentMethod>();
+            var data = await GetLookupTableData<PaymentMethodLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -79,11 +90,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for transaction statuses
     /// </summary>
     [HttpGet("transaction-statuses")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetTransactionStatuses()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetTransactionStatuses()
     {
         try
         {
-            var data = GetEnumLookup<TransactionStatus>();
+            var data = await GetLookupTableData<FinancialTransactionStatusLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -96,11 +107,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for charge types
     /// </summary>
     [HttpGet("charge-types")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetChargeTypes()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetChargeTypes()
     {
         try
         {
-            var data = GetEnumLookup<ChargeType>();
+            var data = await GetLookupTableData<ChargeTypeLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -113,11 +124,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for karat types
     /// </summary>
     [HttpGet("karat-types")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetKaratTypes()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetKaratTypes()
     {
         try
         {
-            var data = GetEnumLookup<KaratType>();
+            var data = await GetLookupTableData<KaratTypeLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -130,11 +141,11 @@ public class LookupsController : ControllerBase
     /// Get lookup values for product category types
     /// </summary>
     [HttpGet("product-category-types")]
-    public ActionResult<IEnumerable<EnumLookupDto>> GetProductCategoryTypes()
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetProductCategoryTypes()
     {
         try
         {
-            var data = GetEnumLookup<ProductCategoryType>();
+            var data = await GetLookupTableData<ProductCategoryTypeLookup>();
             return Ok(new { success = true, data });
         }
         catch (Exception ex)
@@ -144,37 +155,171 @@ public class LookupsController : ControllerBase
     }
 
     /// <summary>
-    /// Generic method to convert enum to lookup data
+    /// Get lookup values for repair statuses
     /// </summary>
-    /// <typeparam name="T">Enum type</typeparam>
-    /// <returns>List of enum lookup DTOs</returns>
-    private static List<EnumLookupDto> GetEnumLookup<T>() where T : struct, System.Enum
+    [HttpGet("repair-statuses")]
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetRepairStatuses()
     {
-        return Enum.GetValues<T>()
-            .Select(enumValue => new EnumLookupDto
-            {
-                Value = Convert.ToInt32(enumValue),
-                Name = enumValue.ToString(),
-                DisplayName = GetEnumDescription(enumValue) ?? enumValue.ToString(),
-                Code = enumValue.ToString()
-            })
-            .OrderBy(x => x.Value)
-            .ToList();
+        try
+        {
+            var data = await GetLookupTableData<RepairStatusLookup>();
+            return Ok(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch repair statuses", error = ex.Message });
+        }
     }
 
     /// <summary>
-    /// Get description attribute value from enum if available
+    /// Get lookup values for repair priorities
     /// </summary>
-    /// <param name="enumValue">Enum value</param>
-    /// <returns>Description or null</returns>
-    private static string? GetEnumDescription(Enum enumValue)
+    [HttpGet("repair-priorities")]
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetRepairPriorities()
     {
-        var field = enumValue.GetType().GetField(enumValue.ToString());
-        if (field == null) return null;
-
-        var attribute = field.GetCustomAttribute<DescriptionAttribute>();
-        return attribute?.Description;
+        try
+        {
+            var data = await GetLookupTableData<RepairPriorityLookup>();
+            return Ok(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch repair priorities", error = ex.Message });
+        }
     }
+
+    /// <summary>
+    /// Get lookup values for order types
+    /// </summary>
+    [HttpGet("order-types")]
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetOrderTypes()
+    {
+        try
+        {
+            var data = await GetLookupTableData<OrderTypeLookup>();
+            return Ok(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch order types", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get lookup values for order statuses
+    /// </summary>
+    [HttpGet("order-statuses")]
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetOrderStatuses()
+    {
+        try
+        {
+            var data = await GetLookupTableData<OrderStatusLookup>();
+            return Ok(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch order statuses", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get lookup values for business entity types
+    /// </summary>
+    [HttpGet("business-entity-types")]
+    public async Task<ActionResult<IEnumerable<EnumLookupDto>>> GetBusinessEntityTypes()
+    {
+        try
+        {
+            var data = await GetLookupTableData<BusinessEntityTypeLookup>();
+            return Ok(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch business entity types", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get sub-categories for a specific product category
+    /// </summary>
+    [HttpGet("sub-categories/{categoryId}")]
+    public async Task<IActionResult> GetSubCategories(int categoryId)
+    {
+        try
+        {
+            // Note: SubCategoryLookup model doesn't have CategoryTypeId relationship yet
+            // For now, return all active sub-categories
+            var subCategories = await _context.SubCategoryLookups
+                .Where(sc => sc.IsActive)
+                .OrderBy(sc => sc.SortOrder)
+                .ThenBy(sc => sc.Name)
+                .Select(sc => new SubCategoryLookupDto
+                {
+                    Id = sc.Id,
+                    Name = sc.Name,
+                    Description = sc.Description,
+                    SortOrder = sc.SortOrder
+                })
+                .ToListAsync();
+
+            return Ok(new { success = true, data = subCategories });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to fetch sub-categories", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Generic method to get lookup table data
+    /// </summary>
+    /// <typeparam name="T">Lookup table type</typeparam>
+    /// <returns>List of lookup DTOs</returns>
+    private async Task<List<EnumLookupDto>> GetLookupTableData<T>() where T : class, ILookupEntity
+    {
+        var dbSet = _context.Set<T>();
+
+        var items = await dbSet
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.Name)
+            .ToListAsync();
+
+        return items.Select(item => new EnumLookupDto
+        {
+            Value = item.Id,
+            Name = item.Name,
+            DisplayName = item.Name,
+            Code = item.Name
+        }).ToList();
+    }
+
+}
+
+/// <summary>
+/// DTO for sub-category lookup data
+/// </summary>
+public class SubCategoryLookupDto
+{
+    /// <summary>
+    /// Sub-category ID
+    /// </summary>
+    public int Id { get; set; }
+
+    /// <summary>
+    /// Sub-category name
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Sub-category description
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Sort order for display
+    /// </summary>
+    public int SortOrder { get; set; }
 }
 
 /// <summary>

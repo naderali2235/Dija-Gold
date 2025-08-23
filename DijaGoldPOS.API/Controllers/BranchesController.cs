@@ -2,6 +2,7 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -557,48 +558,55 @@ public class BranchesController : ControllerBase
             var startOfMonth = new DateTime(reportDate.Year, reportDate.Month, 1);
             var endOfMonth = startOfMonth.AddMonths(1).AddTicks(-1);
 
-            // Daily metrics
-            var dailyTransactions = await _context.Transactions
-                .Where(t => t.BranchId == id && t.TransactionDate >= startOfDay && t.TransactionDate <= endOfDay)
+            // Daily metrics - using FinancialTransactions for sales data
+            var dailyFinancialTransactions = await _context.FinancialTransactions
+                .Where(ft => ft.BranchId == id && ft.TransactionDate >= startOfDay && ft.TransactionDate <= endOfDay 
+                    && ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale
+                    && ft.StatusId == LookupTableConstants.FinancialTransactionStatusCompleted)
                 .ToListAsync();
 
-            var dailySales = dailyTransactions.Sum(t => t.TotalAmount);
-            var dailyTransactionCount = dailyTransactions.Count;
+            var dailySales = dailyFinancialTransactions.Sum(ft => ft.TotalAmount);
+            var dailyTransactionCount = dailyFinancialTransactions.Count;
 
-            // Monthly metrics
-            var monthlyTransactions = await _context.Transactions
-                .Where(t => t.BranchId == id && t.TransactionDate >= startOfMonth && t.TransactionDate <= endOfMonth)
+            // Monthly metrics - using FinancialTransactions for sales data
+            var monthlyFinancialTransactions = await _context.FinancialTransactions
+                .Where(ft => ft.BranchId == id && ft.TransactionDate >= startOfMonth && ft.TransactionDate <= endOfMonth
+                    && ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale
+                    && ft.StatusId == LookupTableConstants.FinancialTransactionStatusCompleted)
                 .ToListAsync();
 
-            var monthlySales = monthlyTransactions.Sum(t => t.TotalAmount);
-            var monthlyTransactionCount = monthlyTransactions.Count;
+            var monthlySales = monthlyFinancialTransactions.Sum(ft => ft.TotalAmount);
+            var monthlyTransactionCount = monthlyFinancialTransactions.Count;
 
             // Average transaction value
             var averageTransactionValue = monthlyTransactionCount > 0 ? monthlySales / monthlyTransactionCount : 0;
 
             // Active customers (customers with transactions this month)
-            var activeCustomers = await _context.Transactions
-                .Where(t => t.BranchId == id && t.TransactionDate >= startOfMonth && t.TransactionDate <= endOfMonth && t.CustomerId.HasValue)
-                .Select(t => t.CustomerId)
+            // Note: Customer information is now in the related Order, accessed via BusinessEntityId
+            var activeCustomers = await _context.Orders
+                .Where(o => o.BranchId == id && o.OrderDate >= startOfMonth && o.OrderDate <= endOfMonth 
+                    && o.CustomerId.HasValue
+                    && o.OrderTypeId == LookupTableConstants.OrderTypeSale
+                    && o.StatusId == LookupTableConstants.OrderStatusCompleted)
+                .Select(o => o.CustomerId)
                 .Distinct()
                 .CountAsync();
 
-            // Recent transactions (last 10)
-            var recentTransactions = await _context.Transactions
-                .Include(t => t.Customer)
-                .Include(t => t.CreatedByUser)
-                .Where(t => t.BranchId == id)
-                .OrderByDescending(t => t.TransactionDate)
+            // Recent transactions (last 10) - using FinancialTransactions
+            var recentTransactions = await _context.FinancialTransactions
+                .Include(ft => ft.ProcessedByUser)
+                .Where(ft => ft.BranchId == id && ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale)
+                .OrderByDescending(ft => ft.TransactionDate)
                 .Take(10)
-                .Select(t => new BranchTransactionDto
+                .Select(ft => new BranchTransactionDto
                 {
-                    TransactionId = t.Id,
-                    TransactionNumber = t.TransactionNumber,
-                    TransactionDate = t.TransactionDate,
-                    TransactionType = t.TransactionType.ToString(),
-                    TotalAmount = t.TotalAmount,
-                    CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
-                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
+                    TransactionId = ft.Id,
+                    TransactionNumber = ft.TransactionNumber,
+                    TransactionDate = ft.TransactionDate,
+                    TransactionType = "Sale", // FinancialTransactionTypeSale
+                    TotalAmount = ft.TotalAmount,
+                    CustomerName = "Walk-in", // Customer info is in related Order
+                    CashierName = ft.ProcessedByUser != null ? ft.ProcessedByUser.FullName : string.Empty
                 })
                 .ToListAsync();
 
@@ -655,37 +663,36 @@ public class BranchesController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Branch not found"));
             }
 
-            var query = _context.Transactions
-                .Include(t => t.Customer)
-                .Include(t => t.CreatedByUser)
-                .Where(t => t.BranchId == id);
+            var query = _context.FinancialTransactions
+                .Include(ft => ft.ProcessedByUser)
+                .Where(ft => ft.BranchId == id && ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale);
 
             if (fromDate.HasValue)
             {
-                query = query.Where(t => t.TransactionDate >= fromDate.Value);
+                query = query.Where(ft => ft.TransactionDate >= fromDate.Value);
             }
 
             if (toDate.HasValue)
             {
-                query = query.Where(t => t.TransactionDate <= toDate.Value);
+                query = query.Where(ft => ft.TransactionDate <= toDate.Value);
             }
 
-            query = query.OrderByDescending(t => t.TransactionDate);
+            query = query.OrderByDescending(ft => ft.TransactionDate);
 
             var totalCount = await query.CountAsync();
 
             var transactions = await query
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(t => new BranchTransactionDto
+                .Select(ft => new BranchTransactionDto
                 {
-                    TransactionId = t.Id,
-                    TransactionNumber = t.TransactionNumber,
-                    TransactionDate = t.TransactionDate,
-                    TransactionType = t.TransactionType.ToString(),
-                    TotalAmount = t.TotalAmount,
-                    CustomerName = t.Customer != null ? t.Customer.FullName : "Walk-in",
-                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
+                    TransactionId = ft.Id,
+                    TransactionNumber = ft.TransactionNumber,
+                    TransactionDate = ft.TransactionDate,
+                    TransactionType = "Sale", // FinancialTransactionTypeSale
+                    TotalAmount = ft.TotalAmount,
+                    CustomerName = "Walk-in", // Customer info is in related Order
+                    CashierName = ft.ProcessedByUser != null ? ft.ProcessedByUser.FullName : string.Empty
                 })
                 .ToListAsync();
 

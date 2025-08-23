@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;
@@ -28,11 +28,11 @@ public class ProductRepository : Repository<Product>, IProductRepository
     /// <summary>
     /// Get products by category type
     /// </summary>
-    public async Task<List<Product>> GetByCategoryAsync(ProductCategoryType categoryType)
+    public async Task<List<Product>> GetByCategoryAsync(int categoryTypeId)
     {
         return await _dbSet
             .Include(p => p.Supplier)
-            .Where(p => p.CategoryType == categoryType)
+            .Where(p => p.CategoryTypeId == categoryTypeId)
             .OrderBy(p => p.Name)
             .ToListAsync();
     }
@@ -40,11 +40,11 @@ public class ProductRepository : Repository<Product>, IProductRepository
     /// <summary>
     /// Get products by karat type
     /// </summary>
-    public async Task<List<Product>> GetByKaratTypeAsync(KaratType karatType)
+    public async Task<List<Product>> GetByKaratTypeAsync(int karatTypeId)
     {
         return await _dbSet
             .Include(p => p.Supplier)
-            .Where(p => p.KaratType == karatType)
+            .Where(p => p.KaratTypeId == karatTypeId)
             .OrderBy(p => p.Name)
             .ToListAsync();
     }

@@ -9,7 +9,7 @@ public interface IUnitOfWork : IDisposable
     IProductRepository Products { get; }
     IInventoryRepository Inventory { get; }
     IInventoryMovementRepository InventoryMovements { get; }
-    ITransactionRepository Transactions { get; }
+    // Legacy Transactions repository removed - using FinancialTransactions instead
     IGoldRateRepository GoldRates { get; }
     ICustomerRepository Customers { get; }
     IBranchRepository Branches { get; }

@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Models.LookupTables;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -27,7 +27,7 @@ public class TaxConfiguration : BaseEntity
     /// Type of tax (percentage or fixed amount)
     /// </summary>
     [Required]
-    public ChargeType TaxType { get; set; }
+    public int TaxTypeId { get; set; }
     
     /// <summary>
     /// Tax rate (percentage) or fixed amount in EGP
@@ -63,7 +63,9 @@ public class TaxConfiguration : BaseEntity
     public int DisplayOrder { get; set; } = 1;
     
     /// <summary>
-    /// Navigation property to transaction taxes
+    /// Navigation property to charge type lookup
     /// </summary>
-    public virtual ICollection<TransactionTax> TransactionTaxes { get; set; } = new List<TransactionTax>();
+    public virtual ChargeTypeLookup TaxType { get; set; } = null!;
+    
+    // TransactionTaxes navigation property removed - obsolete model
 }

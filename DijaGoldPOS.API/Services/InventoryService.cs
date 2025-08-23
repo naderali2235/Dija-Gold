@@ -87,15 +87,15 @@ public class InventoryService : IInventoryService
     }
 
     /// <summary>
-    /// Reserve inventory for a transaction (decrease stock)
+    /// Reserve inventory for an order (decrease stock)
     /// </summary>
-    public async Task<bool> ReserveInventoryAsync(List<TransactionItem> transactionItems, int branchId, string userId)
+    public async Task<bool> ReserveInventoryAsync(List<OrderItem> orderItems, int branchId, string userId)
     {
         try
         {
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                return await ReserveInventoryInternalAsync(transactionItems, branchId, userId);
+                return await ReserveInventoryInternalAsync(orderItems, branchId, userId);
             });
         }
         catch (Exception ex)
@@ -106,13 +106,13 @@ public class InventoryService : IInventoryService
     }
 
     /// <summary>
-    /// Reserve inventory for a transaction (decrease stock) - internal method that works within existing transaction
+    /// Reserve inventory for an order (decrease stock) - internal method that works within existing transaction
     /// </summary>
-    public async Task<bool> ReserveInventoryInternalAsync(List<TransactionItem> transactionItems, int branchId, string userId)
+    public async Task<bool> ReserveInventoryInternalAsync(List<OrderItem> orderItems, int branchId, string userId)
     {
         try
         {
-            foreach (var item in transactionItems)
+            foreach (var item in orderItems)
             {
                 var inventory = await _unitOfWork.Inventory.GetByProductAndBranchAsync(item.ProductId, branchId);
                 if (inventory == null)
@@ -129,9 +129,12 @@ public class InventoryService : IInventoryService
                     return false;
                 }
 
+                // Calculate weight from product
+                var weightChange = item.Product.Weight * item.Quantity;
+
                 // Update inventory
                 inventory.QuantityOnHand -= item.Quantity;
-                inventory.WeightOnHand -= item.TotalWeight;
+                inventory.WeightOnHand -= weightChange;
                 _unitOfWork.Inventory.Update(inventory);
 
                 // Create inventory movement record
@@ -140,12 +143,12 @@ public class InventoryService : IInventoryService
                     InventoryId = inventory.Id,
                     MovementType = "Sale",
                     QuantityChange = -item.Quantity,
-                    WeightChange = -item.TotalWeight,
+                    WeightChange = -weightChange,
                     QuantityBalance = inventory.QuantityOnHand,
                     WeightBalance = inventory.WeightOnHand,
                     MovementDate = DateTime.UtcNow,
-                    ReferenceNumber = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                    Notes = $"Reserved for transaction by user {userId}",
+                    ReferenceNumber = $"ORD-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                    Notes = $"Reserved for order by user {userId}",
                     CreatedBy = userId
                 };
 
@@ -153,7 +156,7 @@ public class InventoryService : IInventoryService
 
                 // Log audit trail
                 await _auditService.LogAsync(userId, "Reserve", "Inventory", inventory.Id.ToString(), 
-                    $"Reserved {item.Quantity} units, {item.TotalWeight}g for transaction", null, null, null, null, branchId);
+                    $"Reserved {item.Quantity} units, {weightChange}g for order", null, null, null, null, branchId);
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -169,13 +172,13 @@ public class InventoryService : IInventoryService
     /// <summary>
     /// Release reserved inventory (return to stock)
     /// </summary>
-    public async Task<bool> ReleaseInventoryAsync(List<TransactionItem> transactionItems, int branchId, string userId)
+    public async Task<bool> ReleaseInventoryAsync(List<OrderItem> orderItems, int branchId, string userId)
     {
         try
         {
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                foreach (var item in transactionItems)
+                foreach (var item in orderItems)
                 {
                     var inventory = await _unitOfWork.Inventory.GetByProductAndBranchAsync(item.ProductId, branchId);
                     if (inventory == null)
@@ -185,9 +188,12 @@ public class InventoryService : IInventoryService
                         return false;
                     }
 
+                    // Calculate weight from product
+                    var weightChange = item.Product.Weight * item.Quantity;
+
                     // Update inventory
                     inventory.QuantityOnHand += item.Quantity;
-                    inventory.WeightOnHand += item.TotalWeight;
+                    inventory.WeightOnHand += weightChange;
                     _unitOfWork.Inventory.Update(inventory);
 
                     // Create inventory movement record
@@ -196,7 +202,7 @@ public class InventoryService : IInventoryService
                         InventoryId = inventory.Id,
                         MovementType = "Return",
                         QuantityChange = item.Quantity,
-                        WeightChange = item.TotalWeight,
+                        WeightChange = weightChange,
                         QuantityBalance = inventory.QuantityOnHand,
                         WeightBalance = inventory.WeightOnHand,
                         MovementDate = DateTime.UtcNow,
@@ -209,7 +215,7 @@ public class InventoryService : IInventoryService
 
                     // Log audit trail
                     await _auditService.LogAsync(userId, "Release", "Inventory", inventory.Id.ToString(), 
-                        $"Released {item.Quantity} units, {item.TotalWeight}g from reservation", null, null, null, null, branchId);
+                        $"Released {item.Quantity} units, {weightChange}g from reservation", null, null, null, null, branchId);
                 }
 
                 await _unitOfWork.SaveChangesAsync();

@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Models.LookupTables;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
@@ -28,13 +28,13 @@ public class Product : BaseEntity
     /// Product category type
     /// </summary>
     [Required]
-    public ProductCategoryType CategoryType { get; set; }
+    public int CategoryTypeId { get; set; }
     
     /// <summary>
     /// Karat type of the gold
     /// </summary>
     [Required]
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
     
     /// <summary>
     /// Weight in grams (precision to 3 decimal places)
@@ -55,7 +55,12 @@ public class Product : BaseEntity
     public string? DesignStyle { get; set; }
     
     /// <summary>
-    /// Specific category within the product type (rings, necklaces, etc.)
+    /// Sub-category ID (foreign key to SubCategoryLookup)
+    /// </summary>
+    public int? SubCategoryId { get; set; }
+    
+    /// <summary>
+    /// Legacy sub-category field (for backward compatibility during migration)
     /// </summary>
     [MaxLength(50)]
     public string? SubCategory { get; set; }
@@ -100,6 +105,22 @@ public class Product : BaseEntity
     public bool MakingChargesApplicable { get; set; } = true;
     
     /// <summary>
+    /// Product-specific making charges type (null if using pricing-level charges)
+    /// </summary>
+    public int? ProductMakingChargesTypeId { get; set; }
+    
+    /// <summary>
+    /// Product-specific making charges value (null if using pricing-level charges)
+    /// </summary>
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? ProductMakingChargesValue { get; set; }
+    
+    /// <summary>
+    /// Whether to use product-specific making charges instead of pricing-level charges
+    /// </summary>
+    public bool UseProductMakingCharges { get; set; } = false;
+    
+    /// <summary>
     /// Supplier ID (if purchased from supplier)
     /// </summary>
     public int? SupplierId { get; set; }
@@ -117,8 +138,26 @@ public class Product : BaseEntity
     public virtual ICollection<Inventory> InventoryRecords { get; set; } = new List<Inventory>();
     
     /// <summary>
-    /// Navigation property to transaction items
+    /// Navigation property to product category type lookup
     /// </summary>
     [JsonIgnore]
-    public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
+    public virtual ProductCategoryTypeLookup CategoryType { get; set; } = null!;
+    
+    /// <summary>
+    /// Navigation property to karat type lookup
+    /// </summary>
+    [JsonIgnore]
+    public virtual KaratTypeLookup KaratType { get; set; } = null!;
+    
+    /// <summary>
+    /// Navigation property to sub-category lookup
+    /// </summary>
+    [JsonIgnore]
+    public virtual SubCategoryLookup? SubCategoryLookup { get; set; }
+    
+    /// <summary>
+    /// Navigation property to order items
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 }

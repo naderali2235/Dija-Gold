@@ -2,18 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Shield, Save, AlertTriangle } from 'lucide-react';
+import { Shield, Save, AlertTriangle, Settings as SettingsIcon } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useGoldRates } from '../hooks/useApi';
+import { productOwnershipApi } from '../services/api';
 import { PricingSettings } from './settings/PricingSettings';
 import { SystemSettings } from './settings/SystemSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
 import { NotificationSettings } from './settings/NotificationSettings';
+import { OwnershipSettings } from './settings/OwnershipSettings';
 import {
   DEFAULT_TAX_SETTINGS,
   DEFAULT_SYSTEM_SETTINGS,
   DEFAULT_SECURITY_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_OWNERSHIP_SETTINGS,
 } from './settings/constants';
 
 export default function Settings() {
@@ -33,6 +36,7 @@ export default function Settings() {
   const [originalSystemSettings, setOriginalSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
   const [originalSecuritySettings, setOriginalSecuritySettings] = useState(DEFAULT_SECURITY_SETTINGS);
   const [originalNotificationSettings, setOriginalNotificationSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS);
+  const [originalOwnershipSettings, setOriginalOwnershipSettings] = useState(DEFAULT_OWNERSHIP_SETTINGS);
 
   // Settings states
   const [goldRates, setGoldRates] = useState<Record<string, string>>({
@@ -45,6 +49,7 @@ export default function Settings() {
   const [systemSettings, setSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
   const [securitySettings, setSecuritySettings] = useState(DEFAULT_SECURITY_SETTINGS);
   const [notificationSettings, setNotificationSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS);
+  const [ownershipSettings, setOwnershipSettings] = useState(DEFAULT_OWNERSHIP_SETTINGS);
 
   const [resetManuallyEditedTrigger, setResetManuallyEditedTrigger] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,12 +61,13 @@ export default function Settings() {
     const systemSettingsChanged = JSON.stringify(systemSettings) !== JSON.stringify(originalSystemSettings);
     const securitySettingsChanged = JSON.stringify(securitySettings) !== JSON.stringify(originalSecuritySettings);
     const notificationSettingsChanged = JSON.stringify(notificationSettings) !== JSON.stringify(originalNotificationSettings);
+    const ownershipSettingsChanged = JSON.stringify(ownershipSettings) !== JSON.stringify(originalOwnershipSettings);
     
     const hasChanges = goldRatesChanged || taxSettingsChanged || systemSettingsChanged || 
-                      securitySettingsChanged || notificationSettingsChanged;
+                      securitySettingsChanged || notificationSettingsChanged || ownershipSettingsChanged;
     
     setHasUnsavedChanges(hasChanges);
-  }, [goldRates, originalGoldRates, taxSettings, originalTaxSettings, systemSettings, originalSystemSettings, securitySettings, originalSecuritySettings, notificationSettings, originalNotificationSettings]);
+  }, [goldRates, originalGoldRates, taxSettings, originalTaxSettings, systemSettings, originalSystemSettings, securitySettings, originalSecuritySettings, notificationSettings, originalNotificationSettings, ownershipSettings, originalOwnershipSettings]);
 
   // Transform API gold rates to the format expected by the component
   const transformGoldRates = (apiRates: any[]): Record<string, string> => {
@@ -124,6 +130,10 @@ export default function Settings() {
     setNotificationSettings({ ...notificationSettings, [setting]: value });
   }, [notificationSettings]);
 
+  const handleOwnershipSettingChange = useCallback((settings: typeof DEFAULT_OWNERSHIP_SETTINGS) => {
+    setOwnershipSettings(settings);
+  }, []);
+
   if (!isManager) {
     return (
       <div className="space-y-6">
@@ -160,6 +170,7 @@ export default function Settings() {
         systemSettings,
         securitySettings,
         notificationSettings,
+        ownershipSettings,
       });
       
       // Update original values to current values after successful save
@@ -168,6 +179,7 @@ export default function Settings() {
       setOriginalSystemSettings({ ...systemSettings });
       setOriginalSecuritySettings({ ...securitySettings });
       setOriginalNotificationSettings({ ...notificationSettings });
+      setOriginalOwnershipSettings({ ...ownershipSettings });
       
       setHasUnsavedChanges(false);
       // Trigger refresh of rates from database after saving
@@ -220,11 +232,12 @@ export default function Settings() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="system">System</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="ownership">Ownership</TabsTrigger>
         </TabsList>
         
         <TabsContent value="pricing">
@@ -255,6 +268,14 @@ export default function Settings() {
           <NotificationSettings
             notificationSettings={notificationSettings}
             onNotificationSettingChange={handleNotificationSettingChange}
+          />
+        </TabsContent>
+        
+        <TabsContent value="ownership">
+          <OwnershipSettings
+            settings={ownershipSettings}
+            onSettingsChange={handleOwnershipSettingChange}
+            isManager={isManager}
           />
         </TabsContent>
       </Tabs>

@@ -1,0 +1,1008 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Badge } from './ui/badge';
+import { Textarea } from './ui/textarea';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from './ui/tabs';
+import {
+  Package,
+  Plus,
+  Search,
+  AlertTriangle,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Eye,
+  Edit,
+  Trash2,
+  Bell,
+  FileText,
+  Shield,
+  Send,
+  Filter,
+  BarChart3,
+  Users,
+  MapPin,
+  Calendar,
+  Clock,
+  CheckCircle,
+  XCircle,
+} from 'lucide-react';
+import { formatCurrency } from './utils/currency';
+import { useAuth } from './AuthContext';
+import { 
+  productOwnershipApi,
+  productsApi,
+  suppliersApi,
+  ProductOwnershipDto,
+  ProductOwnershipRequest,
+  OwnershipAlertDto,
+  OwnershipMovementDto,
+  ConvertRawGoldRequest,
+  NewProductFromRawGold,
+  Product,
+  SupplierDto
+} from '../services/api';
+import { toast } from 'sonner';
+
+export default function ProductOwnership() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isNewOwnershipOpen, setIsNewOwnershipOpen] = useState(false);
+  const [isConvertRawGoldOpen, setIsConvertRawGoldOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedOwnership, setSelectedOwnership] = useState<ProductOwnershipDto | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
+  const [alerts, setAlerts] = useState<OwnershipAlertDto[]>([]);
+  const [lowOwnershipProducts, setLowOwnershipProducts] = useState<ProductOwnershipDto[]>([]);
+  const [outstandingPayments, setOutstandingPayments] = useState<ProductOwnershipDto[]>([]);
+  const [ownershipMovements, setOwnershipMovements] = useState<OwnershipMovementDto[]>([]);
+
+  // Form state for new ownership
+  const [newOwnership, setNewOwnership] = useState({
+    productId: '',
+    supplierId: '',
+    totalQuantity: '',
+    totalWeight: '',
+    ownedQuantity: '',
+    ownedWeight: '',
+    totalCost: '',
+    amountPaid: '',
+  });
+
+  // Form state for raw gold conversion
+  const [rawGoldConversion, setRawGoldConversion] = useState({
+    rawGoldProductId: '',
+    weightToConvert: '',
+    quantityToConvert: '',
+    newProducts: [] as NewProductFromRawGold[],
+  });
+
+  // State for ownership details dialog
+  const [ownershipDetailsOpen, setOwnershipDetailsOpen] = useState(false);
+  const [selectedOwnershipForDetails, setSelectedOwnershipForDetails] = useState<ProductOwnershipDto | null>(null);
+
+  // State for payment dialog
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    paymentAmount: '',
+    referenceNumber: '',
+  });
+
+  // State for ownership data
+  const [ownershipData, setOwnershipData] = useState<ProductOwnershipDto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchData();
+  }, [user?.branch?.id]);
+
+  const fetchData = async () => {
+    if (!user?.branch?.id) return;
+
+    try {
+      setLoading(true);
+      
+      // Fetch products and suppliers for dropdowns
+      const [productsResponse, suppliersResponse] = await Promise.all([
+        productsApi.getProducts({ pageSize: 1000 }),
+        suppliersApi.getSuppliers({ pageSize: 1000 })
+      ]);
+
+      setProducts(productsResponse.items);
+      setSuppliers(suppliersResponse.items);
+
+      // Fetch ownership alerts
+      const alertsData = await productOwnershipApi.getOwnershipAlerts(user.branch.id);
+      setAlerts(alertsData);
+
+      // Fetch low ownership products
+      const lowOwnershipData = await productOwnershipApi.getLowOwnershipProducts(0.5);
+      setLowOwnershipProducts(lowOwnershipData);
+
+      // Fetch outstanding payments
+      const outstandingData = await productOwnershipApi.getProductsWithOutstandingPayments();
+      setOutstandingPayments(outstandingData);
+
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      toast.error('Failed to load ownership data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOwnershipData = ownershipData.filter(
+    ownership =>
+      ownership.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ownership.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ownership.supplierName?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleCreateOwnership = async () => {
+    if (!user?.branch?.id) {
+      toast.error('Branch information not available');
+      return;
+    }
+
+    if (!newOwnership.productId || !newOwnership.totalQuantity || !newOwnership.totalWeight) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const request: ProductOwnershipRequest = {
+        productId: parseInt(newOwnership.productId),
+        branchId: user.branch.id,
+        supplierId: newOwnership.supplierId ? parseInt(newOwnership.supplierId) : undefined,
+        totalQuantity: parseFloat(newOwnership.totalQuantity),
+        totalWeight: parseFloat(newOwnership.totalWeight),
+        ownedQuantity: parseFloat(newOwnership.ownedQuantity) || 0,
+        ownedWeight: parseFloat(newOwnership.ownedWeight) || 0,
+        totalCost: parseFloat(newOwnership.totalCost) || 0,
+        amountPaid: parseFloat(newOwnership.amountPaid) || 0,
+      };
+
+      await productOwnershipApi.createOrUpdateOwnership(request);
+      
+      toast.success('Product ownership created successfully');
+      setIsNewOwnershipOpen(false);
+      setNewOwnership({
+        productId: '',
+        supplierId: '',
+        totalQuantity: '',
+        totalWeight: '',
+        ownedQuantity: '',
+        ownedWeight: '',
+        totalCost: '',
+        amountPaid: '',
+      });
+      
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error('Failed to create ownership:', error);
+      toast.error('Failed to create product ownership');
+    }
+  };
+
+  const handleConvertRawGold = async () => {
+    if (!user?.branch?.id) {
+      toast.error('Branch information not available');
+      return;
+    }
+
+    if (!rawGoldConversion.rawGoldProductId || !rawGoldConversion.weightToConvert || rawGoldConversion.newProducts.length === 0) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const request: ConvertRawGoldRequest = {
+        rawGoldProductId: parseInt(rawGoldConversion.rawGoldProductId),
+        branchId: user.branch.id,
+        weightToConvert: parseFloat(rawGoldConversion.weightToConvert),
+        quantityToConvert: parseFloat(rawGoldConversion.quantityToConvert),
+        newProducts: rawGoldConversion.newProducts,
+      };
+
+      const result = await productOwnershipApi.convertRawGoldToProducts(request);
+      
+      if (result.success) {
+        toast.success('Raw gold converted successfully');
+        setIsConvertRawGoldOpen(false);
+        setRawGoldConversion({
+          rawGoldProductId: '',
+          weightToConvert: '',
+          quantityToConvert: '',
+          newProducts: [],
+        });
+        
+        fetchData(); // Refresh data
+      } else {
+        toast.error(result.message || 'Failed to convert raw gold');
+      }
+    } catch (error) {
+      console.error('Failed to convert raw gold:', error);
+      toast.error('Failed to convert raw gold');
+    }
+  };
+
+  const handleViewOwnershipDetails = async (ownership: ProductOwnershipDto) => {
+    try {
+      const movements = await productOwnershipApi.getOwnershipMovements(ownership.id);
+      setOwnershipMovements(movements);
+      setSelectedOwnershipForDetails(ownership);
+      setOwnershipDetailsOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch ownership movements:', error);
+      toast.error('Failed to load ownership details');
+    }
+  };
+
+  const handleMakePayment = async () => {
+    if (!selectedOwnership) {
+      toast.error('No ownership selected');
+      return;
+    }
+
+    if (!paymentForm.paymentAmount || !paymentForm.referenceNumber) {
+      toast.error('Please fill in all payment fields');
+      return;
+    }
+
+    try {
+      await productOwnershipApi.updateOwnershipAfterPayment({
+        productOwnershipId: selectedOwnership.id,
+        paymentAmount: parseFloat(paymentForm.paymentAmount),
+        referenceNumber: paymentForm.referenceNumber,
+      });
+
+      toast.success('Payment processed successfully');
+      setPaymentDialogOpen(false);
+      setPaymentForm({ paymentAmount: '', referenceNumber: '' });
+      setSelectedOwnership(null);
+      
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error('Failed to process payment:', error);
+      toast.error('Failed to process payment');
+    }
+  };
+
+  const getOwnershipStatusColor = (percentage: number) => {
+    if (percentage >= 80) return 'bg-green-100 text-green-800';
+    if (percentage >= 50) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
+  };
+
+  const getAlertSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Product Ownership</h1>
+          <p className="text-muted-foreground">
+            Manage product ownership, track payments, and convert raw gold
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsNewOwnershipOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Ownership
+          </Button>
+          <Button variant="outline" onClick={() => setIsConvertRawGoldOpen(true)}>
+            <Package className="h-4 w-4 mr-2" />
+            Convert Raw Gold
+          </Button>
+        </div>
+      </div>
+
+      {/* Alerts Summary */}
+      {alerts.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800">
+              <Bell className="h-5 w-5" />
+              Ownership Alerts ({alerts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {alerts.slice(0, 3).map((alert, index) => (
+                <div key={index} className="flex items-center justify-between p-2 bg-white rounded">
+                  <div>
+                    <p className="font-medium">{alert.productName}</p>
+                    <p className="text-sm text-gray-600">{alert.message}</p>
+                  </div>
+                  <Badge className={getAlertSeverityColor(alert.severity)}>
+                    {alert.severity}
+                  </Badge>
+                </div>
+              ))}
+              {alerts.length > 3 && (
+                <p className="text-sm text-orange-700">
+                  +{alerts.length - 3} more alerts...
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Main Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="low-ownership">Low Ownership</TabsTrigger>
+          <TabsTrigger value="outstanding-payments">Outstanding Payments</TabsTrigger>
+          <TabsTrigger value="movements">Movement History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Product Ownership Summary</CardTitle>
+              <CardDescription>
+                Overview of all product ownership records
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-4">
+                <Input
+                  placeholder="Search products, suppliers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="max-w-sm"
+                />
+              </div>
+              
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Ownership %</TableHead>
+                    <TableHead>Total Cost</TableHead>
+                    <TableHead>Amount Paid</TableHead>
+                    <TableHead>Outstanding</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredOwnershipData.map((ownership) => (
+                    <TableRow key={ownership.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{ownership.productName}</p>
+                          <p className="text-sm text-gray-500">{ownership.productCode}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{ownership.supplierName || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge className={getOwnershipStatusColor(ownership.ownershipPercentage)}>
+                          {ownership.ownershipPercentage.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatCurrency(ownership.totalCost)}</TableCell>
+                      <TableCell>{formatCurrency(ownership.amountPaid)}</TableCell>
+                      <TableCell>
+                        <span className={ownership.outstandingAmount > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>
+                          {formatCurrency(ownership.outstandingAmount)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewOwnershipDetails(ownership)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {ownership.outstandingAmount > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedOwnership(ownership);
+                                setPaymentDialogOpen(true);
+                              }}
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="low-ownership" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Low Ownership Products</CardTitle>
+              <CardDescription>
+                Products with ownership percentage below 50%
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Ownership %</TableHead>
+                    <TableHead>Outstanding Amount</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lowOwnershipProducts.map((ownership) => (
+                    <TableRow key={ownership.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{ownership.productName}</p>
+                          <p className="text-sm text-gray-500">{ownership.productCode}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className="bg-red-100 text-red-800">
+                          {ownership.ownershipPercentage.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-red-600 font-medium">
+                        {formatCurrency(ownership.outstandingAmount)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedOwnership(ownership);
+                            setPaymentDialogOpen(true);
+                          }}
+                        >
+                          <DollarSign className="h-4 w-4 mr-2" />
+                          Make Payment
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="outstanding-payments" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Outstanding Payments</CardTitle>
+              <CardDescription>
+                Products with pending payments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Outstanding Amount</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {outstandingPayments.map((ownership) => (
+                    <TableRow key={ownership.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{ownership.productName}</p>
+                          <p className="text-sm text-gray-500">{ownership.productCode}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{ownership.supplierName || 'N/A'}</TableCell>
+                      <TableCell className="text-red-600 font-medium">
+                        {formatCurrency(ownership.outstandingAmount)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedOwnership(ownership);
+                            setPaymentDialogOpen(true);
+                          }}
+                        >
+                          <DollarSign className="h-4 w-4 mr-2" />
+                          Pay Now
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="movements" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ownership Movement History</CardTitle>
+              <CardDescription>
+                Track all ownership changes and movements
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {selectedOwnershipForDetails ? (
+                <div>
+                  <div className="mb-4 p-4 bg-gray-50 rounded">
+                    <h3 className="font-medium">{selectedOwnershipForDetails.productName}</h3>
+                    <p className="text-sm text-gray-600">{selectedOwnershipForDetails.productCode}</p>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Quantity Change</TableHead>
+                        <TableHead>Weight Change</TableHead>
+                        <TableHead>Amount Change</TableHead>
+                        <TableHead>Reference</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ownershipMovements.map((movement) => (
+                        <TableRow key={movement.id}>
+                          <TableCell>{new Date(movement.movementDate).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{movement.movementType}</Badge>
+                          </TableCell>
+                          <TableCell>{movement.quantityChange}</TableCell>
+                          <TableCell>{movement.weightChange}g</TableCell>
+                          <TableCell>{formatCurrency(movement.amountChange)}</TableCell>
+                          <TableCell>{movement.referenceNumber || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  Select an ownership record to view movement history
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* New Ownership Dialog */}
+      <Dialog open={isNewOwnershipOpen} onOpenChange={setIsNewOwnershipOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Product Ownership</DialogTitle>
+            <DialogDescription>
+              Add a new product ownership record
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="product">Product</Label>
+              <Select value={newOwnership.productId} onValueChange={(value) => setNewOwnership({...newOwnership, productId: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id.toString()}>
+                      {product.name} ({product.productCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="supplier">Supplier (Optional)</Label>
+              <Select value={newOwnership.supplierId} onValueChange={(value) => setNewOwnership({...newOwnership, supplierId: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                      {supplier.companyName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="totalQuantity">Total Quantity</Label>
+                <Input
+                  id="totalQuantity"
+                  type="number"
+                  value={newOwnership.totalQuantity}
+                  onChange={(e) => setNewOwnership({...newOwnership, totalQuantity: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="totalWeight">Total Weight (g)</Label>
+                <Input
+                  id="totalWeight"
+                  type="number"
+                  step="0.01"
+                  value={newOwnership.totalWeight}
+                  onChange={(e) => setNewOwnership({...newOwnership, totalWeight: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="ownedQuantity">Owned Quantity</Label>
+                <Input
+                  id="ownedQuantity"
+                  type="number"
+                  value={newOwnership.ownedQuantity}
+                  onChange={(e) => setNewOwnership({...newOwnership, ownedQuantity: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="ownedWeight">Owned Weight (g)</Label>
+                <Input
+                  id="ownedWeight"
+                  type="number"
+                  step="0.01"
+                  value={newOwnership.ownedWeight}
+                  onChange={(e) => setNewOwnership({...newOwnership, ownedWeight: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="totalCost">Total Cost</Label>
+                <Input
+                  id="totalCost"
+                  type="number"
+                  step="0.01"
+                  value={newOwnership.totalCost}
+                  onChange={(e) => setNewOwnership({...newOwnership, totalCost: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="amountPaid">Amount Paid</Label>
+                <Input
+                  id="amountPaid"
+                  type="number"
+                  step="0.01"
+                  value={newOwnership.amountPaid}
+                  onChange={(e) => setNewOwnership({...newOwnership, amountPaid: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsNewOwnershipOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateOwnership}>
+                Create Ownership
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Make Payment</DialogTitle>
+            <DialogDescription>
+              Process payment for outstanding amount
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedOwnership && (
+              <div className="p-4 bg-gray-50 rounded">
+                <p className="font-medium">{selectedOwnership.productName}</p>
+                <p className="text-sm text-gray-600">Outstanding: {formatCurrency(selectedOwnership.outstandingAmount)}</p>
+              </div>
+            )}
+            
+            <div>
+              <Label htmlFor="paymentAmount">Payment Amount</Label>
+              <Input
+                id="paymentAmount"
+                type="number"
+                step="0.01"
+                value={paymentForm.paymentAmount}
+                onChange={(e) => setPaymentForm({...paymentForm, paymentAmount: e.target.value})}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="referenceNumber">Reference Number</Label>
+              <Input
+                id="referenceNumber"
+                value={paymentForm.referenceNumber}
+                onChange={(e) => setPaymentForm({...paymentForm, referenceNumber: e.target.value})}
+                placeholder="Payment reference or receipt number"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleMakePayment}>
+                Process Payment
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ownership Details Dialog */}
+      <Dialog open={ownershipDetailsOpen} onOpenChange={setOwnershipDetailsOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Ownership Details</DialogTitle>
+            <DialogDescription>
+              Detailed view of ownership information and movement history
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOwnershipForDetails && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Product</Label>
+                  <p className="font-medium">{selectedOwnershipForDetails.productName}</p>
+                  <p className="text-sm text-gray-600">{selectedOwnershipForDetails.productCode}</p>
+                </div>
+                <div>
+                  <Label>Supplier</Label>
+                  <p className="font-medium">{selectedOwnershipForDetails.supplierName || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label>Ownership Percentage</Label>
+                  <Badge className={getOwnershipStatusColor(selectedOwnershipForDetails.ownershipPercentage)}>
+                    {selectedOwnershipForDetails.ownershipPercentage.toFixed(1)}%
+                  </Badge>
+                </div>
+                <div>
+                  <Label>Outstanding Amount</Label>
+                  <p className={`font-medium ${selectedOwnershipForDetails.outstandingAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {formatCurrency(selectedOwnershipForDetails.outstandingAmount)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-medium mb-2">Movement History</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Weight</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reference</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ownershipMovements.map((movement) => (
+                      <TableRow key={movement.id}>
+                        <TableCell>{new Date(movement.movementDate).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{movement.movementType}</Badge>
+                        </TableCell>
+                        <TableCell>{movement.quantityChange}</TableCell>
+                        <TableCell>{movement.weightChange}g</TableCell>
+                        <TableCell>{formatCurrency(movement.amountChange)}</TableCell>
+                        <TableCell>{movement.referenceNumber || 'N/A'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Raw Gold Conversion Dialog */}
+      <Dialog open={isConvertRawGoldOpen} onOpenChange={setIsConvertRawGoldOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Convert Raw Gold to Products</DialogTitle>
+            <DialogDescription>
+              Convert raw gold into finished products
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rawGoldProduct">Raw Gold Product</Label>
+              <Select value={rawGoldConversion.rawGoldProductId} onValueChange={(value) => setRawGoldConversion({...rawGoldConversion, rawGoldProductId: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select raw gold product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.filter(p => p.categoryType === 1).map((product) => ( // Assuming categoryType 1 is raw gold
+                    <SelectItem key={product.id} value={product.id.toString()}>
+                      {product.name} ({product.productCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="weightToConvert">Weight to Convert (g)</Label>
+                <Input
+                  id="weightToConvert"
+                  type="number"
+                  step="0.01"
+                  value={rawGoldConversion.weightToConvert}
+                  onChange={(e) => setRawGoldConversion({...rawGoldConversion, weightToConvert: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="quantityToConvert">Quantity to Convert</Label>
+                <Input
+                  id="quantityToConvert"
+                  type="number"
+                  value={rawGoldConversion.quantityToConvert}
+                  onChange={(e) => setRawGoldConversion({...rawGoldConversion, quantityToConvert: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>New Products</Label>
+              <div className="space-y-2">
+                {rawGoldConversion.newProducts.map((product, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <Select 
+                      value={product.productId.toString()} 
+                      onValueChange={(value) => {
+                        const newProducts = [...rawGoldConversion.newProducts];
+                        newProducts[index].productId = parseInt(value);
+                        setRawGoldConversion({...rawGoldConversion, newProducts});
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select product" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.filter(p => p.categoryType !== 1).map((p) => (
+                          <SelectItem key={p.id} value={p.id.toString()}>
+                            {p.name} ({p.productCode})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      placeholder="Qty"
+                      value={product.quantity}
+                      onChange={(e) => {
+                        const newProducts = [...rawGoldConversion.newProducts];
+                        newProducts[index].quantity = parseFloat(e.target.value) || 0;
+                        setRawGoldConversion({...rawGoldConversion, newProducts});
+                      }}
+                      className="w-20"
+                    />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Weight"
+                      value={product.weight}
+                      onChange={(e) => {
+                        const newProducts = [...rawGoldConversion.newProducts];
+                        newProducts[index].weight = parseFloat(e.target.value) || 0;
+                        setRawGoldConversion({...rawGoldConversion, newProducts});
+                      }}
+                      className="w-24"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newProducts = rawGoldConversion.newProducts.filter((_, i) => i !== index);
+                        setRawGoldConversion({...rawGoldConversion, newProducts});
+                      }}
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newProducts = [...rawGoldConversion.newProducts, { productId: 0, quantity: 0, weight: 0 }];
+                    setRawGoldConversion({...rawGoldConversion, newProducts});
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Product
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsConvertRawGoldOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleConvertRawGold}>
+                Convert Raw Gold
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

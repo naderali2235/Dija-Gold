@@ -66,16 +66,18 @@ public class ProductsController : ControllerBase
                                         (p.Brand != null && p.Brand.Contains(searchRequest.SearchTerm)));
             }
 
-            if (searchRequest.CategoryType.HasValue)
-                query = query.Where(p => p.CategoryType == searchRequest.CategoryType.Value);
+            if (searchRequest.CategoryTypeId.HasValue)
+                query = query.Where(p => p.CategoryTypeId == searchRequest.CategoryTypeId.Value);
 
-            if (searchRequest.KaratType.HasValue)
-                query = query.Where(p => p.KaratType == searchRequest.KaratType.Value);
+            if (searchRequest.KaratTypeId.HasValue)
+                query = query.Where(p => p.KaratTypeId == searchRequest.KaratTypeId.Value);
 
             if (!string.IsNullOrEmpty(searchRequest.Brand))
                 query = query.Where(p => p.Brand == searchRequest.Brand);
 
-            if (!string.IsNullOrEmpty(searchRequest.SubCategory))
+            if (searchRequest.SubCategoryId.HasValue)
+                query = query.Where(p => p.SubCategoryId == searchRequest.SubCategoryId.Value);
+            else if (!string.IsNullOrEmpty(searchRequest.SubCategory))
                 query = query.Where(p => p.SubCategory == searchRequest.SubCategory);
 
             if (searchRequest.SupplierId.HasValue)
@@ -213,6 +215,31 @@ public class ProductsController : ControllerBase
                 }
             }
 
+            // Validate product-level making charges if enabled
+            if (request.UseProductMakingCharges)
+            {
+                if (!request.ProductMakingChargesTypeId.HasValue || !request.ProductMakingChargesValue.HasValue)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges type and value are required when using product-level making charges"));
+                }
+
+                if (request.ProductMakingChargesTypeId.Value < 1 || request.ProductMakingChargesTypeId.Value > 2)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges type must be 1 (Percentage) or 2 (Fixed)"));
+                }
+
+                if (request.ProductMakingChargesValue.Value <= 0)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges value must be greater than 0"));
+                }
+
+                // Validate percentage making charges cannot exceed 100%
+                if (request.ProductMakingChargesTypeId.Value == 1 && request.ProductMakingChargesValue.Value > 100)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Percentage making charges cannot exceed 100%"));
+                }
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var product = _mapper.Map<Product>(request);
@@ -299,6 +326,31 @@ public class ProductsController : ControllerBase
                 }
             }
 
+            // Validate product-level making charges if enabled
+            if (request.UseProductMakingCharges)
+            {
+                if (!request.ProductMakingChargesTypeId.HasValue || !request.ProductMakingChargesValue.HasValue)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges type and value are required when using product-level making charges"));
+                }
+
+                if (request.ProductMakingChargesTypeId.Value < 1 || request.ProductMakingChargesTypeId.Value > 2)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges type must be 1 (Percentage) or 2 (Fixed)"));
+                }
+
+                if (request.ProductMakingChargesValue.Value <= 0)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Product making charges value must be greater than 0"));
+                }
+
+                // Validate percentage making charges cannot exceed 100%
+                if (request.ProductMakingChargesTypeId.Value == 1 && request.ProductMakingChargesValue.Value > 100)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse("Percentage making charges cannot exceed 100%"));
+                }
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
             
             // Create DTO for old values to avoid circular references
@@ -308,12 +360,13 @@ public class ProductsController : ControllerBase
             // Update product properties
             product.ProductCode = request.ProductCode;
             product.Name = request.Name;
-            product.CategoryType = request.CategoryType;
-            product.KaratType = request.KaratType;
+            product.CategoryTypeId = request.CategoryTypeId;
+            product.KaratTypeId = request.KaratTypeId;
             product.Weight = request.Weight;
             product.Brand = request.Brand;
             product.DesignStyle = request.DesignStyle;
-            product.SubCategory = request.SubCategory;
+            product.SubCategoryId = request.SubCategoryId;
+            product.SubCategory = request.SubCategory; // Keep for backward compatibility
             product.Shape = request.Shape;
             product.PurityCertificateNumber = request.PurityCertificateNumber;
             product.CountryOfOrigin = request.CountryOfOrigin;
@@ -321,6 +374,9 @@ public class ProductsController : ControllerBase
             product.FaceValue = request.FaceValue;
             product.HasNumismaticValue = request.HasNumismaticValue;
             product.MakingChargesApplicable = request.MakingChargesApplicable;
+            product.UseProductMakingCharges = request.UseProductMakingCharges;
+            product.ProductMakingChargesTypeId = request.ProductMakingChargesTypeId;
+            product.ProductMakingChargesValue = request.ProductMakingChargesValue;
             product.SupplierId = request.SupplierId;
             product.ModifiedBy = userId;
             product.ModifiedAt = DateTime.UtcNow;

@@ -16,7 +16,7 @@ public class UnitOfWork : IUnitOfWork
     private IProductRepository? _products;
     private IInventoryRepository? _inventory;
     private IInventoryMovementRepository? _inventoryMovements;
-    private ITransactionRepository? _transactions;
+    // Legacy Transactions repository removed
     private IGoldRateRepository? _goldRates;
     private ICustomerRepository? _customers;
     private IBranchRepository? _branches;
@@ -38,8 +38,7 @@ public class UnitOfWork : IUnitOfWork
     public IInventoryMovementRepository InventoryMovements =>
         _inventoryMovements ??= new InventoryMovementRepository(_context);
 
-    public ITransactionRepository Transactions =>
-        _transactions ??= new TransactionRepository(_context);
+    // Legacy Transactions repository removed - using FinancialTransactions instead
 
     public IGoldRateRepository GoldRates =>
         _goldRates ??= new GoldRateRepository(_context);

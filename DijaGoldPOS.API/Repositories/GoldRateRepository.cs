@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;
@@ -17,10 +17,10 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     /// <summary>
     /// Get current active gold rate for a specific karat type
     /// </summary>
-    public async Task<GoldRate?> GetCurrentRateAsync(KaratType karatType)
+    public async Task<GoldRate?> GetCurrentRateAsync(int karatTypeId)
     {
         return await _dbSet
-            .Where(gr => gr.KaratType == karatType && gr.EffectiveTo == null)
+            .Where(gr => gr.KaratTypeId == karatTypeId && gr.EffectiveTo == null)
             .OrderByDescending(gr => gr.EffectiveFrom)
             .FirstOrDefaultAsync();
     }
@@ -28,7 +28,7 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     /// <summary>
     /// Get current active gold rates for all karat types
     /// </summary>
-    public async Task<Dictionary<KaratType, GoldRate>> GetCurrentRatesAsync()
+    public async Task<Dictionary<int, GoldRate>> GetCurrentRatesAsync()
     {
         var currentRates = await _dbSet
             .Where(gr => gr.EffectiveTo == null)
@@ -36,16 +36,16 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
             .Select(g => g.OrderByDescending(gr => gr.EffectiveFrom).First())
             .ToListAsync();
 
-        return currentRates.ToDictionary(gr => gr.KaratType, gr => gr);
+        return currentRates.ToDictionary(gr => gr.KaratTypeId, gr => gr);
     }
 
     /// <summary>
     /// Get gold rate effective at a specific date and time
     /// </summary>
-    public async Task<GoldRate?> GetRateAtDateAsync(KaratType karatType, DateTime effectiveDate)
+    public async Task<GoldRate?> GetRateAtDateAsync(int karatTypeId, DateTime effectiveDate)
     {
         return await _dbSet
-            .Where(gr => gr.KaratType == karatType &&
+            .Where(gr => gr.KaratTypeId == karatTypeId &&
                         gr.EffectiveFrom <= effectiveDate &&
                         (gr.EffectiveTo == null || gr.EffectiveTo > effectiveDate))
             .OrderByDescending(gr => gr.EffectiveFrom)
@@ -55,9 +55,9 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     /// <summary>
     /// Get rate history for a specific karat type
     /// </summary>
-    public async Task<List<GoldRate>> GetRateHistoryAsync(KaratType karatType, DateTime? fromDate = null, DateTime? toDate = null)
+    public async Task<List<GoldRate>> GetRateHistoryAsync(int karatTypeId, DateTime? fromDate = null, DateTime? toDate = null)
     {
-        var query = _dbSet.Where(gr => gr.KaratType == karatType);
+        var query = _dbSet.Where(gr => gr.KaratTypeId == karatTypeId);
 
         if (fromDate.HasValue)
         {
@@ -88,10 +88,10 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     /// <summary>
     /// Check if a rate exists for the same karat type and effective date
     /// </summary>
-    public async Task<bool> RateExistsAsync(KaratType karatType, DateTime effectiveFrom, int? excludeId = null)
+    public async Task<bool> RateExistsAsync(int karatTypeId, DateTime effectiveFrom, int? excludeId = null)
     {
         var query = _dbSet
-            .Where(gr => gr.KaratType == karatType && gr.EffectiveFrom == effectiveFrom);
+            .Where(gr => gr.KaratTypeId == karatTypeId && gr.EffectiveFrom == effectiveFrom);
 
         if (excludeId.HasValue)
         {
@@ -104,10 +104,10 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     /// <summary>
     /// Deactivate previous rates when a new rate becomes effective
     /// </summary>
-    public async Task<int> DeactivatePreviousRatesAsync(KaratType karatType, DateTime newEffectiveFrom)
+    public async Task<int> DeactivatePreviousRatesAsync(int karatTypeId, DateTime newEffectiveFrom)
     {
         var previousRates = await _dbSet
-            .Where(gr => gr.KaratType == karatType && 
+            .Where(gr => gr.KaratTypeId == karatTypeId && 
                         gr.EffectiveFrom < newEffectiveFrom && 
                         gr.EffectiveTo == null)
             .ToListAsync();
@@ -127,7 +127,7 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
     {
         var rates = await _dbSet
             .Where(gr => gr.EffectiveFrom >= fromDate && gr.EffectiveFrom <= toDate)
-            .OrderBy(gr => gr.KaratType)
+            .OrderBy(gr => gr.KaratTypeId)
             .ThenBy(gr => gr.EffectiveFrom)
             .ToListAsync();
 
@@ -136,7 +136,7 @@ public class GoldRateRepository : Repository<GoldRate>, IGoldRateRepository
         foreach (var rate in rates)
         {
             var previousRate = await _dbSet
-                .Where(gr => gr.KaratType == rate.KaratType && 
+                .Where(gr => gr.KaratTypeId == rate.KaratTypeId && 
                             gr.EffectiveFrom < rate.EffectiveFrom)
                 .OrderByDescending(gr => gr.EffectiveFrom)
                 .FirstOrDefaultAsync();

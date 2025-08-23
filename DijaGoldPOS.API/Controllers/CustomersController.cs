@@ -2,6 +2,7 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
@@ -333,8 +334,8 @@ public class CustomersController : ControllerBase
             }
 
             // Check if customer has active transactions
-            var hasActiveTransactions = await _context.Transactions
-                .AnyAsync(t => t.CustomerId == id && t.Status != Models.Enums.TransactionStatus.Voided);
+            var hasActiveTransactions = await _context.Orders
+                .AnyAsync(o => o.CustomerId == id && o.StatusId != LookupTableConstants.OrderStatusCancelled);
 
             if (hasActiveTransactions)
             {
@@ -388,37 +389,40 @@ public class CustomersController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Customer not found"));
             }
 
-            var query = _context.Transactions
-                .Include(t => t.Branch)
-                .Include(t => t.CreatedByUser)
-                .Where(t => t.CustomerId == id);
+            var query = _context.Orders
+                .Include(o => o.Branch)
+                .Include(o => o.Cashier)
+                .Where(o => o.CustomerId == id && o.OrderTypeId == LookupTableConstants.OrderTypeSale);
 
             if (fromDate.HasValue)
             {
-                query = query.Where(t => t.TransactionDate >= fromDate.Value);
+                query = query.Where(o => o.OrderDate >= fromDate.Value);
             }
 
             if (toDate.HasValue)
             {
-                query = query.Where(t => t.TransactionDate <= toDate.Value);
+                query = query.Where(o => o.OrderDate <= toDate.Value);
             }
 
             var transactions = await query
-                .OrderByDescending(t => t.TransactionDate)
+                .Include(o => o.OrderItems)
+                .OrderByDescending(o => o.OrderDate)
                 .Take(100) // Limit to last 100 transactions
-                .Select(t => new CustomerTransactionDto
+                .Select(o => new CustomerTransactionDto
                 {
-                    TransactionId = t.Id,
-                    TransactionNumber = t.TransactionNumber,
-                    TransactionDate = t.TransactionDate,
-                    TransactionType = t.TransactionType.ToString(),
-                    TotalAmount = t.TotalAmount,
-                    BranchName = t.Branch != null ? t.Branch.Name : string.Empty,
-                    CashierName = t.CreatedByUser != null ? t.CreatedByUser.FullName : string.Empty
+                    TransactionId = o.Id,
+                    TransactionNumber = o.OrderNumber,
+                    TransactionDate = o.OrderDate,
+                    TransactionType = "Sale", // OrderTypeSale
+                    TotalAmount = o.OrderItems.Sum(oi => oi.TotalAmount),
+                    BranchName = o.Branch != null ? o.Branch.Name : string.Empty,
+                    CashierName = o.Cashier != null ? o.Cashier.FullName : string.Empty
                 })
                 .ToListAsync();
 
-            var totalAmount = await query.SumAsync(t => t.TotalAmount);
+            var totalAmount = await query
+                .Include(o => o.OrderItems)
+                .SumAsync(o => o.OrderItems.Sum(oi => oi.TotalAmount));
             var totalTransactionCount = await query.CountAsync();
 
             var result = new CustomerTransactionHistoryDto

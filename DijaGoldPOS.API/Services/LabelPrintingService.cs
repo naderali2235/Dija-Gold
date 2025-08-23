@@ -87,7 +87,7 @@ public class LabelPrintingService : ILabelPrintingService
         sb.AppendLine("^FO20,20^BQN,2,5");
         sb.AppendLine("^FDLA," + EscapeZpl(payload) + "^FS");
         // Karat (right-top)
-        sb.AppendLine("^FO230,20^A0N,32,32^FDK" + ((int)product.KaratType).ToString() + "^FS");
+        sb.AppendLine("^FO230,20^A0N,32,32^FDK" + product.KaratTypeId.ToString() + "^FS");
         // W is used in your tag to indicate product code
         sb.AppendLine("^FO230,60^A0N,28,28^FDW:^FS");
         sb.AppendLine("^FO270,60^A0N,28,28^FD" + EscapeZpl(product.ProductCode) + "^FS");
@@ -122,6 +122,7 @@ public class LabelPrintingService : ILabelPrintingService
             {
                 // Fallback: send via RAW print to Windows printer using PrintDocument
                 // Note: Zebra expects raw text; PrintDocument can be used to send via graphics-less method
+#pragma warning disable CA1416 // Validate platform compatibility
                 using var raw = new System.Drawing.Printing.PrintDocument();
                 raw.PrinterSettings.PrinterName = windowsPrinterShare;
                 raw.PrintPage += (s, e) =>
@@ -130,6 +131,7 @@ public class LabelPrintingService : ILabelPrintingService
                     e.Graphics?.DrawString(zpl, font, System.Drawing.Brushes.Black, 0, 0);
                 };
                 raw.Print();
+#pragma warning restore CA1416 // Validate platform compatibility
                 _logger.LogInformation("Sent ZPL to Windows printer {Printer}", windowsPrinterShare);
                 return true;
             }

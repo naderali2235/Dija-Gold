@@ -1,10 +1,12 @@
-using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models.Enums;
-using DijaGoldPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
 using System.Security.Claims;
-using DijaGoldPOS.API.Models;
 
 namespace DijaGoldPOS.API.Controllers;
 
@@ -19,19 +21,22 @@ public class PricingController : ControllerBase
     private readonly IPricingService _pricingService;
     private readonly IAuditService _auditService;
     private readonly ILogger<PricingController> _logger;
+    private readonly ApplicationDbContext _context;
 
     public PricingController(
         IPricingService pricingService,
         IAuditService auditService,
-        ILogger<PricingController> logger)
+        ILogger<PricingController> logger,
+        ApplicationDbContext context)
     {
         _pricingService = pricingService;
         _auditService = auditService;
         _logger = logger;
+        _context = context;
     }
 
     /// <summary>
-    /// Get current gold rates for all karat types
+    /// Get current gold rates
     /// </summary>
     /// <returns>Current gold rates</returns>
     [HttpGet("gold-rates")]
@@ -43,15 +48,21 @@ public class PricingController : ControllerBase
         {
             var goldRates = new List<GoldRateDto>();
 
-            foreach (KaratType karatType in Enum.GetValues<KaratType>())
+            // Get all karat types from lookup table
+            var karatTypes = await _context.KaratTypeLookups
+                .Where(kt => kt.IsActive)
+                .OrderBy(kt => kt.SortOrder)
+                .ToListAsync();
+
+            foreach (var karatType in karatTypes)
             {
-                var rate = await _pricingService.GetCurrentGoldRateAsync(karatType);
+                var rate = await _pricingService.GetCurrentGoldRateAsync(karatType.Id);
                 if (rate != null)
                 {
                     goldRates.Add(new GoldRateDto
                     {
                         Id = rate.Id,
-                        KaratType = rate.KaratType,
+                        KaratTypeId = rate.KaratTypeId,
                         RatePerGram = rate.RatePerGram,
                         EffectiveFrom = rate.EffectiveFrom,
                         EffectiveTo = rate.EffectiveTo,
@@ -62,7 +73,7 @@ public class PricingController : ControllerBase
                 }
             }
 
-            return Ok(ApiResponse<List<GoldRateDto>>.SuccessResponse(goldRates.OrderBy(gr => gr.KaratType).ToList()));
+            return Ok(ApiResponse<List<GoldRateDto>>.SuccessResponse(goldRates.OrderBy(gr => gr.KaratTypeId).ToList()));
         }
         catch (Exception ex)
         {
@@ -93,7 +104,7 @@ public class PricingController : ControllerBase
 
             var goldRateUpdates = request.GoldRates.Select(gr => new GoldRateUpdate
             {
-                KaratType = gr.KaratType,
+                KaratTypeId = gr.KaratTypeId,
                 RatePerGram = gr.RatePerGram,
                 EffectiveFrom = gr.EffectiveFrom
             }).ToList();
@@ -130,18 +141,23 @@ public class PricingController : ControllerBase
             var makingChargesList = new List<MakingChargesDto>();
 
             // Get making charges for each product category
-            foreach (ProductCategoryType categoryType in Enum.GetValues<ProductCategoryType>())
+            var productCategories = await _context.ProductCategoryTypeLookups
+                .Where(pc => pc.IsActive)
+                .OrderBy(pc => pc.SortOrder)
+                .ToListAsync();
+
+            foreach (var categoryType in productCategories)
             {
-                var charges = await _pricingService.GetCurrentMakingChargesAsync(categoryType);
+                var charges = await _pricingService.GetCurrentMakingChargesAsync(categoryType.Id);
                 if (charges != null)
                 {
                     makingChargesList.Add(new MakingChargesDto
                     {
                         Id = charges.Id,
                         Name = charges.Name,
-                        ProductCategory = charges.ProductCategory,
+                        ProductCategoryId = charges.ProductCategoryId,
                         SubCategory = charges.SubCategory,
-                        ChargeType = charges.ChargeType,
+                        ChargeTypeId = charges.ChargeTypeId,
                         ChargeValue = charges.ChargeValue,
                         EffectiveFrom = charges.EffectiveFrom,
                         EffectiveTo = charges.EffectiveTo,
@@ -152,8 +168,7 @@ public class PricingController : ControllerBase
                 }
             }
 
-            return Ok(ApiResponse<List<MakingChargesDto>>.SuccessResponse(
-                makingChargesList.OrderBy(mc => mc.ProductCategory).ThenBy(mc => mc.SubCategory).ToList()));
+            return Ok(ApiResponse<List<MakingChargesDto>>.SuccessResponse(makingChargesList.OrderBy(mc => mc.ProductCategoryId).ToList()));
         }
         catch (Exception ex)
         {
@@ -186,9 +201,9 @@ public class PricingController : ControllerBase
             {
                 Id = request.Id,
                 Name = request.Name,
-                ProductCategory = request.ProductCategory,
+                ProductCategoryId = request.ProductCategoryId,
                 SubCategory = request.SubCategory,
-                ChargeType = request.ChargeType,
+                ChargeTypeId = request.ChargeTypeId,
                 ChargeValue = request.ChargeValue,
                 EffectiveFrom = request.EffectiveFrom
             };
@@ -229,7 +244,7 @@ public class PricingController : ControllerBase
                 Id = tc.Id,
                 TaxName = tc.TaxName,
                 TaxCode = tc.TaxCode,
-                TaxType = tc.TaxType,
+                TaxTypeId = tc.TaxTypeId,
                 TaxRate = tc.TaxRate,
                 IsMandatory = tc.IsMandatory,
                 EffectiveFrom = tc.EffectiveFrom,
@@ -274,7 +289,7 @@ public class PricingController : ControllerBase
                 Id = request.Id,
                 TaxName = request.TaxName,
                 TaxCode = request.TaxCode,
-                TaxType = request.TaxType,
+                TaxTypeId = request.TaxTypeId,
                 TaxRate = request.TaxRate,
                 IsMandatory = request.IsMandatory,
                 EffectiveFrom = request.EffectiveFrom,
@@ -364,6 +379,99 @@ public class PricingController : ControllerBase
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while calculating price"));
         }
     }
+
+    /// <summary>
+    /// Test product-level making charges calculation
+    /// </summary>
+    /// <param name="request">Price calculation request</param>
+    /// <returns>Price calculation result with making charges breakdown</returns>
+    [HttpPost("test-product-making-charges")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<PriceCalculationResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> TestProductMakingCharges([FromBody] PriceCalculationRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
+            }
+
+            // Get the product from database
+            var product = await _context.Products
+                .Include(p => p.CategoryType)
+                .Include(p => p.KaratType)
+                .FirstOrDefaultAsync(p => p.Id == request.ProductId);
+
+            if (product == null)
+            {
+                return NotFound(ApiResponse.ErrorResponse("Product not found"));
+            }
+
+            // Calculate price using the pricing service
+            var result = await _pricingService.CalculatePriceAsync(product, request.Quantity, request.CustomerId);
+
+            // Map to DTO
+            var resultDto = new PriceCalculationResultDto
+            {
+                ProductId = product.Id,
+                Quantity = request.Quantity,
+                GoldValue = result.GoldValue,
+                MakingChargesAmount = result.MakingChargesAmount,
+                SubTotal = result.SubTotal,
+                DiscountAmount = result.DiscountAmount,
+                TaxableAmount = result.TaxableAmount,
+                TotalTaxAmount = result.TotalTaxAmount,
+                FinalTotal = result.FinalTotal,
+                CalculatedAt = DateTime.UtcNow,
+                Taxes = result.Taxes.Select(t => new TaxCalculationDto
+                {
+                    TaxName = t.TaxName,
+                    TaxRate = t.TaxRate,
+                    TaxableAmount = t.TaxableAmount,
+                    TaxAmount = t.TaxAmount
+                }).ToList()
+            };
+
+            // Add debug information
+            var debugInfo = new
+            {
+                ProductInfo = new
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name,
+                    ProductCode = product.ProductCode,
+                    MakingChargesApplicable = product.MakingChargesApplicable,
+                    UseProductMakingCharges = product.UseProductMakingCharges,
+                    ProductMakingChargesTypeId = product.ProductMakingChargesTypeId,
+                    ProductMakingChargesValue = product.ProductMakingChargesValue,
+                    CategoryType = product.CategoryType?.Name,
+                    SubCategory = product.SubCategory
+                },
+                MakingChargesUsed = result.MakingChargesUsed != null ? new
+                {
+                    Name = result.MakingChargesUsed.Name,
+                    ChargeTypeId = result.MakingChargesUsed.ChargeTypeId,
+                    ChargeValue = result.MakingChargesUsed.ChargeValue
+                } : null,
+                GoldRateUsed = result.GoldRateUsed != null ? new
+                {
+                    KaratTypeId = result.GoldRateUsed.KaratTypeId,
+                    RatePerGram = result.GoldRateUsed.RatePerGram
+                } : null
+            };
+
+            _logger.LogInformation("Product making charges test: {@DebugInfo}", debugInfo);
+
+            return Ok(ApiResponse<PriceCalculationResultDto>.SuccessResponse(resultDto, "Price calculation completed successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error testing product making charges for product {ProductId}", request.ProductId);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while testing product making charges"));
+        }
+    }
 }
 
 /// <summary>
@@ -372,7 +480,7 @@ public class PricingController : ControllerBase
 public class GoldRateDto
 {
     public int Id { get; set; }
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
     public decimal RatePerGram { get; set; }
     public DateTime EffectiveFrom { get; set; }
     public DateTime? EffectiveTo { get; set; }
@@ -394,7 +502,7 @@ public class UpdateGoldRatesRequestDto
 /// </summary>
 public class GoldRateUpdateDto
 {
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
     public decimal RatePerGram { get; set; }
     public DateTime EffectiveFrom { get; set; }
 }
@@ -406,9 +514,9 @@ public class MakingChargesDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public ProductCategoryType ProductCategory { get; set; }
+    public int ProductCategoryId { get; set; }
     public string? SubCategory { get; set; }
-    public ChargeType ChargeType { get; set; }
+    public int ChargeTypeId { get; set; }
     public decimal ChargeValue { get; set; }
     public DateTime EffectiveFrom { get; set; }
     public DateTime? EffectiveTo { get; set; }
@@ -424,9 +532,9 @@ public class UpdateMakingChargesRequestDto
 {
     public int? Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public ProductCategoryType ProductCategory { get; set; }
+    public int ProductCategoryId { get; set; }
     public string? SubCategory { get; set; }
-    public ChargeType ChargeType { get; set; }
+    public int ChargeTypeId { get; set; }
     public decimal ChargeValue { get; set; }
     public DateTime EffectiveFrom { get; set; }
 }
@@ -439,7 +547,7 @@ public class UpdateTaxConfigurationRequestDto
     public int? Id { get; set; }
     public string TaxName { get; set; } = string.Empty;
     public string TaxCode { get; set; } = string.Empty;
-    public ChargeType TaxType { get; set; }
+    public int TaxTypeId { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsMandatory { get; set; } = true;
     public DateTime EffectiveFrom { get; set; }
@@ -454,7 +562,7 @@ public class TaxConfigurationDto
     public int Id { get; set; }
     public string TaxName { get; set; } = string.Empty;
     public string TaxCode { get; set; } = string.Empty;
-    public ChargeType TaxType { get; set; }
+    public int TaxTypeId { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsMandatory { get; set; }
     public DateTime EffectiveFrom { get; set; }

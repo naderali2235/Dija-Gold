@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 
 namespace DijaGoldPOS.API.Services;
 
@@ -20,17 +20,17 @@ public interface IPricingService
     /// <summary>
     /// Get current gold rate for specific karat type
     /// </summary>
-    /// <param name="karatType">Karat type</param>
+    /// <param name="karatTypeId">Karat type ID</param>
     /// <returns>Current gold rate</returns>
-    Task<GoldRate?> GetCurrentGoldRateAsync(KaratType karatType);
+    Task<GoldRate?> GetCurrentGoldRateAsync(int karatTypeId);
     
     /// <summary>
     /// Get current making charges for product category
     /// </summary>
-    /// <param name="categoryType">Product category</param>
-    /// <param name="subCategory">Sub-category (optional)</param>
+    /// <param name="categoryTypeId">Product category ID</param>
+    /// <param name="subCategoryId">Sub-category ID (optional)</param>
     /// <returns>Current making charges</returns>
-    Task<MakingCharges?> GetCurrentMakingChargesAsync(ProductCategoryType categoryType, string? subCategory = null);
+    Task<MakingCharges?> GetCurrentMakingChargesAsync(int categoryTypeId, int? subCategoryId = null);
     
     /// <summary>
     /// Get current tax configurations
@@ -106,7 +106,7 @@ public class TaxCalculation
 /// </summary>
 public class GoldRateUpdate
 {
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
     public decimal RatePerGram { get; set; }
     public DateTime EffectiveFrom { get; set; }
 }
@@ -118,9 +118,10 @@ public class MakingChargesUpdate
 {
     public int? Id { get; set; } // Null for new, Id for update
     public string Name { get; set; } = string.Empty;
-    public ProductCategoryType ProductCategory { get; set; }
-    public string? SubCategory { get; set; }
-    public ChargeType ChargeType { get; set; }
+    public int ProductCategoryId { get; set; }
+    public int? SubCategoryId { get; set; }
+    public string? SubCategory { get; set; } // Legacy field for backward compatibility
+    public int ChargeTypeId { get; set; }
     public decimal ChargeValue { get; set; }
     public DateTime EffectiveFrom { get; set; }
 }
@@ -133,7 +134,7 @@ public class TaxConfigurationUpdate
     public int? Id { get; set; } // Null for new, Id for update
     public string TaxName { get; set; } = string.Empty;
     public string TaxCode { get; set; } = string.Empty;
-    public ChargeType TaxType { get; set; }
+    public int TaxTypeId { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsMandatory { get; set; } = true;
     public DateTime EffectiveFrom { get; set; }

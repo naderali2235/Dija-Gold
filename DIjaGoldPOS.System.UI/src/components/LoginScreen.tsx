@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
-import { Eye, EyeOff, Shield, User } from 'lucide-react';
+import { Eye, EyeOff, Shield, User, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import DijaLogo, { DijaLogoWithText, DijaLogoAnimated } from './DijaLogo';
+import { testApiConnection } from '../services/api';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -14,30 +15,234 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState<'error' | 'warning' | 'info'>('error');
+  const [isOnline, setIsOnline] = useState(true);
+  const [isServerReachable, setIsServerReachable] = useState(true);
   
   const { login } = useAuth();
+
+  // Check network connectivity and server reachability
+  useEffect(() => {
+    const checkConnectivity = async () => {
+      // Check if browser is online
+      setIsOnline(navigator.onLine);
+      
+      // Check if server is reachable
+      try {
+        const serverReachable = await testApiConnection();
+        setIsServerReachable(serverReachable);
+      } catch (error) {
+        setIsServerReachable(false);
+      }
+    };
+
+    checkConnectivity();
+
+    // Listen for online/offline events
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const getErrorMessage = (error: any): { message: string; type: 'error' | 'warning' | 'info' } => {
+    // Handle network connectivity issues
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return {
+        message: 'Unable to connect to the server. Please check your internet connection and try again.',
+        type: 'warning'
+      };
+    }
+
+    // Handle HTTP status codes
+    if (error.status) {
+      switch (error.status) {
+        case 400:
+          return {
+            /*
+            message: 'Invalid request. Please check your input and try again.',
+            */
+            message:error.message,
+            type: 'error'
+          };
+        case 401:
+          return {
+            //message: 'Invalid username or password. Please check your credentials and try again.',
+            message:error.message,
+            type: 'error'
+          };
+        case 403:
+          return {
+            //message: 'Access denied. Your account may be locked or you may not have permission to access this system.',
+            message:error.message,
+            type: 'warning'
+          };
+        case 404:
+          return {
+            //message: 'Login service not found. Please contact support.',
+            message:error.message,
+            type: 'error'
+          };
+        case 429:
+          return {
+            //message: 'Too many login attempts. Please wait a few minutes before trying again.',
+            message:error.message,
+            type: 'warning'
+          };
+        case 500:
+          return {
+            //message: 'Server error occurred. Please try again later or contact support.',
+            message:error.message,
+            type: 'error'
+          };
+        case 502:
+        case 503:
+        case 504:
+          return {
+            message: 'Service temporarily unavailable. Please try again later.',
+            type: 'info'
+          };
+      }
+    }
+
+    /*
+    // Handle specific API error messages
+    if (error.message) {
+      const message = error.message.toLowerCase();
+      
+      // Invalid credentials
+      if (message.includes('invalid') || message.includes('incorrect') || message.includes('credentials')) {
+        return {
+          message: 'Invalid username or password. Please check your credentials and try again.',
+          type: 'error'
+        };
+      }
+
+      // Account locked or disabled
+      if (message.includes('locked') || message.includes('disabled') || message.includes('suspended')) {
+        return {
+          message: 'Your account has been locked. Please contact your administrator.',
+          type: 'warning'
+        };
+      }
+
+      // Account expired
+      if (message.includes('expired') || message.includes('expiration')) {
+        return {
+          message: 'Your account has expired. Please contact your administrator to renew your access.',
+          type: 'warning'
+        };
+      }
+
+      // Too many failed attempts
+      if (message.includes('too many') || message.includes('attempts') || message.includes('rate limit')) {
+        return {
+          message: 'Too many failed login attempts. Please wait a few minutes before trying again.',
+          type: 'warning'
+        };
+      }
+
+      // Server errors
+      if (message.includes('server') || message.includes('internal') || message.includes('500')) {
+        return {
+          message: 'Server error occurred. Please try again later or contact support.',
+          type: 'error'
+        };
+      }
+
+      // Maintenance mode
+      if (message.includes('maintenance') || message.includes('unavailable') || message.includes('503')) {
+        return {
+          message: 'The system is currently under maintenance. Please try again later.',
+          type: 'info'
+        };
+      }
+
+      // Session expired
+      if (message.includes('session') || message.includes('expired')) {
+        return {
+          message: 'Your session has expired. Please login again.',
+          type: 'info'
+        };
+      }
+
+      // Use the original error message if it's user-friendly
+      if (message.length < 100) {
+        return {
+          message: error.message,
+          type: 'error'
+        };
+      }
+    }
+
+  */
+
+    // Default error message
+    return {
+      message: 'Unable to sign in. Please check your credentials and try again.',
+      type: 'error'
+    };
+  };
+
+  const retryConnectivityCheck = async () => {
+    try {
+      const serverReachable = await testApiConnection();
+      setIsServerReachable(serverReachable);
+      if (serverReachable) {
+        setError('');
+        setErrorType('error');
+      }
+    } catch (error) {
+      setIsServerReachable(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorType('error');
     setIsLoading(true);
     console.log('Login form submitted with username:', username.trim());
     
     try {
-      const success = await login(username.trim(), password);
-      console.log('Login result:', success);
-      
-      if (!success) {
-        console.log('Login failed - setting error message');
-        setError('Invalid username or password');
-      } else {
-        console.log('Login successful - should redirect to main app');
-      }
+      await login(username.trim(), password);
+      console.log('Login successful - user will be redirected automatically');
     } catch (err) {
-      console.error('Login exception:', err);
-      setError('Unable to sign in. Please try again.');
+      console.error('Login failed:', err);
+      const { message, type } = getErrorMessage(err);
+      setError(message);
+      setErrorType(type);
+      // No redirect on failure - user stays on login screen
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getErrorIcon = () => {
+    switch (errorType) {
+      case 'warning':
+        return <AlertCircle className="h-4 w-4 text-amber-600" />;
+      case 'info':
+        return <AlertCircle className="h-4 w-4 text-blue-600" />;
+      default:
+        return <AlertCircle className="h-4 w-4 text-red-600" />;
+    }
+  };
+
+  const getErrorStyles = () => {
+    switch (errorType) {
+      case 'warning':
+        return 'bg-amber-50 border-amber-200 text-amber-800';
+      case 'info':
+        return 'bg-blue-50 border-blue-200 text-blue-800';
+      default:
+        return 'bg-red-50 border-red-200 text-red-600';
     }
   };
 /*
@@ -136,8 +341,40 @@ export default function LoginScreen() {
 
             {/* Error Message */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className={`p-3 border rounded-lg ${getErrorStyles()}`}>
+                <div className="flex items-center gap-2">
+                  {getErrorIcon()}
+                  <p className="text-sm">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Connectivity Status */}
+            {(!isOnline || !isServerReachable) && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <WifiOff className="h-4 w-4 text-amber-600" />
+                    <div className="text-sm text-amber-800">
+                      {!isOnline ? (
+                        <span>You are currently offline. Please check your internet connection.</span>
+                      ) : (
+                        <span>Unable to reach the server. Please check your connection or try again later.</span>
+                      )}
+                    </div>
+                  </div>
+                  {!isOnline && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={retryConnectivityCheck}
+                      className="text-amber-700 border-amber-300 hover:bg-amber-100"
+                    >
+                      Retry
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -145,12 +382,17 @@ export default function LoginScreen() {
             <Button
               type="submit"
               className="w-full h-12 text-lg bg-gradient-to-r from-[#D4AF37] to-[#B8941F] hover:from-[#B8941F] hover:to-[#D4AF37] text-[#0D1B2A] font-semibold shadow-lg transition-all duration-200 transform hover:scale-105"
-              disabled={isLoading}
+              disabled={isLoading || !isOnline || !isServerReachable}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <DijaLogoAnimated size="sm" />
                   Signing In...
+                </div>
+              ) : !isOnline || !isServerReachable ? (
+                <div className="flex items-center gap-2">
+                  <WifiOff className="h-4 w-4" />
+                  Connection Unavailable
                 </div>
               ) : (
                 'Sign In'

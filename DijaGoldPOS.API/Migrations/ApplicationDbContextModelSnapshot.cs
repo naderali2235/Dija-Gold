@@ -143,6 +143,9 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<int?>("FinancialTransactionId")
+                        .HasColumnType("int");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("nvarchar(45)");
@@ -156,15 +159,15 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<string>("OldValues")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("OrderId")
+                        .HasColumnType("int");
+
                     b.Property<string>("SessionId")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("datetime2");
-
-                    b.Property<int?>("TransactionId")
-                        .HasColumnType("int");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(500)
@@ -184,15 +187,17 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("Timestamp");
+                    b.HasIndex("FinancialTransactionId");
 
-                    b.HasIndex("TransactionId");
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("Timestamp");
 
                     b.HasIndex("EntityType", "EntityId");
 
                     b.HasIndex("UserId", "Timestamp");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Branch", b =>
@@ -251,7 +256,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Branches");
+                    b.ToTable("Branches", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.CashDrawerBalance", b =>
@@ -333,7 +338,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("BranchId", "BalanceDate")
                         .IsUnique();
 
-                    b.ToTable("CashDrawerBalances");
+                    b.ToTable("CashDrawerBalances", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Customer", b =>
@@ -425,7 +430,265 @@ namespace DijaGoldPOS.API.Migrations
                         .IsUnique()
                         .HasFilter("[NationalId] IS NOT NULL");
 
-                    b.ToTable("Customers");
+                    b.ToTable("Customers", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchase", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PaymentMethodId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PurchaseDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PurchaseNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("PaymentMethodId");
+
+                    b.HasIndex("PurchaseDate");
+
+                    b.HasIndex("PurchaseNumber")
+                        .IsUnique();
+
+                    b.ToTable("CustomerPurchases", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchaseItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("CustomerPurchaseId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Weight")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerPurchaseId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("CustomerPurchaseItems", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.FinancialTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BranchId1")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BusinessEntityId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessEntityTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ChangeGiven")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("GeneralLedgerPosted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("OriginalTransactionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PaymentMethodId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProcessedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("ReceiptPrinted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ReversalReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("StatusId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalDiscountAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalTaxAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("TransactionDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TransactionNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("TransactionTypeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("BranchId1");
+
+                    b.HasIndex("BusinessEntityId");
+
+                    b.HasIndex("BusinessEntityTypeId");
+
+                    b.HasIndex("OriginalTransactionId");
+
+                    b.HasIndex("PaymentMethodId");
+
+                    b.HasIndex("ProcessedByUserId");
+
+                    b.HasIndex("StatusId");
+
+                    b.HasIndex("TransactionDate");
+
+                    b.HasIndex("TransactionTypeId");
+
+                    b.HasIndex("BranchId", "TransactionNumber")
+                        .IsUnique();
+
+                    b.ToTable("FinancialTransactions", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.GoldRate", b =>
@@ -456,7 +719,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<bool>("IsCurrent")
                         .HasColumnType("bit");
 
-                    b.Property<int>("KaratType")
+                    b.Property<int>("KaratTypeId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ModifiedAt")
@@ -471,9 +734,9 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("KaratType", "EffectiveFrom");
+                    b.HasIndex("KaratTypeId", "EffectiveFrom");
 
-                    b.ToTable("GoldRates");
+                    b.ToTable("GoldRates", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Inventory", b =>
@@ -533,7 +796,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("ProductId", "BranchId")
                         .IsUnique();
 
-                    b.ToTable("Inventories");
+                    b.ToTable("Inventories", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.InventoryMovement", b =>
@@ -600,7 +863,654 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("InventoryId");
 
-                    b.ToTable("InventoryMovements");
+                    b.ToTable("InventoryMovements", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.BusinessEntityTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("BusinessEntityTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.ChargeTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("ChargeTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionStatusLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("FinancialTransactionStatusLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("FinancialTransactionTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.KaratTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KaratValue")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("KaratTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.OrderStatusLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("OrderStatusLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.OrderTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("OrderTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.PaymentMethodLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("PaymentMethodLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.ProductCategoryTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("ProductCategoryTypeLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.RepairPriorityLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("RepairPriorityLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.RepairStatusLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("RepairStatusLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.SubCategoryLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("SubCategoryLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.TransactionStatusLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("TransactionStatusLookups", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.TransactionTypeLookup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("TransactionTypeLookups", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.MakingCharges", b =>
@@ -611,7 +1521,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ChargeType")
+                    b.Property<int>("ChargeTypeId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("ChargeValue")
@@ -649,18 +1559,307 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int>("ProductCategory")
+                    b.Property<int>("ProductCategoryId")
                         .HasColumnType("int");
 
                     b.Property<string>("SubCategory")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("SubCategoryId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductCategory", "SubCategory", "EffectiveFrom");
+                    b.HasIndex("ChargeTypeId");
 
-                    b.ToTable("MakingCharges");
+                    b.HasIndex("SubCategoryId");
+
+                    b.HasIndex("ProductCategoryId", "SubCategoryId", "EffectiveFrom");
+
+                    b.ToTable("MakingCharges", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.Order", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApprovedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BranchId1")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CashierId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CustomerId1")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("EstimatedCompletionDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("FinancialTransactionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("GoldRateId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("GoldRateId1")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("OrderDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("OrderTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OriginalOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReturnReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("StatusId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("BranchId1");
+
+                    b.HasIndex("CashierId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("CustomerId1");
+
+                    b.HasIndex("FinancialTransactionId");
+
+                    b.HasIndex("GoldRateId");
+
+                    b.HasIndex("GoldRateId1");
+
+                    b.HasIndex("OrderDate");
+
+                    b.HasIndex("OrderTypeId");
+
+                    b.HasIndex("OriginalOrderId");
+
+                    b.HasIndex("StatusId");
+
+                    b.HasIndex("BranchId", "OrderNumber")
+                        .IsUnique();
+
+                    b.ToTable("Orders", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.OrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DiscountPercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("FinalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MakingCharges")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("MakingChargesId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProductId1")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MakingChargesId");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductId1");
+
+                    b.ToTable("OrderItems", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.OwnershipMovement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountChange")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("AmountPaidAfter")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("MovementDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MovementType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("OwnedQuantityAfter")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("OwnedWeightAfter")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("OwnershipPercentageAfter")
+                        .HasColumnType("decimal(5,4)");
+
+                    b.Property<int>("ProductOwnershipId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("QuantityChange")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<string>("ReferenceNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("WeightChange")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MovementDate");
+
+                    b.HasIndex("MovementType");
+
+                    b.HasIndex("ProductOwnershipId");
+
+                    b.HasIndex("ReferenceNumber");
+
+                    b.ToTable("OwnershipMovements", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Product", b =>
@@ -675,7 +1874,7 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int>("CategoryType")
+                    b.Property<int>("CategoryTypeId")
                         .HasColumnType("int");
 
                     b.Property<string>("CountryOfOrigin")
@@ -703,7 +1902,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<int>("KaratType")
+                    b.Property<int>("KaratTypeId")
                         .HasColumnType("int");
 
                     b.Property<bool>("MakingChargesApplicable")
@@ -726,6 +1925,12 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("ProductMakingChargesTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("ProductMakingChargesValue")
+                        .HasColumnType("decimal(10,4)");
+
                     b.Property<string>("PurityCertificateNumber")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -738,8 +1943,14 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("SubCategoryId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("SupplierId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("UseProductMakingCharges")
+                        .HasColumnType("bit");
 
                     b.Property<decimal>("Weight")
                         .HasColumnType("decimal(10,3)");
@@ -749,12 +1960,107 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryTypeId");
+
+                    b.HasIndex("KaratTypeId");
+
                     b.HasIndex("ProductCode")
                         .IsUnique();
 
+                    b.HasIndex("SubCategoryId");
+
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.ProductOwnership", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("CustomerPurchaseId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CustomerPurchaseId1")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("OutstandingAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("OwnedQuantity")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("OwnedWeight")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("OwnershipPercentage")
+                        .HasColumnType("decimal(5,4)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PurchaseOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalQuantity")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("TotalWeight")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("CustomerPurchaseId");
+
+                    b.HasIndex("CustomerPurchaseId1");
+
+                    b.HasIndex("OutstandingAmount");
+
+                    b.HasIndex("OwnershipPercentage");
+
+                    b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("ProductId", "BranchId", "SupplierId", "PurchaseOrderId");
+
+                    b.ToTable("ProductOwnerships", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.PurchaseOrder", b =>
@@ -839,7 +2145,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("PurchaseOrders");
+                    b.ToTable("PurchaseOrders", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.PurchaseOrderItem", b =>
@@ -907,7 +2213,100 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("PurchaseOrderId");
 
-                    b.ToTable("PurchaseOrderItems");
+                    b.ToTable("PurchaseOrderItems", (string)null);
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.RepairJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("AssignedTechnicianId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CompletedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime?>("CustomerNotificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("CustomerNotified")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeliveredDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("FinancialTransactionId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("HoursSpent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MaterialsUsed")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("PriorityId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("QualityCheckDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("QualityCheckedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ReadyForPickupDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("StartedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("StatusId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TechnicianNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedTechnicianId");
+
+                    b.HasIndex("FinancialTransactionId")
+                        .IsUnique()
+                        .HasFilter("[FinancialTransactionId] IS NOT NULL");
+
+                    b.HasIndex("PriorityId");
+
+                    b.HasIndex("QualityCheckedBy");
+
+                    b.HasIndex("StatusId");
+
+                    b.ToTable("RepairJobs", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Supplier", b =>
@@ -990,7 +2389,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Suppliers");
+                    b.ToTable("Suppliers", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.SupplierTransaction", b =>
@@ -1066,7 +2465,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("TransactionNumber")
                         .IsUnique();
 
-                    b.ToTable("SupplierTransactions");
+                    b.ToTable("SupplierTransactions", (string)null);
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.TaxConfiguration", b =>
@@ -1123,7 +2522,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(10,4)");
 
-                    b.Property<int>("TaxType")
+                    b.Property<int>("TaxTypeId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -1131,10 +2530,12 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("TaxCode")
                         .IsUnique();
 
-                    b.ToTable("TaxConfigurations");
+                    b.HasIndex("TaxTypeId");
+
+                    b.ToTable("TaxConfigurations", (string)null);
                 });
 
-            modelBuilder.Entity("DijaGoldPOS.API.Models.Transaction", b =>
+            modelBuilder.Entity("DijaGoldPOS.API.Models.Technician", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1142,27 +2543,8 @@ namespace DijaGoldPOS.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("AmountPaid")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("ApprovedBy")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("ApprovedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<int>("BranchId")
+                    b.Property<int?>("BranchId")
                         .HasColumnType("int");
-
-                    b.Property<string>("CashierId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<decimal>("ChangeGiven")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -1172,24 +2554,14 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("CreatedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                    b.Property<string>("Email")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
-                    b.Property<int?>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("EstimatedCompletionDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("GeneralLedgerPosted")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("GoldRateId")
-                        .HasColumnType("int");
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -1201,206 +2573,28 @@ namespace DijaGoldPOS.API.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
-                    b.Property<int?>("OriginalTransactionId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PaymentMethod")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("ReceiptPrinted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("RepairDescription")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("ReturnReason")
+                    b.Property<string>("Specialization")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Subtotal")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("SubtotalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalMakingCharges")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalTaxAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("TransactionDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("TransactionNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int>("TransactionType")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("ApprovedBy");
+                    b.HasIndex("BranchId");
 
-                    b.HasIndex("CashierId");
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasFilter("[Email] IS NOT NULL");
 
-                    b.HasIndex("CreatedByUserId");
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique()
+                        .HasFilter("[PhoneNumber] IS NOT NULL");
 
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("GoldRateId");
-
-                    b.HasIndex("OriginalTransactionId");
-
-                    b.HasIndex("BranchId", "TransactionNumber")
-                        .IsUnique();
-
-                    b.ToTable("Transactions");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.TransactionItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("DiscountPercentage")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal>("GoldRatePerGram")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("MakingChargesAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("MakingChargesId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("decimal(10,3)");
-
-                    b.Property<decimal>("TotalPrice")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalWeight")
-                        .HasColumnType("decimal(10,3)");
-
-                    b.Property<int>("TransactionId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("UnitWeight")
-                        .HasColumnType("decimal(10,3)");
-
-                    b.Property<decimal>("Weight")
-                        .HasColumnType("decimal(10,3)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MakingChargesId");
-
-                    b.HasIndex("ProductId");
-
-                    b.HasIndex("TransactionId");
-
-                    b.ToTable("TransactionItems");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.TransactionTax", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("TaxConfigurationId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("TaxRate")
-                        .HasColumnType("decimal(10,4)");
-
-                    b.Property<decimal>("TaxableAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("TransactionId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TaxConfigurationId");
-
-                    b.HasIndex("TransactionId");
-
-                    b.ToTable("TransactionTaxes");
+                    b.ToTable("Technicians", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -1558,9 +2752,14 @@ namespace DijaGoldPOS.API.Migrations
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("DijaGoldPOS.API.Models.Transaction", "Transaction")
+                    b.HasOne("DijaGoldPOS.API.Models.FinancialTransaction", "FinancialTransaction")
                         .WithMany()
-                        .HasForeignKey("TransactionId")
+                        .HasForeignKey("FinancialTransactionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "User")
@@ -1571,7 +2770,9 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.Navigation("Branch");
 
-                    b.Navigation("Transaction");
+                    b.Navigation("FinancialTransaction");
+
+                    b.Navigation("Order");
 
                     b.Navigation("User");
                 });
@@ -1585,6 +2786,132 @@ namespace DijaGoldPOS.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchase", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.PaymentMethodLookup", "PaymentMethod")
+                        .WithMany()
+                        .HasForeignKey("PaymentMethodId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("PaymentMethod");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchaseItem", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.CustomerPurchase", "CustomerPurchase")
+                        .WithMany("CustomerPurchaseItems")
+                        .HasForeignKey("CustomerPurchaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CustomerPurchase");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.FinancialTransaction", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", null)
+                        .WithMany("FinancialTransactions")
+                        .HasForeignKey("BranchId1");
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.BusinessEntityTypeLookup", "BusinessEntityType")
+                        .WithMany()
+                        .HasForeignKey("BusinessEntityTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.FinancialTransaction", "OriginalTransaction")
+                        .WithMany("ReversalTransactions")
+                        .HasForeignKey("OriginalTransactionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.PaymentMethodLookup", "PaymentMethod")
+                        .WithMany()
+                        .HasForeignKey("PaymentMethodId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "ProcessedByUser")
+                        .WithMany()
+                        .HasForeignKey("ProcessedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionStatusLookup", "Status")
+                        .WithMany()
+                        .HasForeignKey("StatusId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionTypeLookup", "TransactionType")
+                        .WithMany()
+                        .HasForeignKey("TransactionTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("BusinessEntityType");
+
+                    b.Navigation("OriginalTransaction");
+
+                    b.Navigation("PaymentMethod");
+
+                    b.Navigation("ProcessedByUser");
+
+                    b.Navigation("Status");
+
+                    b.Navigation("TransactionType");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.GoldRate", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.KaratTypeLookup", "KaratType")
+                        .WithMany()
+                        .HasForeignKey("KaratTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KaratType");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Inventory", b =>
@@ -1617,12 +2944,225 @@ namespace DijaGoldPOS.API.Migrations
                     b.Navigation("Inventory");
                 });
 
+            modelBuilder.Entity("DijaGoldPOS.API.Models.MakingCharges", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.ChargeTypeLookup", "ChargeType")
+                        .WithMany()
+                        .HasForeignKey("ChargeTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.ProductCategoryTypeLookup", "ProductCategory")
+                        .WithMany()
+                        .HasForeignKey("ProductCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.SubCategoryLookup", "SubCategoryLookup")
+                        .WithMany()
+                        .HasForeignKey("SubCategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ChargeType");
+
+                    b.Navigation("ProductCategory");
+
+                    b.Navigation("SubCategoryLookup");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.Order", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", null)
+                        .WithMany("Orders")
+                        .HasForeignKey("BranchId1");
+
+                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "Cashier")
+                        .WithMany()
+                        .HasForeignKey("CashierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.Customer", null)
+                        .WithMany("Orders")
+                        .HasForeignKey("CustomerId1");
+
+                    b.HasOne("DijaGoldPOS.API.Models.FinancialTransaction", "FinancialTransaction")
+                        .WithMany()
+                        .HasForeignKey("FinancialTransactionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.GoldRate", "GoldRate")
+                        .WithMany()
+                        .HasForeignKey("GoldRateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.GoldRate", null)
+                        .WithMany("Orders")
+                        .HasForeignKey("GoldRateId1");
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.OrderTypeLookup", "OrderType")
+                        .WithMany()
+                        .HasForeignKey("OrderTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Order", "OriginalOrder")
+                        .WithMany("RelatedOrders")
+                        .HasForeignKey("OriginalOrderId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.OrderStatusLookup", "Status")
+                        .WithMany()
+                        .HasForeignKey("StatusId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Cashier");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("FinancialTransaction");
+
+                    b.Navigation("GoldRate");
+
+                    b.Navigation("OrderType");
+
+                    b.Navigation("OriginalOrder");
+
+                    b.Navigation("Status");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.OrderItem", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.MakingCharges", null)
+                        .WithMany("OrderItems")
+                        .HasForeignKey("MakingChargesId");
+
+                    b.HasOne("DijaGoldPOS.API.Models.Order", "Order")
+                        .WithMany("OrderItems")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Product", null)
+                        .WithMany("OrderItems")
+                        .HasForeignKey("ProductId1");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.OwnershipMovement", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.ProductOwnership", "ProductOwnership")
+                        .WithMany("OwnershipMovements")
+                        .HasForeignKey("ProductOwnershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProductOwnership");
+                });
+
             modelBuilder.Entity("DijaGoldPOS.API.Models.Product", b =>
                 {
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.ProductCategoryTypeLookup", "CategoryType")
+                        .WithMany()
+                        .HasForeignKey("CategoryTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.KaratTypeLookup", "KaratType")
+                        .WithMany()
+                        .HasForeignKey("KaratTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.SubCategoryLookup", "SubCategoryLookup")
+                        .WithMany()
+                        .HasForeignKey("SubCategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("DijaGoldPOS.API.Models.Supplier", "Supplier")
                         .WithMany("Products")
                         .HasForeignKey("SupplierId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CategoryType");
+
+                    b.Navigation("KaratType");
+
+                    b.Navigation("SubCategoryLookup");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.ProductOwnership", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.CustomerPurchase", "CustomerPurchase")
+                        .WithMany()
+                        .HasForeignKey("CustomerPurchaseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.CustomerPurchase", null)
+                        .WithMany("ProductOwnerships")
+                        .HasForeignKey("CustomerPurchaseId1");
+
+                    b.HasOne("DijaGoldPOS.API.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.PurchaseOrder", "PurchaseOrder")
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("CustomerPurchase");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("PurchaseOrder");
 
                     b.Navigation("Supplier");
                 });
@@ -1665,6 +3205,46 @@ namespace DijaGoldPOS.API.Migrations
                     b.Navigation("PurchaseOrder");
                 });
 
+            modelBuilder.Entity("DijaGoldPOS.API.Models.RepairJob", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.Technician", "AssignedTechnician")
+                        .WithMany()
+                        .HasForeignKey("AssignedTechnicianId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DijaGoldPOS.API.Models.FinancialTransaction", "FinancialTransaction")
+                        .WithOne()
+                        .HasForeignKey("DijaGoldPOS.API.Models.RepairJob", "FinancialTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.RepairPriorityLookup", "Priority")
+                        .WithMany()
+                        .HasForeignKey("PriorityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DijaGoldPOS.API.Models.Technician", "QualityChecker")
+                        .WithMany()
+                        .HasForeignKey("QualityCheckedBy")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.RepairStatusLookup", "Status")
+                        .WithMany()
+                        .HasForeignKey("StatusId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssignedTechnician");
+
+                    b.Navigation("FinancialTransaction");
+
+                    b.Navigation("Priority");
+
+                    b.Navigation("QualityChecker");
+
+                    b.Navigation("Status");
+                });
+
             modelBuilder.Entity("DijaGoldPOS.API.Models.SupplierTransaction", b =>
                 {
                     b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
@@ -1684,102 +3264,25 @@ namespace DijaGoldPOS.API.Migrations
                     b.Navigation("Supplier");
                 });
 
-            modelBuilder.Entity("DijaGoldPOS.API.Models.Transaction", b =>
+            modelBuilder.Entity("DijaGoldPOS.API.Models.TaxConfiguration", b =>
                 {
-                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "ApprovedByUser")
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.ChargeTypeLookup", "TaxType")
                         .WithMany()
-                        .HasForeignKey("ApprovedBy")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("TaxTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
+                    b.Navigation("TaxType");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.Technician", b =>
+                {
                     b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
-                        .WithMany("Transactions")
+                        .WithMany()
                         .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "Cashier")
-                        .WithMany()
-                        .HasForeignKey("CashierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DijaGoldPOS.API.Models.ApplicationUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.HasOne("DijaGoldPOS.API.Models.Customer", "Customer")
-                        .WithMany("Transactions")
-                        .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("DijaGoldPOS.API.Models.GoldRate", "GoldRate")
-                        .WithMany("Transactions")
-                        .HasForeignKey("GoldRateId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("DijaGoldPOS.API.Models.Transaction", "OriginalTransaction")
-                        .WithMany("ReturnTransactions")
-                        .HasForeignKey("OriginalTransactionId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.Navigation("ApprovedByUser");
 
                     b.Navigation("Branch");
-
-                    b.Navigation("Cashier");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Customer");
-
-                    b.Navigation("GoldRate");
-
-                    b.Navigation("OriginalTransaction");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.TransactionItem", b =>
-                {
-                    b.HasOne("DijaGoldPOS.API.Models.MakingCharges", "MakingCharges")
-                        .WithMany("TransactionItems")
-                        .HasForeignKey("MakingChargesId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("DijaGoldPOS.API.Models.Product", "Product")
-                        .WithMany("TransactionItems")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DijaGoldPOS.API.Models.Transaction", "Transaction")
-                        .WithMany("TransactionItems")
-                        .HasForeignKey("TransactionId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("MakingCharges");
-
-                    b.Navigation("Product");
-
-                    b.Navigation("Transaction");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.TransactionTax", b =>
-                {
-                    b.HasOne("DijaGoldPOS.API.Models.TaxConfiguration", "TaxConfiguration")
-                        .WithMany("TransactionTaxes")
-                        .HasForeignKey("TaxConfigurationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DijaGoldPOS.API.Models.Transaction", "Transaction")
-                        .WithMany("TransactionTaxes")
-                        .HasForeignKey("TransactionId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("TaxConfiguration");
-
-                    b.Navigation("Transaction");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1844,21 +3347,35 @@ namespace DijaGoldPOS.API.Migrations
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Branch", b =>
                 {
+                    b.Navigation("FinancialTransactions");
+
                     b.Navigation("InventoryItems");
 
-                    b.Navigation("Transactions");
+                    b.Navigation("Orders");
 
                     b.Navigation("Users");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Customer", b =>
                 {
-                    b.Navigation("Transactions");
+                    b.Navigation("Orders");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchase", b =>
+                {
+                    b.Navigation("CustomerPurchaseItems");
+
+                    b.Navigation("ProductOwnerships");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.FinancialTransaction", b =>
+                {
+                    b.Navigation("ReversalTransactions");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.GoldRate", b =>
                 {
-                    b.Navigation("Transactions");
+                    b.Navigation("Orders");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Inventory", b =>
@@ -1868,14 +3385,26 @@ namespace DijaGoldPOS.API.Migrations
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.MakingCharges", b =>
                 {
-                    b.Navigation("TransactionItems");
+                    b.Navigation("OrderItems");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.Order", b =>
+                {
+                    b.Navigation("OrderItems");
+
+                    b.Navigation("RelatedOrders");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Product", b =>
                 {
                     b.Navigation("InventoryRecords");
 
-                    b.Navigation("TransactionItems");
+                    b.Navigation("OrderItems");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.ProductOwnership", b =>
+                {
+                    b.Navigation("OwnershipMovements");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.PurchaseOrder", b =>
@@ -1888,20 +3417,6 @@ namespace DijaGoldPOS.API.Migrations
                     b.Navigation("Products");
 
                     b.Navigation("PurchaseOrders");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.TaxConfiguration", b =>
-                {
-                    b.Navigation("TransactionTaxes");
-                });
-
-            modelBuilder.Entity("DijaGoldPOS.API.Models.Transaction", b =>
-                {
-                    b.Navigation("ReturnTransactions");
-
-                    b.Navigation("TransactionItems");
-
-                    b.Navigation("TransactionTaxes");
                 });
 #pragma warning restore 612, 618
         }

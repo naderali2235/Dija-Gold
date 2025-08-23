@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
+using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Services;
@@ -13,15 +14,18 @@ public class PricingService : IPricingService
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PricingService> _logger;
     private readonly IAuditService _auditService;
+    private readonly IConfiguration _configuration;
 
     public PricingService(
         ApplicationDbContext context, 
         ILogger<PricingService> logger,
-        IAuditService auditService)
+        IAuditService auditService,
+        IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
         _auditService = auditService;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -35,10 +39,10 @@ public class PricingService : IPricingService
             var result = new PriceCalculationResult();
             
             // Get current gold rate
-            var goldRate = await GetCurrentGoldRateAsync(product.KaratType);
+            var goldRate = await GetCurrentGoldRateAsync(product.KaratTypeId);
             if (goldRate == null)
             {
-                throw new InvalidOperationException($"No current gold rate found for {product.KaratType}");
+                throw new InvalidOperationException($"No current gold rate found for {product.KaratTypeId}");
             }
             result.GoldRateUsed = goldRate;
 
@@ -51,18 +55,45 @@ public class PricingService : IPricingService
             // Calculate making charges if applicable
             if (product.MakingChargesApplicable)
             {
-                var makingCharges = await GetCurrentMakingChargesAsync(product.CategoryType, product.SubCategory);
-                if (makingCharges != null)
+                // Check if product has specific making charges defined
+                if (product.UseProductMakingCharges && 
+                    product.ProductMakingChargesTypeId.HasValue && 
+                    product.ProductMakingChargesValue.HasValue)
                 {
-                    result.MakingChargesUsed = makingCharges;
+                    // Use product-specific making charges
+                    var chargeTypeId = product.ProductMakingChargesTypeId.Value;
                     
-                    if (makingCharges.ChargeType == ChargeType.Percentage)
+                    if (chargeTypeId == LookupTableConstants.ChargeTypePercentage)
                     {
-                        result.MakingChargesAmount = result.GoldValue * (makingCharges.ChargeValue / 100m);
+                        result.MakingChargesAmount = result.GoldValue * (product.ProductMakingChargesValue.Value / 100m);
                     }
                     else // Fixed amount
                     {
-                        result.MakingChargesAmount = makingCharges.ChargeValue * quantity;
+                        result.MakingChargesAmount = product.ProductMakingChargesValue.Value * quantity;
+                    }
+                    
+                    _logger.LogInformation("Using product-specific making charges: {ChargeTypeId} {ChargeValue}", 
+                        chargeTypeId, product.ProductMakingChargesValue.Value);
+                }
+                else
+                {
+                    // Use pricing-level making charges
+                    var makingCharges = await GetCurrentMakingChargesAsync(product.CategoryTypeId, product.SubCategoryId);
+                    if (makingCharges != null)
+                    {
+                        result.MakingChargesUsed = makingCharges;
+                        
+                        if (makingCharges.ChargeTypeId == LookupTableConstants.ChargeTypePercentage)
+                        {
+                            result.MakingChargesAmount = result.GoldValue * (makingCharges.ChargeValue / 100m);
+                        }
+                        else // Fixed amount
+                        {
+                            result.MakingChargesAmount = makingCharges.ChargeValue * quantity;
+                        }
+                        
+                        _logger.LogInformation("Using pricing-level making charges: {ChargeTypeId} {ChargeValue}", 
+                            makingCharges.ChargeTypeId, makingCharges.ChargeValue);
                     }
                 }
             }
@@ -71,6 +102,22 @@ public class PricingService : IPricingService
             result.SubTotal = result.GoldValue + result.MakingChargesAmount;
 
             // Apply customer loyalty discount if applicable
+            // 
+            // BUSINESS RULES FOR CUSTOMER DISCOUNTS:
+            // 1. Percentage Discount: Applied to subtotal (Gold Value + Making Charges)
+            // 2. Making Charges Waiver: Completely waives making charges (VIP benefit)
+            // 3. Mutual Exclusivity: If making charges are waived, no percentage discount is applied
+            // 4. Discount Cap: Total discount cannot exceed making charges amount
+            // 5. Configurable Rules: Both rules can be enabled/disabled via configuration
+            //
+            // EXAMPLES:
+            // - Gold Value: 5000 EGP, Making Charges: 500 EGP, Customer has 10% discount
+            //   Result: Discount = 550 EGP (10% of 5500), but capped to 500 EGP (making charges)
+            // - Gold Value: 5000 EGP, Making Charges: 500 EGP, Customer has making charges waived
+            //   Result: Discount = 500 EGP (making charges waived), no percentage discount applied
+            // - Gold Value: 5000 EGP, Making Charges: 500 EGP, Customer has 5% discount + making charges waived
+            //   Result: Discount = 500 EGP (only making charges waived, no percentage discount)
+            //
             Customer? customer = null;
             if (customerId.HasValue)
             {
@@ -79,16 +126,42 @@ public class PricingService : IPricingService
                 
                 if (customer != null)
                 {
-                    // Apply discount percentage
-                    if (customer.DefaultDiscountPercentage > 0)
+                    // Get business rule configurations
+                    var preventPercentageDiscountWhenMakingChargesWaived = _configuration.GetValue<bool>("BusinessRules:PreventPercentageDiscountWhenMakingChargesWaived", true);
+                    var capDiscountToMakingCharges = _configuration.GetValue<bool>("BusinessRules:CapDiscountToMakingCharges", true);
+                    
+                    // Apply discount percentage only if making charges are not waived (configurable rule)
+                    // This prevents double benefits: either percentage discount OR making charges waiver, not both
+                    if (customer.DefaultDiscountPercentage > 0 && (!preventPercentageDiscountWhenMakingChargesWaived || !customer.MakingChargesWaived))
                     {
                         result.DiscountAmount = result.SubTotal * (customer.DefaultDiscountPercentage / 100m);
                     }
                     
                     // Waive making charges if customer has that privilege
+                    // This is typically for VIP customers who get making charges completely waived
                     if (customer.MakingChargesWaived)
                     {
                         result.DiscountAmount += result.MakingChargesAmount;
+                    }
+                    
+                    // Validate that total discount doesn't exceed making charges (configurable rule)
+                    // This ensures discounts don't exceed the value of making charges, protecting profitability
+                    if (capDiscountToMakingCharges && result.DiscountAmount > result.MakingChargesAmount)
+                    {
+                        _logger.LogWarning("Customer discount {DiscountAmount:F2} exceeds making charges {MakingCharges:F2} for customer {CustomerId}. Capping discount to making charges amount.", 
+                            result.DiscountAmount, result.MakingChargesAmount, customer.Id);
+                        
+                        // Cap the discount to the making charges amount
+                        result.DiscountAmount = result.MakingChargesAmount;
+                        
+                        // Log this as a business rule violation for audit purposes
+                        await _auditService.LogAsync(
+                            "SYSTEM",
+                            "PRICING_VALIDATION",
+                            "CustomerDiscount",
+                            customer.Id.ToString(),
+                            $"Discount capped from {result.DiscountAmount:F2} to {result.MakingChargesAmount:F2} (making charges amount) for customer {customer.FullName}"
+                        );
                     }
                 }
             }
@@ -108,7 +181,7 @@ public class PricingService : IPricingService
                     TaxableAmount = result.TaxableAmount
                 };
 
-                if (taxConfig.TaxType == ChargeType.Percentage)
+                if (taxConfig.TaxTypeId == LookupTableConstants.ChargeTypePercentage)
                 {
                     taxCalculation.TaxAmount = result.TaxableAmount * (taxConfig.TaxRate / 100m);
                 }
@@ -147,10 +220,10 @@ public class PricingService : IPricingService
     /// <summary>
     /// Get current gold rate for specific karat type
     /// </summary>
-    public async Task<GoldRate?> GetCurrentGoldRateAsync(KaratType karatType)
+    public async Task<GoldRate?> GetCurrentGoldRateAsync(int karatTypeId)
     {
         return await _context.GoldRates
-            .Where(gr => gr.KaratType == karatType && gr.EffectiveTo == null)
+            .Where(gr => gr.KaratTypeId == karatTypeId && gr.EffectiveTo == null)
             .OrderByDescending(gr => gr.EffectiveFrom)
             .FirstOrDefaultAsync();
     }
@@ -158,16 +231,16 @@ public class PricingService : IPricingService
     /// <summary>
     /// Get current making charges for product category
     /// </summary>
-    public async Task<MakingCharges?> GetCurrentMakingChargesAsync(ProductCategoryType categoryType, string? subCategory = null)
+    public async Task<MakingCharges?> GetCurrentMakingChargesAsync(int categoryTypeId, int? subCategoryId = null)
     {
         var query = _context.MakingCharges
-            .Where(mc => mc.ProductCategory == categoryType && mc.IsCurrent);
+            .Where(mc => mc.ProductCategoryId == categoryTypeId && mc.IsCurrent);
 
         // First try to find specific subcategory match
-        if (!string.IsNullOrEmpty(subCategory))
+        if (subCategoryId.HasValue)
         {
             var specificMatch = await query
-                .Where(mc => mc.SubCategory == subCategory)
+                .Where(mc => mc.SubCategoryId == subCategoryId.Value)
                 .OrderByDescending(mc => mc.EffectiveFrom)
                 .FirstOrDefaultAsync();
             
@@ -175,9 +248,9 @@ public class PricingService : IPricingService
                 return specificMatch;
         }
 
-        // Fallback to general category match (where SubCategory is null)
+        // Fallback to general category match (where SubCategoryId is null)
         return await query
-            .Where(mc => mc.SubCategory == null)
+            .Where(mc => mc.SubCategoryId == null)
             .OrderByDescending(mc => mc.EffectiveFrom)
             .FirstOrDefaultAsync();
     }
@@ -205,7 +278,7 @@ public class PricingService : IPricingService
             {
                 // End current rate
                 var currentRates = await _context.GoldRates
-                    .Where(gr => gr.KaratType == update.KaratType && gr.IsCurrent)
+                    .Where(gr => gr.KaratTypeId == update.KaratTypeId && gr.IsCurrent)
                     .ToListAsync();
 
                 foreach (var currentRate in currentRates)
@@ -219,7 +292,7 @@ public class PricingService : IPricingService
                 // Create new rate
                 var newRate = new GoldRate
                 {
-                    KaratType = update.KaratType,
+                    KaratTypeId = update.KaratTypeId,
                     RatePerGram = update.RatePerGram,
                     EffectiveFrom = update.EffectiveFrom,
                     IsCurrent = true,
@@ -235,7 +308,7 @@ public class PricingService : IPricingService
                     "UPDATE_GOLD_RATE",
                     "GoldRate",
                     newRate.Id.ToString(),
-                    $"Updated gold rate for {update.KaratType} to {update.RatePerGram} EGP/gram",
+                    $"Updated gold rate for karat type {update.KaratTypeId} to {update.RatePerGram} EGP/gram",
                     oldValues: currentRates.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(currentRates.First()) : null,
                     newValues: System.Text.Json.JsonSerializer.Serialize(newRate)
                 );
@@ -280,8 +353,8 @@ public class PricingService : IPricingService
             {
                 // End any current charges for the same category/subcategory
                 var currentCharges = await _context.MakingCharges
-                    .Where(mc => mc.ProductCategory == update.ProductCategory 
-                              && mc.SubCategory == update.SubCategory 
+                    .Where(mc => mc.ProductCategoryId == update.ProductCategoryId 
+                              && mc.SubCategoryId == update.SubCategoryId 
                               && mc.IsCurrent)
                     .ToListAsync();
 
@@ -298,9 +371,10 @@ public class PricingService : IPricingService
             var newCharges = new MakingCharges
             {
                 Name = update.Name,
-                ProductCategory = update.ProductCategory,
-                SubCategory = update.SubCategory,
-                ChargeType = update.ChargeType,
+                ProductCategoryId = update.ProductCategoryId,
+                SubCategoryId = update.SubCategoryId,
+                SubCategory = update.SubCategory, // Keep for backward compatibility
+                ChargeTypeId = update.ChargeTypeId,
                 ChargeValue = update.ChargeValue,
                 EffectiveFrom = update.EffectiveFrom,
                 IsCurrent = true,
@@ -316,7 +390,7 @@ public class PricingService : IPricingService
                 "UPDATE_MAKING_CHARGES",
                 "MakingCharges",
                 newCharges.Id.ToString(),
-                $"Updated making charges for {update.ProductCategory}",
+                $"Updated making charges for product category {update.ProductCategoryId}",
                 newValues: System.Text.Json.JsonSerializer.Serialize(newCharges)
             );
 
@@ -368,7 +442,7 @@ public class PricingService : IPricingService
 
                 // Update the existing configuration
                 existing.TaxName = update.TaxName;
-                existing.TaxType = update.TaxType;
+                existing.TaxTypeId = update.TaxTypeId;
                 existing.TaxRate = update.TaxRate;
                 existing.IsMandatory = update.IsMandatory;
                 existing.EffectiveFrom = update.EffectiveFrom;
@@ -396,7 +470,7 @@ public class PricingService : IPricingService
                 {
                     TaxName = update.TaxName,
                     TaxCode = update.TaxCode,
-                    TaxType = update.TaxType,
+                    TaxTypeId = update.TaxTypeId,
                     TaxRate = update.TaxRate,
                     IsMandatory = update.IsMandatory,
                     EffectiveFrom = update.EffectiveFrom,
@@ -459,7 +533,7 @@ public class PricingService : IPricingService
             {
                 TaxName = update.TaxName,
                 TaxCode = update.TaxCode,
-                TaxType = update.TaxType,
+                TaxTypeId = update.TaxTypeId,
                 TaxRate = update.TaxRate,
                 IsMandatory = update.IsMandatory,
                 EffectiveFrom = update.EffectiveFrom,

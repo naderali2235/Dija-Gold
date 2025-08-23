@@ -40,31 +40,31 @@ public interface IInventoryService
     Task<bool> CheckStockAvailabilityAsync(int productId, int branchId, decimal requestedQuantity);
 
     /// <summary>
-    /// Reserve inventory for a transaction (decrease stock)
+    /// Reserve inventory for an order (decrease stock)
     /// </summary>
-    /// <param name="transactionItems">List of transaction items</param>
+    /// <param name="orderItems">List of order items</param>
     /// <param name="branchId">Branch ID</param>
     /// <param name="userId">User performing the action</param>
     /// <returns>Success status</returns>
-    Task<bool> ReserveInventoryAsync(List<TransactionItem> transactionItems, int branchId, string userId);
+    Task<bool> ReserveInventoryAsync(List<OrderItem> orderItems, int branchId, string userId);
 
     /// <summary>
-    /// Reserve inventory for a transaction (decrease stock) - internal method that works within existing transaction
+    /// Reserve inventory for an order (decrease stock) - internal method that works within existing transaction
     /// </summary>
-    /// <param name="transactionItems">List of transaction items</param>
+    /// <param name="orderItems">List of order items</param>
     /// <param name="branchId">Branch ID</param>
     /// <param name="userId">User performing the action</param>
     /// <returns>Success status</returns>
-    Task<bool> ReserveInventoryInternalAsync(List<TransactionItem> transactionItems, int branchId, string userId);
+    Task<bool> ReserveInventoryInternalAsync(List<OrderItem> orderItems, int branchId, string userId);
 
     /// <summary>
     /// Release reserved inventory (return to stock)
     /// </summary>
-    /// <param name="transactionItems">List of transaction items</param>
+    /// <param name="orderItems">List of order items</param>
     /// <param name="branchId">Branch ID</param>
     /// <param name="userId">User performing the action</param>
     /// <returns>Success status</returns>
-    Task<bool> ReleaseInventoryAsync(List<TransactionItem> transactionItems, int branchId, string userId);
+    Task<bool> ReleaseInventoryAsync(List<OrderItem> orderItems, int branchId, string userId);
 
     /// <summary>
     /// Add inventory (from purchases or adjustments)

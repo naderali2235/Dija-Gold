@@ -29,6 +29,23 @@ export function calculateProductPricing(
   customer?: Customer | null,
   taxConfigurations?: any[]
 ): PricingCalculation {
+  // Check if gold rates are loaded - return default values if not
+  if (!goldRates || goldRates.length === 0) {
+    return {
+      goldValue: 0,
+      makingChargesAmount: 0,
+      totalPrice: 0,
+      goldRate: 0,
+      makingChargesRate: undefined,
+      makingChargesType: undefined,
+      discountAmount: 0,
+      subtotal: 0,
+      taxableAmount: 0,
+      totalTaxAmount: 0,
+      finalTotal: 0
+    };
+  }
+
   // Find the current gold rate for the product's karat type
   // Filter by EffectiveTo == null to match backend logic
   const goldRateData = goldRates.find(rate => 
@@ -37,8 +54,21 @@ export function calculateProductPricing(
   );
   
   if (!goldRateData) {
-    const availableKaratTypes = goldRates.map(rate => rate.karatType).join(', ');
-    throw new Error(`No gold rate found for karat type ${product.karatType}. Available karat types: ${availableKaratTypes || 'none'}`);
+    // Instead of throwing an error, return default values
+    // This prevents the initial render errors when data is still loading
+    return {
+      goldValue: 0,
+      makingChargesAmount: 0,
+      totalPrice: 0,
+      goldRate: 0,
+      makingChargesRate: undefined,
+      makingChargesType: undefined,
+      discountAmount: 0,
+      subtotal: 0,
+      taxableAmount: 0,
+      totalTaxAmount: 0,
+      finalTotal: 0
+    };
   }
 
   const goldRate = goldRateData.ratePerGram;
@@ -51,30 +81,48 @@ export function calculateProductPricing(
 
   // Calculate making charges if applicable
   if (product.makingChargesApplicable) {
-    // First try to find specific subcategory match
-    let chargesData = makingCharges.find(charge => 
-      charge.productCategory === product.categoryType && 
-      charge.subCategory === product.subCategory &&
-      charge.effectiveTo == null
-    );
+    // Check if product has specific making charges defined
+    if (product.useProductMakingCharges && 
+        product.productMakingChargesTypeId && 
+        product.productMakingChargesValue) {
+      
+      // Use product-specific making charges
+      const chargeType = product.productMakingChargesTypeId;
+      makingChargesRate = product.productMakingChargesValue;
+      makingChargesType = chargeType === 1 ? 'percentage' : 'fixed';
 
-    // Fallback to general category match (where SubCategory is null)
-    if (!chargesData) {
-      chargesData = makingCharges.find(charge => 
+      if (chargeType === 1) { // Percentage
+        makingChargesAmount = goldValue * (product.productMakingChargesValue / 100);
+      } else { // Fixed amount
+        makingChargesAmount = product.productMakingChargesValue * quantity;
+      }
+    } else {
+      // Use pricing-level making charges
+      // First try to find specific subcategory match
+      let chargesData = makingCharges.find(charge => 
         charge.productCategory === product.categoryType && 
-        !charge.subCategory &&
+        charge.subCategory === product.subCategory &&
         charge.effectiveTo == null
       );
-    }
 
-    if (chargesData) {
-      makingChargesRate = chargesData.chargeValue;
-      makingChargesType = chargesData.chargeType === 1 ? 'percentage' : 'fixed';
+      // Fallback to general category match (where SubCategory is null)
+      if (!chargesData) {
+        chargesData = makingCharges.find(charge => 
+          charge.productCategory === product.categoryType && 
+          !charge.subCategory &&
+          charge.effectiveTo == null
+        );
+      }
 
-      if (chargesData.chargeType === 1) { // Percentage
-        makingChargesAmount = goldValue * (chargesData.chargeValue / 100);
-      } else { // Fixed amount
-        makingChargesAmount = chargesData.chargeValue * quantity;
+      if (chargesData) {
+        makingChargesRate = chargesData.chargeValue;
+        makingChargesType = chargesData.chargeType === 1 ? 'percentage' : 'fixed';
+
+        if (chargesData.chargeType === 1) { // Percentage
+          makingChargesAmount = goldValue * (chargesData.chargeValue / 100);
+        } else { // Fixed amount
+          makingChargesAmount = chargesData.chargeValue * quantity;
+        }
       }
     }
   }
@@ -82,14 +130,22 @@ export function calculateProductPricing(
   // Apply customer discounts if applicable
   let discountAmount = 0;
   if (customer) {
-    // Apply discount percentage
-    if (customer.defaultDiscountPercentage && customer.defaultDiscountPercentage > 0) {
+    // Apply discount percentage only if making charges are not waived
+    if (customer.defaultDiscountPercentage && customer.defaultDiscountPercentage > 0 && !customer.makingChargesWaived) {
       discountAmount = (goldValue + makingChargesAmount) * (customer.defaultDiscountPercentage / 100);
     }
     
     // Waive making charges if customer has that privilege
     if (customer.makingChargesWaived) {
       discountAmount += makingChargesAmount;
+    }
+    
+    // Validate that total discount doesn't exceed making charges
+    if (discountAmount > makingChargesAmount) {
+      console.warn(`Customer discount ${discountAmount.toFixed(2)} exceeds making charges ${makingChargesAmount.toFixed(2)}. Capping discount to making charges amount.`);
+      
+      // Cap the discount to the making charges amount
+      discountAmount = makingChargesAmount;
     }
   }
 

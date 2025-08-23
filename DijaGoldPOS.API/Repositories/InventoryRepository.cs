@@ -126,8 +126,8 @@ public class InventoryRepository : Repository<Inventory>, IInventoryRepository
         return await _dbSet
             .Include(i => i.Product)
             .Where(i => i.BranchId == branchId && i.WeightOnHand > 0)
-            .GroupBy(i => i.Product.KaratType)
-            .Select(g => new { KaratType = g.Key.ToString(), TotalWeight = g.Sum(i => i.WeightOnHand) })
+            .GroupBy(i => i.Product.KaratType.Name ?? "Unknown")
+            .Select(g => new { KaratType = g.Key, TotalWeight = g.Sum(i => i.WeightOnHand) })
             .ToDictionaryAsync(x => x.KaratType, x => x.TotalWeight);
     }
 

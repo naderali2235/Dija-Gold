@@ -1,4 +1,3 @@
-using DijaGoldPOS.API.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace DijaGoldPOS.API.DTOs;
@@ -11,12 +10,16 @@ public class ProductDto
     public int Id { get; set; }
     public string ProductCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public ProductCategoryType CategoryType { get; set; }
-    public KaratType KaratType { get; set; }
+    public int CategoryTypeId { get; set; }
+    public string CategoryTypeName { get; set; } = string.Empty;
+    public int KaratTypeId { get; set; }
+    public string KaratTypeName { get; set; } = string.Empty;
     public decimal Weight { get; set; }
     public string? Brand { get; set; }
     public string? DesignStyle { get; set; }
-    public string? SubCategory { get; set; }
+    public int? SubCategoryId { get; set; }
+    public string? SubCategoryName { get; set; }
+    public string? SubCategory { get; set; } // Legacy field for backward compatibility
     public string? Shape { get; set; }
     public string? PurityCertificateNumber { get; set; }
     public string? CountryOfOrigin { get; set; }
@@ -24,6 +27,9 @@ public class ProductDto
     public decimal? FaceValue { get; set; }
     public bool? HasNumismaticValue { get; set; }
     public bool MakingChargesApplicable { get; set; }
+    public int? ProductMakingChargesTypeId { get; set; }
+    public decimal? ProductMakingChargesValue { get; set; }
+    public bool UseProductMakingCharges { get; set; }
     public int? SupplierId { get; set; }
     public string? SupplierName { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -44,10 +50,10 @@ public class CreateProductRequestDto
     public string Name { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Category type is required")]
-    public ProductCategoryType CategoryType { get; set; }
+    public int CategoryTypeId { get; set; }
 
     [Required(ErrorMessage = "Karat type is required")]
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
 
     [Required(ErrorMessage = "Weight is required")]
     [Range(0.001, 999999.999, ErrorMessage = "Weight must be between 0.001 and 999999.999 grams")]
@@ -59,8 +65,10 @@ public class CreateProductRequestDto
     [StringLength(100, ErrorMessage = "Design/Style cannot exceed 100 characters")]
     public string? DesignStyle { get; set; }
 
+    public int? SubCategoryId { get; set; }
+
     [StringLength(50, ErrorMessage = "Sub-category cannot exceed 50 characters")]
-    public string? SubCategory { get; set; }
+    public string? SubCategory { get; set; } // Legacy field for backward compatibility
 
     [StringLength(50, ErrorMessage = "Shape cannot exceed 50 characters")]
     public string? Shape { get; set; }
@@ -81,6 +89,13 @@ public class CreateProductRequestDto
 
     public bool MakingChargesApplicable { get; set; } = true;
 
+    public int? ProductMakingChargesTypeId { get; set; }
+    
+    [Range(0, 999999.9999, ErrorMessage = "Product making charges value must be between 0 and 999999.9999")]
+    public decimal? ProductMakingChargesValue { get; set; }
+    
+    public bool UseProductMakingCharges { get; set; } = false;
+
     public int? SupplierId { get; set; }
 }
 
@@ -99,10 +114,11 @@ public class UpdateProductRequestDto : CreateProductRequestDto
 public class ProductSearchRequestDto
 {
     public string? SearchTerm { get; set; }
-    public ProductCategoryType? CategoryType { get; set; }
-    public KaratType? KaratType { get; set; }
+    public int? CategoryTypeId { get; set; }
+    public int? KaratTypeId { get; set; }
     public string? Brand { get; set; }
-    public string? SubCategory { get; set; }
+    public int? SubCategoryId { get; set; }
+    public string? SubCategory { get; set; } // Legacy field for backward compatibility
     public int? SupplierId { get; set; }
     public bool? IsActive { get; set; } = true;
     public int PageNumber { get; set; } = 1;

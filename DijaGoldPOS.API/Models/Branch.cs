@@ -55,7 +55,12 @@ public class Branch : BaseEntity
     public virtual ICollection<Inventory> InventoryItems { get; set; } = new List<Inventory>();
     
     /// <summary>
-    /// Navigation property to transactions at this branch
+    /// Navigation property to financial transactions at this branch
     /// </summary>
-    public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public virtual ICollection<FinancialTransaction> FinancialTransactions { get; set; } = new List<FinancialTransaction>();
+    
+    /// <summary>
+    /// Navigation property to orders at this branch
+    /// </summary>
+    public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 }

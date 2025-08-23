@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Services;
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
@@ -28,7 +28,7 @@ public class RepairJobsController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new repair job from a repair transaction
+    /// Create a new repair job from a financial transaction
     /// </summary>
     [HttpPost]
     [Authorize(Policy = "CashierOrManager")]
@@ -98,28 +98,28 @@ public class RepairJobsController : ControllerBase
     }
 
     /// <summary>
-    /// Get repair job by transaction ID
+    /// Get repair job by financial transaction ID
     /// </summary>
-    [HttpGet("by-transaction/{transactionId}")]
+    [HttpGet("by-financial-transaction/{financialTransactionId}")]
     [Authorize(Policy = "CashierOrManager")]
     [ProducesResponseType(typeof(ApiResponse<RepairJobDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetRepairJobByTransactionId(int transactionId)
+    public async Task<IActionResult> GetRepairJobByFinancialTransactionId(int financialTransactionId)
     {
         try
         {
-            var repairJob = await _repairJobService.GetRepairJobByTransactionIdAsync(transactionId);
+            var repairJob = await _repairJobService.GetRepairJobByFinancialTransactionIdAsync(financialTransactionId);
 
             if (repairJob == null)
             {
-                return NotFound(ApiResponse.ErrorResponse("Repair job not found for this transaction"));
+                return NotFound(ApiResponse.ErrorResponse("Repair job not found for this financial transaction"));
             }
 
             return Ok(ApiResponse<RepairJobDto>.SuccessResponse(repairJob));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving repair job for transaction {TransactionId}", transactionId);
+            _logger.LogError(ex, "Error retrieving repair job for financial transaction {FinancialTransactionId}", financialTransactionId);
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving the repair job"));
         }
     }
@@ -149,8 +149,8 @@ public class RepairJobsController : ControllerBase
                 return BadRequest(ApiResponse.ErrorResponse(errorMessage ?? "Failed to update repair job status"));
             }
 
-            _logger.LogInformation("Repair job {RepairJobId} status updated to {Status} by user {UserId}", 
-                id, request.Status, userId);
+            _logger.LogInformation("Repair job {RepairJobId} status updated to {StatusId} by user {UserId}", 
+                id, request.StatusId, userId);
 
             return Ok(ApiResponse.SuccessResponse("Repair job status updated successfully"));
         }
@@ -357,7 +357,7 @@ public class RepairJobsController : ControllerBase
             {
                 Items = items,
                 TotalCount = totalCount,
-                PageNumber = request.PageNumber,
+                Page = request.PageNumber,
                 PageSize = request.PageSize,
                 TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
             };
@@ -398,27 +398,22 @@ public class RepairJobsController : ControllerBase
     /// <summary>
     /// Get repair jobs by status
     /// </summary>
-    [HttpGet("by-status/{status}")]
+    [HttpGet("by-status/{statusId}")]
     [Authorize(Policy = "CashierOrManager")]
     [ProducesResponseType(typeof(ApiResponse<List<RepairJobDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRepairJobsByStatus(
-        string status,
+        int statusId,
         [FromQuery] int? branchId = null)
     {
         try
         {
-            if (!Enum.TryParse<RepairStatus>(status, true, out var repairStatus))
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid repair status"));
-            }
-
-            var repairJobs = await _repairJobService.GetRepairJobsByStatusAsync(repairStatus, branchId);
+            var repairJobs = await _repairJobService.GetRepairJobsByStatusAsync(statusId, branchId);
 
             return Ok(ApiResponse<List<RepairJobDto>>.SuccessResponse(repairJobs));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving repair jobs by status {Status}", status);
+            _logger.LogError(ex, "Error retrieving repair jobs by status {StatusId}", statusId);
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving repair jobs"));
         }
     }
@@ -430,7 +425,7 @@ public class RepairJobsController : ControllerBase
     [Authorize(Policy = "CashierOrManager")]
     [ProducesResponseType(typeof(ApiResponse<List<RepairJobDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRepairJobsByTechnician(
-        string technicianId,
+        int technicianId,
         [FromQuery] int? branchId = null)
     {
         try
@@ -497,16 +492,4 @@ public class CancelRepairRequestDto
     [Required(ErrorMessage = "Cancellation reason is required")]
     [StringLength(500, ErrorMessage = "Reason cannot exceed 500 characters")]
     public string Reason { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Paginated response wrapper
-/// </summary>
-public class PaginatedResponse<T>
-{
-    public List<T> Items { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int PageNumber { get; set; }
-    public int PageSize { get; set; }
-    public int TotalPages { get; set; }
 }

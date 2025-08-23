@@ -89,7 +89,10 @@ import {
   ReportTypeDto,
   BranchDto,
   ExportReportRequest,
-  CashDrawerBalance
+  CashDrawerBalance,
+  productOwnershipApi,
+  ProductOwnershipDto,
+  OwnershipAlertDto
 } from '../services/api';
 import { EnumLookupDto } from '../types/enums';
 import { EnumMapper } from '../types/enums';
@@ -178,25 +181,99 @@ export default function Reports() {
   const [reportTypes, setReportTypes] = useState<ReportTypeDto[]>([]);
   const [branches, setBranches] = useState<BranchDto[]>([]);
   const [transactionTypes, setTransactionTypes] = useState<EnumLookupDto[]>([]);
+  
+  // Ownership state
+  const [ownershipData, setOwnershipData] = useState<ProductOwnershipDto[]>([]);
+  const [ownershipAlerts, setOwnershipAlerts] = useState<OwnershipAlertDto[]>([]);
+  const [lowOwnershipProducts, setLowOwnershipProducts] = useState<ProductOwnershipDto[]>([]);
+  const [outstandingPayments, setOutstandingPayments] = useState<ProductOwnershipDto[]>([]);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
 
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-                 const [branchesResult, reportTypesResult, transactionTypesResult] = await Promise.all([
-           fetchBranches(),
-           fetchReportTypes(),
-           fetchTransactionTypes()
-         ]);
-         setBranches(branchesResult.items || branchesResult);
-         setReportTypes(reportTypesResult);
-         setTransactionTypes(transactionTypesResult);
+        const [branchesResult, reportTypesResult, transactionTypesResult] = await Promise.all([
+          fetchBranches(),
+          fetchReportTypes(),
+          fetchTransactionTypes()
+        ]);
+        setBranches(branchesResult.items || branchesResult);
+        setReportTypes(reportTypesResult);
+        setTransactionTypes(transactionTypesResult);
       } catch (error) {
         console.error('Failed to load initial data:', error);
       }
     };
+    
     loadInitialData();
   }, [fetchBranches, fetchReportTypes, fetchTransactionTypes]);
+
+  // Load ownership data
+  useEffect(() => {
+    const loadOwnershipData = async () => {
+      if (!selectedBranchId) return;
+      
+      try {
+        setOwnershipLoading(true);
+        const [alerts, lowOwnership, outstanding] = await Promise.all([
+          productOwnershipApi.getOwnershipAlerts(selectedBranchId),
+          productOwnershipApi.getLowOwnershipProducts(0.5),
+          productOwnershipApi.getProductsWithOutstandingPayments()
+        ]);
+        
+        setOwnershipAlerts(alerts);
+        setLowOwnershipProducts(lowOwnership);
+        setOutstandingPayments(outstanding);
+      } catch (error) {
+        console.error('Failed to load ownership data:', error);
+        toast.error('Failed to load ownership data');
+      } finally {
+        setOwnershipLoading(false);
+      }
+    };
+    
+    loadOwnershipData();
+  }, [selectedBranchId]);
+
+  // Ownership statistics helper functions
+  const getOwnershipStatistics = () => {
+    const totalProducts = ownershipData.length;
+    const highOwnership = ownershipData.filter(item => item.ownershipPercentage >= 80).length;
+    const mediumOwnership = ownershipData.filter(item => item.ownershipPercentage >= 50 && item.ownershipPercentage < 80).length;
+    const lowOwnership = ownershipData.filter(item => item.ownershipPercentage < 50).length;
+    const totalOutstanding = outstandingPayments.reduce((sum, item) => sum + item.outstandingAmount, 0);
+    
+    return {
+      totalProducts,
+      highOwnership,
+      mediumOwnership,
+      lowOwnership,
+      totalOutstanding,
+      averageOwnership: totalProducts > 0 ? ownershipData.reduce((sum, item) => sum + item.ownershipPercentage, 0) / totalProducts : 0
+    };
+  };
+
+  const getOwnershipChartData = () => {
+    const stats = getOwnershipStatistics();
+    return [
+      { name: 'High (≥80%)', value: stats.highOwnership, color: '#28A745' },
+      { name: 'Medium (50-79%)', value: stats.mediumOwnership, color: '#FFC107' },
+      { name: 'Low (<50%)', value: stats.lowOwnership, color: '#DC3545' }
+    ];
+  };
+
+  const getOwnershipTrendData = () => {
+    // Mock trend data - in real implementation, this would come from historical data
+    return [
+      { date: '2024-01', ownership: 75 },
+      { date: '2024-02', ownership: 78 },
+      { date: '2024-03', ownership: 82 },
+      { date: '2024-04', ownership: 79 },
+      { date: '2024-05', ownership: 85 },
+      { date: '2024-06', ownership: 88 }
+    ];
+  };
 
   // Load reports based on active tab
   useEffect(() => {
@@ -452,7 +529,7 @@ export default function Reports() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-9">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-10">
           <TabsTrigger value="sales">Sales</TabsTrigger>
           <TabsTrigger value="cash">Cash</TabsTrigger>
           <TabsTrigger value="cashdrawer">Cash Drawer</TabsTrigger>
@@ -462,6 +539,7 @@ export default function Reports() {
           <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
           <TabsTrigger value="tax">Tax</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="ownership">Ownership</TabsTrigger>
         </TabsList>
 
         {/* Daily Sales Summary Tab */}
@@ -518,20 +596,7 @@ export default function Reports() {
                   </CardContent>
                 </Card>
 
-                <Card className="pos-card">
-                  {/* Returns information hidden per user request */}
-                  {/* <CardContent className="pt-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Total Returns</p>
-                        <p className="text-3xl font-bold text-red-600">
-                          {formatCurrency(dailySalesReport.totalReturns)}
-                        </p>
-                      </div>
-                      <TrendingUp className="h-8 w-8 text-red-500" />
-                    </div>
-                  </CardContent> */}
-                </Card>
+
 
                 <Card className="pos-card">
                   <CardContent className="pt-6">
@@ -689,11 +754,7 @@ export default function Reports() {
                       <span>Cash Repairs:</span>
                       <span className="font-semibold text-blue-600">{formatCurrency(cashReconciliationReport.cashRepairs)}</span>
                     </div>
-                    {/* Cash Returns line hidden per user request */}
-                    {/* <div className="flex justify-between">
-                      <span>Cash Returns:</span>
-                      <span className="font-semibold text-red-600">{formatCurrency(cashReconciliationReport.cashReturns)}</span>
-                    </div> */}
+
                     <div className="flex justify-between border-t pt-2">
                       <span className="font-semibold">Expected Closing Balance:</span>
                       <span className="font-semibold">{formatCurrency(cashReconciliationReport.expectedClosingBalance)}</span>
@@ -1288,7 +1349,7 @@ export default function Reports() {
                         <TableHead>Opening</TableHead>
                         <TableHead>Purchases</TableHead>
                         <TableHead>Sales</TableHead>
-                        <TableHead>Returns</TableHead>
+
                         <TableHead>Adjustments</TableHead>
                         <TableHead>Transfers</TableHead>
                         <TableHead>Closing</TableHead>
@@ -1329,11 +1390,7 @@ export default function Reports() {
                               {movement?.sales || 0}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className={(movement?.returns || 0) > 0 ? 'text-blue-600' : 'text-muted-foreground'}>
-                              {movement?.returns || 0}
-                            </div>
-                          </TableCell>
+
                           <TableCell>
                             <div className={(movement?.adjustments || 0) !== 0 ? ((movement?.adjustments || 0) > 0 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}>
                               {(movement?.adjustments || 0) > 0 ? '+' : ''}{movement?.adjustments || 0}
@@ -1969,6 +2026,310 @@ export default function Reports() {
                   )}
                 </CardContent>
               </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* Ownership Reports Tab */}
+        <TabsContent value="ownership" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold">Product Ownership Reports</h2>
+            <div className="flex space-x-2">
+              <Button
+                onClick={() => handleExportToExcel(ownershipData, `Ownership_Report_${selectedDate}`, 'ownership-report')}
+                disabled={excelExportLoading || ownershipLoading}
+                variant="outline"
+                size="sm"
+                className="touch-target hover:bg-[#F4E9B1] transition-colors"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Export Excel
+              </Button>
+              <Button
+                onClick={() => handleExportToPdf(ownershipData, `Ownership_Report_${selectedDate}`, 'ownership-report')}
+                disabled={pdfExportLoading || ownershipLoading}
+                variant="outline"
+                size="sm"
+                className="touch-target hover:bg-[#F4E9B1] transition-colors"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+
+          {ownershipLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+
+          {!ownershipLoading && (
+            <>
+              {/* Ownership Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Products</p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {getOwnershipStatistics().totalProducts}
+                        </p>
+                      </div>
+                      <Package className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">High Ownership</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {getOwnershipStatistics().highOwnership}
+                        </p>
+                      </div>
+                      <CheckCircle className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Low Ownership</p>
+                        <p className="text-3xl font-bold text-red-600">
+                          {getOwnershipStatistics().lowOwnership}
+                        </p>
+                      </div>
+                      <AlertTriangle className="h-8 w-8 text-red-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="pos-card">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Outstanding Amount</p>
+                        <p className="text-3xl font-bold text-orange-600">
+                          {formatCurrency(getOwnershipStatistics().totalOutstanding)}
+                        </p>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-orange-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Ownership Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Ownership Distribution Pie Chart */}
+                <Card className="pos-card">
+                  <CardHeader>
+                    <CardTitle>Ownership Distribution</CardTitle>
+                    <CardDescription>
+                      Distribution of products by ownership percentage
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={getOwnershipChartData()}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {getOwnershipChartData().map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Ownership Trend Line Chart */}
+                <Card className="pos-card">
+                  <CardHeader>
+                    <CardTitle>Ownership Trend</CardTitle>
+                    <CardDescription>
+                      Average ownership percentage over time
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={getOwnershipTrendData()}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="ownership" stroke="#D4AF37" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Ownership Alerts */}
+              {ownershipAlerts.length > 0 && (
+                <Card className="pos-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-orange-500" />
+                      Ownership Alerts ({ownershipAlerts.length})
+                    </CardTitle>
+                    <CardDescription>
+                      Products requiring attention due to ownership issues
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {ownershipAlerts.map((alert, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <AlertTriangle className="h-6 w-6 text-orange-500" />
+                            <div>
+                              <h3 className="font-medium">{alert.productName}</h3>
+                              <p className="text-sm text-muted-foreground">{alert.message}</p>
+                            </div>
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              alert.severity.toLowerCase() === 'high' ? 'bg-red-100 text-red-800' :
+                              alert.severity.toLowerCase() === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-blue-100 text-blue-800'
+                            }
+                          >
+                            {alert.severity}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Low Ownership Products */}
+              {lowOwnershipProducts.length > 0 && (
+                <Card className="pos-card">
+                  <CardHeader>
+                    <CardTitle>Low Ownership Products</CardTitle>
+                    <CardDescription>
+                      Products with ownership percentage below 50%
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Ownership %</TableHead>
+                          <TableHead>Outstanding Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lowOwnershipProducts.map((product) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{product.productName}</div>
+                                <div className="text-sm text-muted-foreground">{product.productCode}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className="bg-red-100 text-red-800">
+                                {product.ownershipPercentage.toFixed(1)}%
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-red-600 font-medium">
+                              {formatCurrency(product.outstandingAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="bg-red-50 text-red-700">
+                                Low Ownership
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Outstanding Payments */}
+              {outstandingPayments.length > 0 && (
+                <Card className="pos-card">
+                  <CardHeader>
+                    <CardTitle>Outstanding Payments</CardTitle>
+                    <CardDescription>
+                      Products with pending payments
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Supplier</TableHead>
+                          <TableHead>Outstanding Amount</TableHead>
+                          <TableHead>Ownership %</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {outstandingPayments.map((product) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{product.productName}</div>
+                                <div className="text-sm text-muted-foreground">{product.productCode}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{product.supplierName || 'N/A'}</TableCell>
+                            <TableCell className="text-red-600 font-medium">
+                              {formatCurrency(product.outstandingAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  product.ownershipPercentage >= 80 ? 'bg-green-100 text-green-800' :
+                                  product.ownershipPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }
+                              >
+                                {product.ownershipPercentage.toFixed(1)}%
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {ownershipData.length === 0 && ownershipAlerts.length === 0 && lowOwnershipProducts.length === 0 && outstandingPayments.length === 0 && (
+                <Card className="pos-card">
+                  <CardContent className="text-center py-12">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                    <p className="text-lg font-medium">No ownership data available</p>
+                    <p className="text-muted-foreground">Start managing product ownership to see reports here</p>
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
         </TabsContent>

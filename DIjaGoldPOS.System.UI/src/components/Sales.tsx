@@ -42,13 +42,17 @@ import {
   Receipt,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Printer,
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCustomers, useProcessSale, useGoldRates, useMakingCharges, useKaratTypes, usePaymentMethods, useTaxConfigurations, useSearchTransactions } from '../hooks/useApi';
+import { useProducts, useCustomers, useCreateSaleOrder, useGoldRates, useMakingCharges, useKaratTypes, usePaymentMethods, useTaxConfigurations, useSearchOrders } from '../hooks/useApi';
 import { useAuth } from './AuthContext';
-import api, { Product, Customer, Transaction } from '../services/api';
+import api, { Product, Customer, OrderDto, productOwnershipApi } from '../services/api';
 import { EnumMapper, EnumLookupDto, ProductCategoryType, KaratType } from '../types/enums';
 import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
+// import TransactionDetailsDialog from './TransactionDetailsDialog'; // Temporarily removed
+import ReceiptPrinter from './ReceiptPrinter';
 
 interface CartItem {
   id: number;
@@ -73,23 +77,40 @@ export default function Sales() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'BankTransfer' | 'Cheque'>('Cash');
   const [amountPaid, setAmountPaid] = useState<number>(0);
-  const [isProcessingTransaction, setIsProcessingTransaction] = useState(false);
+  const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   
-  // Today's transactions state
-  const [todayTransactionsPage, setTodayTransactionsPage] = useState(1);
-  const [todayTransactionsPageSize] = useState(10);
+  // Order details dialog state
+  const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
+  const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
+  
+  // Today's orders state
+  const [todayOrdersPage, setTodayOrdersPage] = useState(1);
+  const [todayOrdersPageSize] = useState(10);
+  
+  // Receipt printer state
+  const [isReceiptPrinterOpen, setIsReceiptPrinterOpen] = useState(false);
+  const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState<number | null>(null);
+  
+  // Ownership validation state
+  const [ownershipValidationErrors, setOwnershipValidationErrors] = useState<{[key: number]: string}>({});
+  const [isValidatingOwnership, setIsValidatingOwnership] = useState(false);
   
   // API hooks
   const { data: productsData, loading: productsLoading, execute: fetchProducts } = useProducts();
   const { data: customersData, loading: customersLoading, execute: fetchCustomers } = useCustomers();
-  const { execute: processSale } = useProcessSale();
+  const { execute: createSaleOrder } = useCreateSaleOrder();
   const { data: goldRatesData, loading: goldRatesLoading, fetchRates } = useGoldRates();
   const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
   const { data: karatTypesData, fetchKaratTypes } = useKaratTypes();
   const { data: paymentMethodsData, execute: fetchPaymentMethods } = usePaymentMethods();
   const { data: taxConfigurationsData, fetchTaxConfigurations } = useTaxConfigurations();
-  const { data: transactionsData, loading: transactionsLoading, execute: fetchTransactions } = useSearchTransactions();
+  const { data: ordersData, loading: ordersLoading, execute: fetchOrders } = useSearchOrders();
+
+  // Check if all critical pricing data is loaded
+  const isPricingDataReady = !goldRatesLoading && !makingChargesLoading && 
+    goldRatesData && goldRatesData.length > 0 && 
+    makingChargesData && makingChargesData.length > 0;
 
   // Fetch data on component mount
   useEffect(() => {
@@ -106,6 +127,23 @@ export default function Sales() {
     fetchCharges();
   }, [searchQuery, fetchProducts, fetchKaratTypes, fetchPaymentMethods, fetchTaxConfigurations, fetchRates, fetchCharges]);
 
+  // Ensure all pricing data is loaded before allowing interactions
+  useEffect(() => {
+    if (goldRatesLoading || makingChargesLoading) {
+      return; // Still loading
+    }
+    
+    if (!goldRatesData || !makingChargesData || goldRatesData.length === 0 || makingChargesData.length === 0) {
+      console.log('Pricing data not yet available, waiting for configuration...');
+      return;
+    }
+    
+    console.log('Pricing data loaded successfully:', {
+      goldRatesCount: goldRatesData.length,
+      makingChargesCount: makingChargesData.length
+    });
+  }, [goldRatesData, makingChargesData, goldRatesLoading, makingChargesLoading]);
+
   useEffect(() => {
     if (customerSearch.trim()) {
       fetchCustomers({ 
@@ -116,7 +154,7 @@ export default function Sales() {
     }
   }, [customerSearch, fetchCustomers]);
 
-  // Fetch today's transactions
+  // Fetch today's orders
   useEffect(() => {
     if (user?.branch?.id) {
       // Get today's date in local timezone - match the Dashboard logic exactly
@@ -124,39 +162,85 @@ export default function Sales() {
         String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
         String(new Date().getDate()).padStart(2, '0');
       
-      console.log('Fetching transactions for today:', today);
+      console.log('Fetching orders for today:', today);
       
-      fetchTransactions({
+      fetchOrders({
         branchId: user.branch.id,
-        transactionType: 'Sale',
+        orderTypeId: 1, // Sale order type ID (assuming 1 is for sales)
         fromDate: today, // Use today only, not yesterday
         toDate: today,   // Use today only, not yesterday
-        pageNumber: todayTransactionsPage,
-        pageSize: todayTransactionsPageSize
+        page: todayOrdersPage,
+        pageSize: todayOrdersPageSize
       });
     }
-  }, [user?.branch?.id, todayTransactionsPage, todayTransactionsPageSize, fetchTransactions]);
+  }, [user?.branch?.id, todayOrdersPage, todayOrdersPageSize, fetchOrders]);
 
   // Recalculate cart pricing when customer changes
   useEffect(() => {
-    if (cart.length > 0) {
+    if (cart.length > 0 && isPricingDataReady) {
       recalculateCartPricing(selectedCustomer);
     }
-  }, [selectedCustomer]);
+  }, [selectedCustomer, isPricingDataReady]);
 
   const products = productsData?.items || [];
   const customers = customersData?.items || [];
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType).toLowerCase().includes(searchQuery.toLowerCase())
+    EnumMapper.productCategoryEnumToString(product.categoryType).toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const validateOwnership = async (productId: number, quantity: number): Promise<boolean> => {
+    if (!user?.branch?.id) return true; // Skip validation if no branch info
+    
+    try {
+      setIsValidatingOwnership(true);
+      const validation = await productOwnershipApi.validateOwnership({
+        productId,
+        branchId: user.branch.id,
+        requestedQuantity: quantity
+      });
+      
+      if (!validation.canSell) {
+        setOwnershipValidationErrors(prev => ({
+          ...prev,
+          [productId]: validation.message
+        }));
+        return false;
+      }
+      
+      // Clear any previous errors for this product
+      setOwnershipValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[productId];
+        return newErrors;
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Ownership validation failed:', error);
+      setOwnershipValidationErrors(prev => ({
+        ...prev,
+        [productId]: 'Failed to validate ownership'
+      }));
+      return false;
+    } finally {
+      setIsValidatingOwnership(false);
+    }
+  };
 
   const addToCart = async (product: Product) => {
     // Ensure all required data is loaded before proceeding
-    if (!goldRatesData || !makingChargesData || goldRatesLoading || makingChargesLoading) {
+    if (!isPricingDataReady) {
       console.warn('Pricing data not fully loaded, cannot add to cart');
       return;
+    }
+
+    // Validate ownership before adding to cart
+    const newQuantity = (cart.find(item => item.productId === product.id)?.quantity || 0) + 1;
+    const isValid = await validateOwnership(product.id, newQuantity);
+    if (!isValid) {
+      return; // Don't add to cart if ownership validation fails
     }
 
     const existingItem = cart.find(item => item.productId === product.id);
@@ -183,8 +267,8 @@ export default function Sales() {
           id: Date.now(), // Temporary ID for cart management
           productId: product.id,
           name: product.name,
-          category: EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType),
-          karat: EnumMapper.karatEnumToString(product.karatType as KaratType),
+          category: EnumMapper.productCategoryEnumToString(product.categoryType),
+          karat: EnumMapper.karatEnumToString(product.karatType),
           weight: product.weight,
           rate: goldRate,
           makingCharges: makingCharges,
@@ -199,12 +283,19 @@ export default function Sales() {
       console.error('Error calculating price for product:', product.id, error);
       // Fallback to local calculation if API fails
       try {
-        if (!goldRatesData || !makingChargesData) {
+        if (!isPricingDataReady) {
           alert('Pricing data not available. Please try again.');
           return;
         }
         
-        const pricing = calculateProductPricing(product, goldRatesData, makingChargesData, 1, selectedCustomer, taxConfigurationsData || []);
+        const pricing = calculateProductPricing(product, goldRatesData!, makingChargesData!, 1, selectedCustomer, taxConfigurationsData || []);
+        
+        // Check if pricing calculation returned valid values
+        if (pricing.goldRate === 0) {
+          alert('Unable to calculate pricing for this product. Please check pricing configuration.');
+          return;
+        }
+        
         const unitPrice = pricing.finalTotal;
         
         if (existingItem) {
@@ -222,8 +313,8 @@ export default function Sales() {
             id: Date.now(),
             productId: product.id,
             name: product.name,
-            category: EnumMapper.productCategoryEnumToString(product.categoryType as ProductCategoryType),
-            karat: EnumMapper.karatEnumToString(product.karatType as KaratType),
+            category: EnumMapper.productCategoryEnumToString(product.categoryType),
+            karat: EnumMapper.karatEnumToString(product.karatType),
             weight: product.weight,
             rate: pricing.goldRate,
             makingCharges: pricing.makingChargesAmount,
@@ -249,6 +340,18 @@ export default function Sales() {
 
     const cartItem = cart.find(item => item.id === cartItemId);
     if (!cartItem) return;
+
+    // Validate ownership for new quantity
+    const isValid = await validateOwnership(cartItem.productId, quantity);
+    if (!isValid) {
+      return; // Don't update quantity if ownership validation fails
+    }
+
+    // Ensure pricing data is ready before recalculating
+    if (!isPricingDataReady) {
+      console.warn('Pricing data not ready, cannot update quantity');
+      return;
+    }
 
     try {
       // Recalculate pricing with new quantity using backend API
@@ -284,6 +387,12 @@ export default function Sales() {
     if (!cartItem) return;
 
     const validDiscountPercentage = Math.max(0, Math.min(100, discountPercentage));
+
+    // Ensure pricing data is ready before recalculating
+    if (!isPricingDataReady) {
+      console.warn('Pricing data not ready, cannot update discount');
+      return;
+    }
 
     try {
       // Recalculate pricing with backend API to get base price without discount
@@ -324,6 +433,12 @@ export default function Sales() {
   // Recalculate all cart items when customer changes
   const recalculateCartPricing = async (newCustomer: Customer | null) => {
     if (cart.length === 0) return;
+
+    // Ensure pricing data is ready before recalculating
+    if (!isPricingDataReady) {
+      console.warn('Pricing data not ready, cannot recalculate cart pricing');
+      return;
+    }
 
     try {
       const updatedCart = await Promise.all(
@@ -373,6 +488,12 @@ export default function Sales() {
           totalTax: 0,
           total: 0
         });
+        return;
+      }
+
+      // Ensure pricing data is ready before calculating bill summary
+      if (!isPricingDataReady) {
+        console.log('Pricing data not ready, skipping bill summary calculation');
         return;
       }
 
@@ -450,7 +571,7 @@ export default function Sales() {
     };
 
     calculateBillSummary();
-  }, [cart, selectedCustomer]);
+  }, [cart, selectedCustomer, isPricingDataReady]);
 
   // Destructure for easier access
   const { subtotal, totalMakingCharges, totalDiscountAmount, totalTax, total } = billSummary;
@@ -512,8 +633,30 @@ export default function Sales() {
       return;
     }
 
+    // Validate ownership for all items in cart before checkout
     try {
-      setIsProcessingTransaction(true);
+      setIsValidatingOwnership(true);
+      const validationPromises = cart.map(item => 
+        validateOwnership(item.productId, item.quantity)
+      );
+      
+      const validationResults = await Promise.all(validationPromises);
+      const hasValidationErrors = validationResults.some(result => !result);
+      
+      if (hasValidationErrors) {
+        alert('Some items cannot be sold due to ownership restrictions. Please check the items in your cart.');
+        return;
+      }
+    } catch (error) {
+      console.error('Ownership validation failed during checkout:', error);
+      alert('Failed to validate ownership. Please try again.');
+      return;
+    } finally {
+      setIsValidatingOwnership(false);
+    }
+
+    try {
+      setIsProcessingOrder(true);
       
       const saleRequest = {
         branchId: user.branch.id,
@@ -524,12 +667,33 @@ export default function Sales() {
           customDiscountPercentage: item.discountPercentage || undefined,
         })),
         amountPaid: amountPaid,
-        paymentMethod: EnumMapper.paymentMethodStringToEnum(paymentMethod),
+        paymentMethodId: EnumMapper.paymentMethodStringToEnum(paymentMethod),
       };
 
-      const transaction = await processSale(saleRequest);
+      const order = await createSaleOrder(saleRequest);
       
-      alert(`Sale completed successfully! Transaction Number: ${transaction.transactionNumber}`);
+      // Update ownership after successful sale
+      try {
+        const branchId = user?.branch?.id;
+        if (branchId) {
+                  const ownershipUpdatePromises = cart.map(item => 
+          productOwnershipApi.updateOwnershipAfterSale({
+            productId: item.productId,
+            branchId: branchId,
+            soldQuantity: item.quantity,
+            referenceNumber: order.orderNumber
+          })
+        );
+          
+          await Promise.all(ownershipUpdatePromises);
+          console.log('Ownership updated successfully after sale');
+        }
+      } catch (error) {
+        console.error('Failed to update ownership after sale:', error);
+        // Don't fail the transaction, but log the error
+      }
+      
+      alert(`Sale completed successfully! Order Number: ${order.orderNumber}`);
       
       // Clear cart and reset form
       setCart([]);
@@ -537,35 +701,88 @@ export default function Sales() {
       setAmountPaid(0);
       setCustomerSearch('');
       setSearchQuery('');
+      setOwnershipValidationErrors({}); // Clear any ownership errors
       
-      // Refresh today's transactions list to show the new transaction
+      // Refresh today's orders list to show the new order
       if (user?.branch?.id) {
         // Get today's date in local timezone - match the refresh button logic exactly
         const today = new Date().getFullYear() + '-' + 
           String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
           String(new Date().getDate()).padStart(2, '0');
         
-        fetchTransactions({
+        fetchOrders({
           branchId: user.branch.id,
-          transactionType: 'Sale',
+          orderTypeId: 1, // Sale order type ID
           fromDate: today, // Use today only, not yesterday
           toDate: today,   // Use today only, not yesterday
-          pageNumber: todayTransactionsPage,
-          pageSize: todayTransactionsPageSize
+          page: todayOrdersPage,
+          pageSize: todayOrdersPageSize
         });
       }
       
     } catch (error) {
-      console.error('Transaction failed:', error);
-      alert(error instanceof Error ? error.message : 'Transaction failed. Please try again.');
+      console.error('Order creation failed:', error);
+      alert(error instanceof Error ? error.message : 'Order creation failed. Please try again.');
     } finally {
-      setIsProcessingTransaction(false);
+      setIsProcessingOrder(false);
+    }
+  };
+
+  const handleViewOrderDetails = async (order: any) => {
+    try {
+      // Get full order details from the orders API
+      const fullOrder = await api.orders.getOrder(order.id);
+      
+      setSelectedOrder(fullOrder);
+      setIsOrderDetailsOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      alert('Failed to load order details. Please try again.');
+    }
+  };
+
+  const handlePrintOrder = async (orderId: number) => {
+    setSelectedOrderForReceipt(orderId);
+    setIsReceiptPrinterOpen(true);
+  };
+
+  const handleGenerateReceipt = async (orderId: number) => {
+    try {
+      // For orders, we might need to get the associated financial transaction ID
+      // or create a new receipt generation endpoint for orders
+      const order = await api.orders.getOrder(orderId);
+      if (order.financialTransactionId) {
+        const result = await api.financialTransactions.generateBrowserReceipt(order.financialTransactionId);
+        return result;
+      } else {
+        throw new Error('No financial transaction associated with this order');
+      }
+    } catch (error) {
+      console.error('Error generating receipt:', error);
+      throw error;
     }
   };
 
   return (
     <div className="space-y-6">
       
+      {/* Show loading state when pricing data is not ready */}
+      {!isPricingDataReady && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <Loader2 className="h-5 w-5 animate-spin text-yellow-600 mr-3" />
+            <div>
+              <p className="text-yellow-800 font-medium">Loading Pricing Configuration</p>
+              <p className="text-yellow-700 text-sm">
+                {goldRatesLoading || makingChargesLoading 
+                  ? 'Loading gold rates and making charges...' 
+                  : 'Waiting for pricing data to be configured...'
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="flex items-center justify-between">
         <h1 className="text-3xl text-[#0D1B2A]">New Sale</h1>
@@ -670,15 +887,15 @@ export default function Sales() {
                 <div className="text-center p-8 text-muted-foreground">
                   {searchQuery ? 'No products found matching your search' : 'No products available'}
                 </div>
-              ) : (goldRatesLoading || makingChargesLoading) ? (
+              ) : !isPricingDataReady ? (
                 <div className="text-center p-8">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                  <p className="text-muted-foreground">Loading pricing data...</p>
-                </div>
-              ) : (!goldRatesData || !makingChargesData) ? (
-                <div className="text-center p-8">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                  <p className="text-muted-foreground">Loading pricing configuration...</p>
+                  <p className="text-muted-foreground">
+                    {goldRatesLoading || makingChargesLoading 
+                      ? 'Loading pricing data...' 
+                      : 'Loading pricing configuration...'
+                    }
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -688,46 +905,61 @@ export default function Sales() {
                     let makingCharges = 0;
                     let totalPrice = 0;
                     
-                    try {
-                      const pricing = calculateProductPricing(product, goldRatesData, makingChargesData, 1, selectedCustomer);
-                      goldRate = pricing.goldRate;
-                      makingCharges = pricing.makingChargesAmount;
-                      totalPrice = pricing.totalPrice;
-                    } catch (error) {
-                      console.error('Error calculating price for product:', product.id, error);
-                      // Set default values if calculation fails
-                      goldRate = 0;
-                      makingCharges = 0;
-                      totalPrice = 0;
+                    // Only calculate pricing when all data is ready
+                    if (isPricingDataReady && goldRatesData && makingChargesData) {
+                      try {
+                        const pricing = calculateProductPricing(product, goldRatesData, makingChargesData, 1, selectedCustomer, taxConfigurationsData || []);
+                        goldRate = pricing.goldRate;
+                        makingCharges = pricing.makingChargesAmount;
+                        totalPrice = pricing.totalPrice;
+                      } catch (error) {
+                        console.error('Error calculating price for product:', product.id, error);
+                        // Set default values if calculation fails
+                        goldRate = 0;
+                        makingCharges = 0;
+                        totalPrice = 0;
+                      }
                     }
                     
                     return (
                       <div
                         key={product.id}
-                        className="p-4 border rounded-lg hover:shadow-md transition-shadow"
+                        className={`p-4 border rounded-lg hover:shadow-md transition-shadow ${
+                          ownershipValidationErrors[product.id] ? 'border-red-200 bg-red-50' : ''
+                        }`}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="font-medium">{product.name}</h3>
-                          <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType as KaratType)}</Badge>
+                          <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType)}</Badge>
                         </div>
                         <div className="space-y-1 text-sm text-muted-foreground mb-3">
                           <p>Weight: {product.weight}g</p>
-                          <p>Rate: {formatCurrency(goldRate)}/g</p>
-                          <p>Making: {formatCurrency(makingCharges)}</p>
+                          <p>Rate: {goldRate > 0 ? formatCurrency(goldRate) : 'Loading...'}/g</p>
+                          <p>Making: {makingCharges > 0 ? formatCurrency(makingCharges) : 'Loading...'}</p>
                           <p>Code: {product.productCode}</p>
                         </div>
+                        {ownershipValidationErrors[product.id] && (
+                          <div className="mb-3 p-2 bg-red-100 border border-red-200 rounded text-xs text-red-700">
+                            <p className="font-medium">Ownership Error:</p>
+                            <p>{ownershipValidationErrors[product.id]}</p>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <p className="font-semibold">
-                            {formatCurrency(totalPrice)}
+                            {totalPrice > 0 ? formatCurrency(totalPrice) : 'Calculating...'}
                           </p>
                           <Button
                             size="sm"
                             variant="golden"
                             onClick={() => addToCart(product)}
-                            disabled={!product.isActive}
+                            disabled={!product.isActive || !isPricingDataReady || goldRate === 0 || isValidatingOwnership}
                             className="touch-target"
                           >
-                            <Plus className="h-4 w-4" />
+                            {isValidatingOwnership ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Plus className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -756,7 +988,9 @@ export default function Sales() {
               ) : (
                 <div className="space-y-4">
                   {cart.map((item) => (
-                    <div key={item.id} className="p-3 border rounded-lg">
+                    <div key={item.id} className={`p-3 border rounded-lg ${
+                      ownershipValidationErrors[item.productId] ? 'border-red-200 bg-red-50' : ''
+                    }`}>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-sm">{item.name}</h4>
                         <Button
@@ -767,6 +1001,12 @@ export default function Sales() {
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
+                      {ownershipValidationErrors[item.productId] && (
+                        <div className="mb-2 p-2 bg-red-100 border border-red-200 rounded text-xs text-red-700">
+                          <p className="font-medium">Ownership Error:</p>
+                          <p>{ownershipValidationErrors[item.productId]}</p>
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground mb-2">
                         {item.weight}g × {formatCurrency(item.rate)} + {formatCurrency(item.makingCharges)}
                       </div>
@@ -902,12 +1142,12 @@ export default function Sales() {
                       className="w-full touch-target"
                       variant="golden"
                       onClick={handleCheckout}
-                      disabled={isProcessingTransaction || cart.length === 0 || amountPaid < total}
+                      disabled={isProcessingOrder || isValidatingOwnership || cart.length === 0 || amountPaid < total || !isPricingDataReady}
                     >
-                      {isProcessingTransaction ? (
+                      {isProcessingOrder || isValidatingOwnership ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing...
+                          {isValidatingOwnership ? 'Validating Ownership...' : 'Processing...'}
                         </>
                       ) : (
                         <>
@@ -916,6 +1156,11 @@ export default function Sales() {
                         </>
                       )}
                     </Button>
+                    {!isPricingDataReady && (
+                      <p className="text-xs text-yellow-600 text-center">
+                        Checkout disabled until pricing configuration is loaded
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -924,17 +1169,17 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* Today's Transactions Section */}
+      {/* Today's Orders Section */}
       <Card className="pos-card">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                Today's Sales Transactions
+                Today's Sales Orders
               </CardTitle>
               <CardDescription>
-                Showing sales transactions for {user?.branch?.name || 'your branch'} (last 24 hours)
+                Showing sales orders for {user?.branch?.name || 'your branch'} (today)
               </CardDescription>
             </div>
             <Button
@@ -947,20 +1192,20 @@ export default function Sales() {
                     String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
                     String(new Date().getDate()).padStart(2, '0');
                   
-                  fetchTransactions({
+                  fetchOrders({
                     branchId: user.branch.id,
-                    transactionType: 'Sale',
+                    orderTypeId: 1, // Sale order type ID
                     fromDate: today, // Use today only, not yesterday
                     toDate: today,   // Use today only, not yesterday
-                    pageNumber: todayTransactionsPage,
-                    pageSize: todayTransactionsPageSize
+                    page: todayOrdersPage,
+                    pageSize: todayOrdersPageSize
                   });
                 }
               }}
-              disabled={transactionsLoading}
+              disabled={ordersLoading}
               className="touch-target hover:bg-[#F4E9B1] transition-colors"
             >
-              {transactionsLoading ? (
+              {ordersLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Calendar className="h-4 w-4" />
@@ -970,84 +1215,81 @@ export default function Sales() {
           </div>
         </CardHeader>
         <CardContent>
-          {transactionsLoading ? (
+          {ordersLoading ? (
             <div className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="ml-2">Loading today's transactions...</span>
+              <span className="ml-2">Loading today's orders...</span>
             </div>
-          ) : transactionsData?.items && transactionsData.items.length > 0 ? (
+          ) : ordersData?.items && ordersData.items.length > 0 ? (
             <div className="space-y-4">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Transaction #</TableHead>
+                      <TableHead>Order #</TableHead>
                       <TableHead>Time</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Cashier</TableHead>
                       <TableHead>Items</TableHead>
-                      <TableHead>Subtotal</TableHead>
-                      <TableHead>Tax</TableHead>
                       <TableHead>Total</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Change</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactionsData.items.map((transaction) => (
-                      <TableRow key={transaction.id}>
+                    {ordersData.items.map((order) => (
+                      <TableRow key={order.id}>
                         <TableCell className="font-mono text-sm">
-                          {transaction.transactionNumber}
+                          {order.orderNumber}
                         </TableCell>
                         <TableCell>
-                          {new Date(transaction.transactionDate).toLocaleTimeString('en-US', {
+                          {new Date(order.orderDate).toLocaleTimeString('en-US', {
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: true
                           })}
                         </TableCell>
                         <TableCell>
-                          {transaction.customerName || 'Walk-in Customer'}
+                          {order.customerName || 'Walk-in Customer'}
                         </TableCell>
                         <TableCell>
-                          {transaction.cashierName}
+                          {order.cashierName}
                         </TableCell>
                         <TableCell>
-                          {transaction.items?.length || 0} items
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(transaction.subtotal)}
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(transaction.totalTaxAmount)}
+                          {order.items?.length || 0} items
                         </TableCell>
                         <TableCell className="font-semibold">
-                          {formatCurrency(transaction.totalAmount)}
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(transaction.amountPaid)}
-                        </TableCell>
-                        <TableCell>
-                          {transaction.changeGiven > 0 ? (
-                            <span className="text-green-600">
-                              +{formatCurrency(transaction.changeGiven)}
-                            </span>
-                          ) : transaction.changeGiven < 0 ? (
-                            <span className="text-red-600">
-                              {formatCurrency(Math.abs(transaction.changeGiven))}
-                            </span>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
+                          {formatCurrency(order.items?.reduce((sum, item) => sum + item.totalAmount, 0) || 0)}
                         </TableCell>
                         <TableCell>
                           <Badge 
-                            variant={transaction.status === 'Completed' ? 'default' : 'secondary'}
-                            className={transaction.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
+                            variant={order.statusDescription === 'Completed' ? 'default' : 'secondary'}
+                            className={order.statusDescription === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
                           >
-                            {transaction.statusDisplayName || transaction.status}
+                            {order.statusDescription}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewOrderDetails(order as any)}
+                              className="h-8 w-8 p-0 hover:bg-blue-50"
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePrintOrder(order.id)}
+                              className="h-8 w-8 p-0 hover:bg-green-50"
+                              title="Print Receipt"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1057,33 +1299,33 @@ export default function Sales() {
 
               {/* Pagination */}
               {(() => {
-                const totalPages = Math.ceil(transactionsData.totalCount / todayTransactionsPageSize);
+                const totalPages = Math.ceil(ordersData.totalCount / todayOrdersPageSize);
                 return totalPages > 1 ? (
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      Showing {((todayTransactionsPage - 1) * todayTransactionsPageSize) + 1} to{' '}
-                      {Math.min(todayTransactionsPage * todayTransactionsPageSize, transactionsData.totalCount)} of{' '}
-                      {transactionsData.totalCount} transactions
+                      Showing {((todayOrdersPage - 1) * todayOrdersPageSize) + 1} to{' '}
+                      {Math.min(todayOrdersPage * todayOrdersPageSize, ordersData.totalCount)} of{' '}
+                      {ordersData.totalCount} orders
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setTodayTransactionsPage(prev => Math.max(1, prev - 1))}
-                        disabled={todayTransactionsPage === 1}
+                        onClick={() => setTodayOrdersPage(prev => Math.max(1, prev - 1))}
+                        disabled={todayOrdersPage === 1}
                         className="touch-target hover:bg-[#F4E9B1] transition-colors"
                       >
                         <ChevronLeft className="h-4 w-4" />
                         Previous
                       </Button>
                       <span className="text-sm font-medium">
-                        Page {todayTransactionsPage} of {totalPages}
+                        Page {todayOrdersPage} of {totalPages}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setTodayTransactionsPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={todayTransactionsPage === totalPages}
+                        onClick={() => setTodayOrdersPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={todayOrdersPage === totalPages}
                         className="touch-target hover:bg-[#F4E9B1] transition-colors"
                       >
                         Next
@@ -1096,30 +1338,32 @@ export default function Sales() {
 
               {/* Summary */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Transactions</p>
-                    <p className="text-2xl font-bold text-[#0D1B2A]">{transactionsData.totalCount}</p>
+                    <p className="text-sm text-muted-foreground">Total Orders</p>
+                    <p className="text-2xl font-bold text-[#0D1B2A]">{ordersData.totalCount}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Sales</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {formatCurrency(transactionsData.items.reduce((sum, t) => sum + t.totalAmount, 0))}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Tax</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(transactionsData.items.reduce((sum, t) => sum + t.totalTaxAmount, 0))}
+                      {formatCurrency(ordersData.items.reduce((sum, order) => {
+                        const orderTotal = order.items?.reduce((itemSum, item) => itemSum + item.totalAmount, 0) || 0;
+                        return sum + orderTotal;
+                      }, 0))}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Average Sale</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      {transactionsData.totalCount > 0 
-                        ? formatCurrency(transactionsData.items.reduce((sum, t) => sum + t.totalAmount, 0) / transactionsData.totalCount)
-                        : formatCurrency(0)
-                      }
+                      {ordersData.totalCount > 0 ? (
+                        (() => {
+                          const totalSales = ordersData.items.reduce((sum, order) => {
+                            const orderTotal = order.items?.reduce((itemSum, item) => itemSum + item.totalAmount, 0) || 0;
+                            return sum + orderTotal;
+                          }, 0);
+                          return formatCurrency(totalSales / ordersData.totalCount);
+                        })()
+                      ) : formatCurrency(0)}
                     </p>
                   </div>
                 </div>
@@ -1128,12 +1372,84 @@ export default function Sales() {
           ) : (
             <div className="text-center p-8 text-muted-foreground">
               <Receipt className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-lg font-medium">No sales transactions today</p>
+              <p className="text-lg font-medium">No sales orders today</p>
               <p className="text-sm">Start making sales to see them appear here</p>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Order Details Dialog */}
+      {/* TODO: Create OrderDetailsDialog component or adapt TransactionDetailsDialog for orders */}
+      {selectedOrder && (
+        <Dialog open={isOrderDetailsOpen} onOpenChange={setIsOrderDetailsOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Order Details - {selectedOrder.orderNumber}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p><strong>Customer:</strong> {selectedOrder.customerName || 'Walk-in Customer'}</p>
+                  <p><strong>Date:</strong> {new Date(selectedOrder.orderDate).toLocaleString()}</p>
+                  <p><strong>Status:</strong> {selectedOrder.statusDescription}</p>
+                </div>
+                <div>
+                  <p><strong>Cashier:</strong> {selectedOrder.cashierName}</p>
+                  <p><strong>Branch:</strong> {selectedOrder.branchName}</p>
+                </div>
+              </div>
+              
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2">Items</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Unit Price</TableHead>
+                        <TableHead>Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrder.items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.productName}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+                          <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handlePrintOrder(selectedOrder.id)}
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Receipt
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Receipt Printer Dialog */}
+      <ReceiptPrinter
+        isOpen={isReceiptPrinterOpen}
+        onClose={() => {
+          setIsReceiptPrinterOpen(false);
+          setSelectedOrderForReceipt(null);
+        }}
+        transactionId={selectedOrderForReceipt || undefined}
+        onGenerateReceipt={handleGenerateReceipt}
+      />
     </div>
   );
 }

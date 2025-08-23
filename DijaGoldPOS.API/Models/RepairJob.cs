@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Models.LookupTables;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
@@ -11,28 +11,26 @@ namespace DijaGoldPOS.API.Models;
 public class RepairJob : BaseEntity
 {
     /// <summary>
-    /// Reference to the original transaction
+    /// Reference to the financial transaction
     /// </summary>
-    [Required]
-    public int TransactionId { get; set; }
+    public int? FinancialTransactionId { get; set; }
     
     /// <summary>
     /// Current status of the repair job
     /// </summary>
     [Required]
-    public RepairStatus Status { get; set; } = RepairStatus.Pending;
+    public int StatusId { get; set; }
     
     /// <summary>
     /// Priority level of the repair
     /// </summary>
     [Required]
-    public RepairPriority Priority { get; set; } = RepairPriority.Medium;
+    public int PriorityId { get; set; }
     
     /// <summary>
     /// ID of the technician assigned to this repair
     /// </summary>
-    [MaxLength(450)]
-    public string? AssignedTechnicianId { get; set; }
+    public int? AssignedTechnicianId { get; set; }
     
     /// <summary>
     /// Date when repair work started
@@ -81,8 +79,7 @@ public class RepairJob : BaseEntity
     /// <summary>
     /// Quality check performed by
     /// </summary>
-    [MaxLength(450)]
-    public string? QualityCheckedBy { get; set; }
+    public int? QualityCheckedBy { get; set; }
     
     /// <summary>
     /// Date of quality check
@@ -100,20 +97,32 @@ public class RepairJob : BaseEntity
     public DateTime? CustomerNotificationDate { get; set; }
     
     /// <summary>
-    /// Navigation property to the transaction
+    /// Navigation property to the financial transaction
     /// </summary>
     [JsonIgnore]
-    public virtual Transaction Transaction { get; set; } = null!;
+    public virtual FinancialTransaction? FinancialTransaction { get; set; }
     
     /// <summary>
     /// Navigation property to the assigned technician
     /// </summary>
     [JsonIgnore]
-    public virtual ApplicationUser? AssignedTechnician { get; set; }
+    public virtual Technician? AssignedTechnician { get; set; }
+    
+    /// <summary>
+    /// Navigation property to repair status lookup
+    /// </summary>
+    [JsonIgnore]
+    public virtual RepairStatusLookup Status { get; set; } = null!;
+    
+    /// <summary>
+    /// Navigation property to repair priority lookup
+    /// </summary>
+    [JsonIgnore]
+    public virtual RepairPriorityLookup Priority { get; set; } = null!;
     
     /// <summary>
     /// Navigation property to the quality checker
     /// </summary>
     [JsonIgnore]
-    public virtual ApplicationUser? QualityChecker { get; set; }
+    public virtual Technician? QualityChecker { get; set; }
 }

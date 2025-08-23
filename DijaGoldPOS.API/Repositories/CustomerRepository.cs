@@ -19,7 +19,6 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
     public async Task<Customer?> GetByNationalIdAsync(string nationalId)
     {
         return await _dbSet
-            .Include(c => c.Transactions)
             .FirstOrDefaultAsync(c => c.NationalId == nationalId);
     }
 
@@ -29,7 +28,6 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
     public async Task<Customer?> GetByMobileNumberAsync(string mobileNumber)
     {
         return await _dbSet
-            .Include(c => c.Transactions)
             .FirstOrDefaultAsync(c => c.MobileNumber == mobileNumber);
     }
 
@@ -39,7 +37,6 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
     public async Task<Customer?> GetByEmailAsync(string email)
     {
         return await _dbSet
-            .Include(c => c.Transactions)
             .FirstOrDefaultAsync(c => c.Email == email);
     }
 
@@ -66,12 +63,8 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
     {
         var query = _dbSet.AsQueryable();
 
-        if (fromDate.HasValue || toDate.HasValue)
-        {
-            query = query.Include(c => c.Transactions.Where(t => 
-                (!fromDate.HasValue || t.TransactionDate >= fromDate.Value) &&
-                (!toDate.HasValue || t.TransactionDate <= toDate.Value)));
-        }
+        // Note: Transaction filtering removed during migration to Order/FinancialTransaction system
+        // TODO: Update to use Orders/FinancialTransactions when migration is complete
 
         return await query
             .OrderByDescending(c => c.TotalPurchaseAmount)

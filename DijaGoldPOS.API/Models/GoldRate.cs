@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Models.LookupTables;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -13,7 +13,7 @@ public class GoldRate : BaseEntity
     /// Karat type for this rate
     /// </summary>
     [Required]
-    public KaratType KaratType { get; set; }
+    public int KaratTypeId { get; set; }
     
     /// <summary>
     /// Rate per gram in Egyptian Pounds
@@ -39,7 +39,12 @@ public class GoldRate : BaseEntity
     public bool IsCurrent { get; set; } = true;
     
     /// <summary>
-    /// Navigation property to transactions using this rate
+    /// Navigation property to karat type lookup
     /// </summary>
-    public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public virtual KaratTypeLookup KaratType { get; set; } = null!;
+    
+    /// <summary>
+    /// Navigation property to orders using this rate
+    /// </summary>
+    public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 }

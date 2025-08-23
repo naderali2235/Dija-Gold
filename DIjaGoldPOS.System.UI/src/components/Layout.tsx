@@ -21,7 +21,6 @@ import {
   BarChart3,
   Package,
   ShoppingCart,
-  RotateCcw,
   Wrench,
   Users,
   Truck,
@@ -31,6 +30,7 @@ import {
   LogOut,
   Bell,
   Wallet,
+  Shield,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import DijaLogo, { DijaLogoWithText } from './DijaLogo';
@@ -58,19 +58,17 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       id: 'sales',
       badge: null,
     },
-    // Returns functionality hidden per user request
-    // {
-    //   title: 'Returns',
-    //   icon: RotateCcw,
-    //   id: 'returns',
-    //   badge: { text: '2', variant: 'secondary' as const },
-    //   managerOnly: false,
-    // },
+    {
+      title: 'Orders',
+      icon: FileText,
+      id: 'orders',
+      badge: null,
+    },
     {
       title: 'Repairs',
       icon: Wrench,
       id: 'repairs',
-      badge: { text: '5', variant: 'default' as const },
+      badge: null,
     },
   ];
 
@@ -85,7 +83,14 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       title: 'Inventory',
       icon: Package,
       id: 'inventory',
-      badge: { text: '12', variant: 'destructive' as const },
+      badge: null,
+    },
+    {
+      title: 'Product Ownership',
+      icon: Shield,
+      id: 'product-ownership',
+      badge: null,
+      managerOnly: true,
     },
   ];
 
@@ -94,6 +99,12 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       title: 'Customers',
       icon: Users,
       id: 'customers',
+      badge: null,
+    },
+    {
+      title: 'Technicians',
+      icon: Wrench,
+      id: 'technicians',
       badge: null,
     },
     {

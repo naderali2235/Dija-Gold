@@ -4,7 +4,7 @@
  */
 
 import { API_CONFIG, STORAGE_KEYS } from '../config/environment';
-import { EnumLookupDto, ApiLookupsResponse } from '../types/enums';
+import { EnumLookupDto, ApiLookupsResponse, LookupTableConstants } from '../types/enums';
 
 // Base API configuration
 const API_BASE_URL = API_CONFIG.BASE_URL;
@@ -230,6 +230,9 @@ export interface Product {
   faceValue?: number;
   hasNumismaticValue?: boolean;
   makingChargesApplicable: boolean;
+  productMakingChargesTypeId?: number;
+  productMakingChargesValue?: number;
+  useProductMakingCharges: boolean;
   supplierId?: number;
   supplierName?: string;
   createdAt: string;
@@ -2186,9 +2189,10 @@ export interface Customer {
   notes?: string;
 }
 
-// Transactions API interfaces
-export interface TransactionItem {
+// Financial Transactions API interfaces (New Architecture)
+export interface OrderItem {
   id: number;
+  orderId: number;
   productId: number;
   productName: string;
   productCode: string;
@@ -2204,35 +2208,806 @@ export interface TransactionItem {
   lineTotal: number;
 }
 
-export interface Transaction {
+export interface FinancialTransactionTax {
+  id: number;
+  financialTransactionId: number;
+  taxConfigurationId: number;
+  taxName: string;
+  taxCode: string;
+  taxRate: number;
+  taxableAmount: number;
+  taxAmount: number;
+}
+
+export interface FinancialTransaction {
   id: number;
   transactionNumber: string;
+  transactionTypeId: number;
   transactionType: 'Sale' | 'Return' | 'Repair';
   transactionDate: string;
   branchId: number;
   branchName: string;
+  branchCode?: string;
   customerId?: number;
   customerName?: string;
-  cashierName: string;
+  customerMobile?: string;
+  customerEmail?: string;
+  processedByUserId?: string;
+  processedByName: string;
+  approvedByUserId?: string;
   approvedByName?: string;
+  orderId?: number;
+  order?: {
+    id: number;
+    orderNumber: string;
+    orderDate: string;
+    orderType: string;
+    items: OrderItem[];
+  };
   subtotal: number;
   totalMakingCharges: number;
   totalTaxAmount: number;
+  totalDiscountAmount?: number;
   discountAmount: number;
   totalAmount: number;
   amountPaid: number;
   changeGiven: number;
-  paymentMethod: number; // PaymentMethod enum value
-  status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded';
-  statusDisplayName?: string; // Display name from backend
-  items: TransactionItem[];
+  paymentMethodId: number;
+  paymentMethod: string;
+  statusId: number;
+  status: 'Completed' | 'Pending' | 'Cancelled' | 'Voided';
+  statusDisplayName?: string;
+  receiptPrinted?: boolean;
+  generalLedgerPosted?: boolean;
+  notes?: string;
+  taxes?: FinancialTransactionTax[];
   // Repair-specific fields
   repairDescription?: string;
   estimatedCompletionDate?: string;
   // Return-specific fields
   returnReason?: string;
+  originalTransactionId?: number;
+  originalTransaction?: FinancialTransaction;
 }
 
+// Legacy Transaction interface for backward compatibility
+export interface Transaction extends Omit<FinancialTransactionDto, 'order'> {
+  items: OrderItem[]; // Alias for order.items
+  cashierName: string; // Alias for processedByName
+  cashierEmployeeCode?: string; // Employee code for the cashier
+  customerMobile?: string; // Customer mobile number
+  customerEmail?: string; // Customer email
+  branchCode?: string; // Branch code
+  order?: {
+    id: number;
+    orderNumber: string;
+    orderDate: string;
+    orderType: string;
+    items: OrderItem[];
+  };
+}
+
+// New API interfaces for Orders and FinancialTransactions
+export interface OrderDto {
+  id: number;
+  orderNumber: string;
+  orderDate: string;
+  orderType: string;
+  branchId: number;
+  branchName: string;
+  customerId?: number;
+  customerName?: string;
+  cashierId: string;
+  cashierName: string;
+  status: number;
+  statusDescription: string;
+  notes?: string;
+  estimatedCompletionDate?: string;
+  financialTransactionId?: number;
+  financialTransactionNumber?: string;
+  items: OrderItemDto[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface OrderItemDto {
+  id: number;
+  orderId: number;
+  productId: number;
+  productName: string;
+  productCode: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  discountPercentage: number;
+  discountAmount: number;
+  finalPrice: number;
+  makingCharges: number;
+  taxAmount: number;
+  totalAmount: number;
+  karatType?: string;
+  weight?: number;
+  notes?: string;
+}
+
+// Helper function to convert OrderItemDto to OrderItem for backward compatibility
+function convertOrderItemDtoToOrderItem(dto: OrderItemDto): OrderItem {
+  return {
+    id: dto.id,
+    orderId: dto.orderId,
+    productId: dto.productId,
+    productName: dto.productName,
+    productCode: dto.productCode,
+    karatType: dto.karatType || '',
+    quantity: dto.quantity,
+    unitWeight: dto.weight || 0,
+    totalWeight: (dto.weight || 0) * dto.quantity,
+    goldRatePerGram: dto.unitPrice / (dto.weight || 1), // Approximate calculation
+    unitPrice: dto.unitPrice,
+    makingChargesAmount: dto.makingCharges,
+    discountPercentage: dto.discountPercentage,
+    discountAmount: dto.discountAmount,
+    lineTotal: dto.totalAmount || dto.finalPrice
+  };
+}
+
+// Helper function to convert OrderItemDto[] to OrderItem[]
+export function convertOrderItemDtosToOrderItems(dtos: OrderItemDto[]): OrderItem[] {
+  return dtos.map(convertOrderItemDtoToOrderItem);
+}
+
+// Helper function to convert FinancialTransactionDto to Transaction for backward compatibility
+export function convertFinancialTransactionDtoToTransaction(dto: FinancialTransactionDto): Transaction {
+  return {
+    ...dto,
+    items: convertOrderItemDtosToOrderItems(dto.order?.items || []),
+    cashierName: dto.processedByName,
+    order: dto.order ? {
+      id: dto.order.id,
+      orderNumber: dto.order.orderNumber,
+      orderDate: dto.order.orderDate,
+      orderType: dto.order.orderType,
+      items: convertOrderItemDtosToOrderItems(dto.order.items)
+    } : undefined
+  };
+}
+
+// Helper function to map transaction type ID to string
+export function mapTransactionTypeIdToString(transactionTypeId: number): 'Sale' | 'Return' | 'Repair' {
+  switch (transactionTypeId) {
+    case LookupTableConstants.FinancialTransactionTypeSale:
+      return 'Sale';
+    case LookupTableConstants.FinancialTransactionTypeReturn:
+      return 'Return';
+    case LookupTableConstants.FinancialTransactionTypeRepair:
+      return 'Repair';
+    default:
+      return 'Sale';
+  }
+}
+
+export interface CreateSaleOrderRequestDto {
+  branchId: number;
+  customerId?: number;
+  goldRateId?: number;
+  notes?: string;
+  items: CreateOrderItemRequestDto[];
+  amountPaid: number;
+  paymentMethodId: number;
+  paymentNotes?: string;
+}
+
+export interface CreateOrderItemRequestDto {
+  productId: number;
+  quantity: number;
+  customDiscountPercentage?: number;
+  notes?: string;
+}
+
+export interface CreateRepairOrderRequestDto {
+  branchId: number;
+  customerId?: number;
+  repairDescription: string;
+  repairAmount: number;
+  amountPaid: number;
+  paymentMethodId: number;
+  estimatedCompletionDate?: string;
+  priority: number; // RepairPriority enum value
+  assignedTechnicianId?: number;
+  technicianNotes?: string;
+}
+
+export interface FinancialTransactionDto {
+  id: number;
+  transactionNumber: string;
+  transactionTypeId: number;
+  transactionType: string;
+  transactionDate: string;
+  branchId: number;
+  branchName: string;
+  customerId?: number;
+  customerName?: string;
+  processedByUserId: string;
+  processedByName: string;
+  processedByUserName?: string;
+  approvedByUserId?: string;
+  approvedByUserName?: string;
+  businessEntityId?: number;
+  businessEntityType?: string;
+  orderId?: number;
+  order?: OrderDto;
+  repairJobId?: number;
+  repairJob?: RepairJobDto;
+  subtotal: number;
+  totalTaxAmount: number;
+  totalDiscountAmount: number;
+  totalAmount: number;
+  amountPaid: number;
+  changeGiven: number;
+  paymentMethodId: number;
+  paymentMethod: string;
+  paymentMethodDescription: string;
+  statusId: number;
+  status: string;
+  statusDescription: string;
+  statusDisplayName?: string;
+  originalTransactionId?: number;
+  reversalReason?: string;
+  receiptPrinted: boolean;
+  generalLedgerPosted: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  taxes?: FinancialTransactionTax[];
+  // Legacy compatibility fields for UI
+  totalMakingCharges?: number;
+  discountAmount?: number;
+  repairDescription?: string;
+  estimatedCompletionDate?: string;
+  returnReason?: string;
+}
+
+export interface RepairJobDto {
+  id: number;
+  financialTransactionId?: number;
+  financialTransactionNumber?: string;
+  status: number; // RepairStatus enum value
+  statusDisplayName: string;
+  priority: number; // RepairPriority enum value
+  priorityDisplayName: string;
+  assignedTechnicianId?: number;
+  assignedTechnicianName?: string;
+  startedDate?: string;
+  completedDate?: string;
+  readyForPickupDate?: string;
+  deliveredDate?: string;
+  technicianNotes?: string;
+  actualCost?: number;
+  materialsUsed?: string;
+  hoursSpent?: number;
+  qualityCheckedBy?: number;
+  qualityCheckerName?: string;
+  qualityCheckDate?: string;
+  customerNotified: boolean;
+  customerNotificationDate?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  repairDescription: string;
+  repairAmount: number;
+  amountPaid: number;
+  estimatedCompletionDate?: string;
+  customerId?: number;
+  customerName?: string;
+  customerPhone?: string;
+  branchId: number;
+  branchName: string;
+}
+
+export interface RepairOrderResultDto {
+  order?: OrderDto;
+  financialTransaction?: FinancialTransactionDto;
+  repairJob?: RepairJobDto;
+}
+
+export const ordersApi = {
+  async createSaleOrder(request: CreateSaleOrderRequestDto): Promise<OrderDto> {
+    const response = await apiRequest<OrderDto>('/orders/sale', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create sale order');
+  },
+
+  async createRepairOrder(request: CreateRepairOrderRequestDto): Promise<RepairOrderResultDto> {
+    const response = await apiRequest<RepairOrderResultDto>('/orders/repair', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create repair order');
+  },
+
+  async getOrder(id: number): Promise<OrderDto> {
+    const response = await apiRequest<OrderDto>(`/orders/${id}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch order');
+  },
+
+  async searchOrders(params: {
+    branchId?: number;
+    orderTypeId?: number;
+    statusId?: number;
+    fromDate?: string;
+    toDate?: string;
+    orderNumber?: string;
+    customerId?: number;
+    cashierId?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<{
+    items: OrderDto[];
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<{
+      items: OrderDto[];
+      totalCount: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/orders/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to search orders');
+  },
+
+  async getOrderSummary(params: {
+    branchId?: number;
+    fromDate?: string;
+    toDate?: string;
+  } = {}): Promise<any> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<any>(`/orders/summary?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get order summary');
+  },
+
+  async getCustomerOrders(customerId: number, params: {
+    fromDate?: string;
+    toDate?: string;
+  } = {}): Promise<OrderDto[]> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<OrderDto[]>(`/orders/customer/${customerId}?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get customer orders');
+  },
+
+  async getCashierOrders(cashierId: string, params: {
+    fromDate?: string;
+    toDate?: string;
+  } = {}): Promise<OrderDto[]> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<OrderDto[]>(`/orders/cashier/${cashierId}?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get cashier orders');
+  },
+
+  async updateOrder(id: number, request: any): Promise<OrderDto> {
+    const response = await apiRequest<OrderDto>(`/orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update order');
+  }
+};
+
+export const financialTransactionsApi = {
+  async getFinancialTransaction(id: number): Promise<FinancialTransactionDto> {
+    const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch financial transaction');
+  },
+
+  async searchFinancialTransactions(params: {
+    branchId?: number;
+    transactionNumber?: string;
+    transactionTypeId?: number;
+    statusId?: number;
+    customerId?: number;
+    fromDate?: string;
+    toDate?: string;
+    pageNumber?: number;
+    pageSize?: number;
+  } = {}): Promise<{
+    items: FinancialTransactionDto[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+  }> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<{
+      items: FinancialTransactionDto[];
+      totalCount: number;
+      pageNumber: number;
+      pageSize: number;
+    }>(`/financialtransactions/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to search financial transactions');
+  },
+
+  async voidFinancialTransaction(id: number, reason: string): Promise<FinancialTransactionDto> {
+    const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}/void`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to void financial transaction');
+  },
+
+  async markReceiptPrinted(id: number): Promise<boolean> {
+    const response = await apiRequest<boolean>(`/financialtransactions/${id}/mark-receipt-printed`, {
+      method: 'POST',
+    });
+    
+    if (response.success) {
+      return true;
+    }
+    
+    throw new Error(response.message || 'Failed to mark receipt as printed');
+  },
+
+  async generateBrowserReceipt(transactionId: number): Promise<{
+    receiptData: any;
+    template: any;
+    htmlTemplate: string;
+    cssStyles: string;
+    transactionNumber: string;
+    transactionDate: string;
+    transactionType: string;
+  }> {
+    const response = await apiRequest<{
+      receiptData: any;
+      template: any;
+      htmlTemplate: string;
+      cssStyles: string;
+      transactionNumber: string;
+      transactionDate: string;
+      transactionType: string;
+    }>('/financialtransactions/generate-browser-receipt', {
+      method: 'POST',
+      body: JSON.stringify({
+        transactionId,
+        includeHtml: true,
+        includeCss: true
+      }),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to generate browser receipt');
+  }
+};
+
+// Initialize auth token on module load
+if (typeof window !== 'undefined') {
+  const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+  if (token) {
+    setAuthToken(token);
+  }
+}
+
+// ProductOwnership API interfaces
+export interface ProductOwnershipDto {
+  id: number;
+  productId: number;
+  productName: string;
+  productCode: string;
+  branchId: number;
+  branchName: string;
+  supplierId?: number;
+  supplierName?: string;
+  purchaseOrderId?: number;
+  purchaseOrderNumber?: string;
+  customerPurchaseId?: number;
+  customerPurchaseNumber?: string;
+  totalQuantity: number;
+  totalWeight: number;
+  ownedQuantity: number;
+  ownedWeight: number;
+  ownershipPercentage: number;
+  totalCost: number;
+  amountPaid: number;
+  outstandingAmount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ProductOwnershipRequest {
+  productId: number;
+  branchId: number;
+  supplierId?: number;
+  purchaseOrderId?: number;
+  customerPurchaseId?: number;
+  totalQuantity: number;
+  totalWeight: number;
+  ownedQuantity: number;
+  ownedWeight: number;
+  totalCost: number;
+  amountPaid: number;
+}
+
+export interface OwnershipMovementDto {
+  id: number;
+  productOwnershipId: number;
+  movementType: string;
+  movementDate: string;
+  referenceNumber?: string;
+  quantityChange: number;
+  weightChange: number;
+  amountChange: number;
+  ownedQuantityAfter: number;
+  ownedWeightAfter: number;
+  amountPaidAfter: number;
+  ownershipPercentageAfter: number;
+  notes?: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface CreateOwnershipMovementRequest {
+  productOwnershipId: number;
+  movementType: string;
+  quantityChange: number;
+  weightChange: number;
+  amountChange: number;
+  referenceNumber?: string;
+  notes?: string;
+}
+
+export interface OwnershipValidationResult {
+  canSell: boolean;
+  message: string;
+  ownedQuantity: number;
+  ownedWeight: number;
+  totalQuantity: number;
+  totalWeight: number;
+  ownershipPercentage: number;
+  warnings: string[];
+}
+
+export interface OwnershipAlertDto {
+  type: string;
+  message: string;
+  severity: string;
+  productId: number;
+  productName: string;
+  supplierId?: number;
+  supplierName?: string;
+  ownershipPercentage: number;
+  outstandingAmount: number;
+  createdAt: string;
+}
+
+export interface ConvertRawGoldRequest {
+  rawGoldProductId: number;
+  branchId: number;
+  weightToConvert: number;
+  quantityToConvert: number;
+  newProducts: NewProductFromRawGold[];
+}
+
+export interface NewProductFromRawGold {
+  productId: number;
+  quantity: number;
+  weight: number;
+}
+
+export interface ValidateOwnershipRequest {
+  productId: number;
+  branchId: number;
+  requestedQuantity: number;
+}
+
+export interface UpdateOwnershipPaymentRequest {
+  productOwnershipId: number;
+  paymentAmount: number;
+  referenceNumber: string;
+}
+
+export interface UpdateOwnershipSaleRequest {
+  productId: number;
+  branchId: number;
+  soldQuantity: number;
+  referenceNumber: string;
+}
+
+export interface ConvertRawGoldResponse {
+  success: boolean;
+  message: string;
+}
+
+// Missing interfaces for Repair Jobs and Technicians
+export interface CreateRepairJobRequestDto {
+  financialTransactionId: number;
+  priority: number; // RepairPriority enum value
+  assignedTechnicianId?: number;
+  technicianNotes?: string;
+}
+
+export interface UpdateRepairJobStatusRequestDto {
+  status: number; // RepairStatus enum value
+  technicianNotes?: string;
+  actualCost?: number;
+  materialsUsed?: string;
+  hoursSpent?: number;
+  additionalPaymentAmount?: number;
+  paymentMethod?: number; // PaymentMethod enum value
+}
+
+export interface AssignTechnicianRequestDto {
+  technicianId: number;
+  technicianNotes?: string;
+}
+
+export interface CompleteRepairRequestDto {
+  actualCost: number;
+  technicianNotes?: string;
+  materialsUsed?: string;
+  hoursSpent?: number;
+  additionalPaymentAmount?: number;
+  paymentMethod?: number; // PaymentMethod enum value
+}
+
+export interface DeliverRepairRequestDto {
+  deliveryNotes?: string;
+  customerNotified?: boolean;
+  additionalPaymentAmount?: number;
+  paymentMethod?: number; // PaymentMethod enum value
+}
+
+export interface RepairJobSearchRequestDto {
+  branchId?: number;
+  status?: number; // RepairStatus enum value
+  priority?: number; // RepairPriority enum value
+  assignedTechnicianId?: number;
+  customerId?: number;
+  transactionNumber?: string;
+  fromDate?: string;
+  toDate?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface RepairJobStatisticsDto {
+  totalJobs: number;
+  pendingJobs: number;
+  inProgressJobs: number;
+  completedJobs: number;
+  readyForPickupJobs: number;
+  deliveredJobs: number;
+  cancelledJobs: number;
+  totalRevenue: number;
+  averageCompletionTime: number;
+  jobsByPriority: { [key: string]: number };
+  jobsByTechnician: { [key: string]: number };
+}
+
+export interface TechnicianDto {
+  id: number;
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  specialization?: string;
+  isActive: boolean;
+  branchId: number;
+  branchName?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+}
+
+export interface CreateTechnicianRequestDto {
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  specialization?: string;
+  branchId: number;
+}
+
+export interface UpdateTechnicianRequestDto {
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  specialization?: string;
+  isActive: boolean;
+  branchId: number;
+}
+
+export interface TechnicianSearchRequestDto {
+  searchTerm?: string;
+  isActive?: boolean;
+  branchId?: number;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+// Legacy transaction interfaces for backward compatibility
 export interface SaleRequest {
   branchId: number;
   customerId?: number;
@@ -2265,94 +3040,7 @@ export interface ReturnRequest {
   }>;
 }
 
-export const transactionsApi = {
-  async processSale(sale: SaleRequest): Promise<Transaction> {
-    const response = await apiRequest<Transaction>('/transactions/sale', {
-      method: 'POST',
-      body: JSON.stringify(sale),
-    });
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to process sale');
-  },
-
-  async processRepair(repair: RepairRequest): Promise<Transaction> {
-    const response = await apiRequest<Transaction>('/transactions/repair', {
-      method: 'POST',
-      body: JSON.stringify(repair),
-    });
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to process repair');
-  },
-
-  async processReturn(returnRequest: ReturnRequest): Promise<Transaction> {
-    const response = await apiRequest<Transaction>('/transactions/return', {
-      method: 'POST',
-      body: JSON.stringify(returnRequest),
-    });
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to process return');
-  },
-
-  async getTransaction(id: number): Promise<Transaction> {
-    const response = await apiRequest<Transaction>(`/transactions/${id}`);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch transaction');
-  },
-
-  async searchTransactions(params: {
-    branchId?: number;
-    transactionNumber?: string;
-    transactionType?: 'Sale' | 'Return' | 'Repair';
-    status?: string;
-    customerId?: number;
-    fromDate?: string;
-    toDate?: string;
-    pageNumber?: number;
-    pageSize?: number;
-  } = {}): Promise<{
-    items: Transaction[];
-    totalCount: number;
-    pageNumber: number;
-    pageSize: number;
-  }> {
-    const queryString = new URLSearchParams(
-      Object.entries(params)
-        .filter(([_, value]) => value !== undefined)
-        .map(([key, value]) => [key, String(value)])
-    ).toString();
-    
-    const response = await apiRequest<{
-      items: Transaction[];
-      totalCount: number;
-      pageNumber: number;
-      pageSize: number;
-    }>(`/transactions/search?${queryString}`);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to search transactions');
-  }
-};
-
-// Customers API
+// Missing APIs
 export const customersApi = {
   async getCustomers(params: {
     searchTerm?: string;
@@ -2423,7 +3111,6 @@ export const customersApi = {
   }
 };
 
-// Lookups API for enum data
 export const lookupsApi = {
   async getAllLookups(): Promise<ApiLookupsResponse> {
     const response = await apiRequest<ApiLookupsResponse>('/lookups');
@@ -2495,6 +3182,26 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch charge types');
   },
 
+  async getRepairStatuses(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/repair-statuses');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair statuses');
+  },
+
+  async getRepairPriorities(): Promise<EnumLookupDto[]> {
+    const response = await apiRequest<EnumLookupDto[]>('/lookups/repair-priorities');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair priorities');
+  },
+
   async getTaxConfigurations(): Promise<TaxConfigurationDto[]> {
     const response = await apiRequest<TaxConfigurationDto[]>('/pricing/taxes');
     
@@ -2506,13 +3213,758 @@ export const lookupsApi = {
   }
 };
 
-// Initialize auth token on module load
-if (typeof window !== 'undefined') {
-  const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-  if (token) {
-    setAuthToken(token);
+export const repairJobsApi = {
+  async createRepairJob(request: CreateRepairJobRequestDto): Promise<RepairJobDto> {
+    const response = await apiRequest<RepairJobDto>('/repairjobs', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create repair job');
+  },
+
+  async getRepairJob(id: number): Promise<RepairJobDto> {
+    const response = await apiRequest<RepairJobDto>(`/repairjobs/${id}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair job');
+  },
+
+  async getRepairJobByFinancialTransactionId(financialTransactionId: number): Promise<RepairJobDto> {
+    const response = await apiRequest<RepairJobDto>(`/repairjobs/by-financial-transaction/${financialTransactionId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair job');
+  },
+
+  async updateRepairJobStatus(id: number, request: UpdateRepairJobStatusRequestDto): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to update repair job status');
+    }
+  },
+
+  async assignTechnician(id: number, request: AssignTechnicianRequestDto): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/assign`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to assign technician');
+    }
+  },
+
+  async completeRepair(id: number, request: CompleteRepairRequestDto): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/complete`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to complete repair');
+    }
+  },
+
+  async markReadyForPickup(id: number): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/ready-for-pickup`, {
+      method: 'PUT',
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to mark repair ready for pickup');
+    }
+  },
+
+  async deliverRepair(id: number, request: DeliverRepairRequestDto): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/deliver`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to deliver repair');
+    }
+  },
+
+  async cancelRepair(id: number, reason: string): Promise<void> {
+    const response = await apiRequest(`/repairjobs/${id}/cancel`, {
+      method: 'PUT',
+      body: JSON.stringify({ reason }),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to cancel repair');
+    }
+  },
+
+  async searchRepairJobs(params: RepairJobSearchRequestDto = {}): Promise<{
+    items: RepairJobDto[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<{
+      items: RepairJobDto[];
+      totalCount: number;
+      pageNumber: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/repairjobs/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to search repair jobs');
+  },
+
+  async getRepairJobStatistics(branchId?: number, fromDate?: string, toDate?: string): Promise<RepairJobStatisticsDto> {
+    const params: Record<string, string> = {};
+    
+    if (branchId) {
+      params.branchId = branchId.toString();
+    }
+    
+    if (fromDate) {
+      params.fromDate = fromDate;
+    }
+    
+    if (toDate) {
+      params.toDate = toDate;
+    }
+    
+    const queryString = Object.keys(params).length > 0 
+      ? new URLSearchParams(params).toString()
+      : '';
+    
+    const response = await apiRequest<RepairJobStatisticsDto>(`/repairjobs/statistics${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair job statistics');
+  },
+
+  async getRepairJobsByStatus(status: string, branchId?: number): Promise<RepairJobDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/by-status/${status}${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair jobs by status');
+  },
+
+  async getRepairJobsByTechnician(technicianId: number, branchId?: number): Promise<RepairJobDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/by-technician/${technicianId}${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair jobs by technician');
+  },
+
+  async getOverdueRepairJobs(branchId?: number): Promise<RepairJobDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/overdue${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch overdue repair jobs');
+  },
+
+  async getRepairJobsDueToday(branchId?: number): Promise<RepairJobDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/due-today${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch repair jobs due today');
   }
-}
+};
+
+export const techniciansApi = {
+  async createTechnician(request: CreateTechnicianRequestDto): Promise<TechnicianDto> {
+    const response = await apiRequest<TechnicianDto>('/technicians', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create technician');
+  },
+
+  async getTechnician(id: number): Promise<TechnicianDto> {
+    const response = await apiRequest<TechnicianDto>(`/technicians/${id}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch technician');
+  },
+
+  async updateTechnician(id: number, request: UpdateTechnicianRequestDto): Promise<void> {
+    const response = await apiRequest(`/technicians/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to update technician');
+    }
+  },
+
+  async deleteTechnician(id: number): Promise<void> {
+    const response = await apiRequest(`/technicians/${id}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to delete technician');
+    }
+  },
+
+  async searchTechnicians(params: TechnicianSearchRequestDto = {}): Promise<{
+    items: TechnicianDto[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+  }> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<{
+      items: TechnicianDto[];
+      totalCount: number;
+      pageNumber: number;
+      pageSize: number;
+    }>(`/technicians/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to search technicians');
+  },
+
+  async getActiveTechnicians(branchId?: number): Promise<TechnicianDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<TechnicianDto[]>(`/technicians/active${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch active technicians');
+  },
+
+  async getTechniciansByBranch(branchId: number): Promise<TechnicianDto[]> {
+    const response = await apiRequest<TechnicianDto[]>(`/technicians/branch/${branchId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch technicians by branch');
+  }
+};
+
+// Helper functions for data conversion between FinancialTransactionDto and Transaction
+// Note: These functions already exist above, so we're just adding the missing ones here
+
+// Legacy Transactions API (for backward compatibility)
+export const transactionsApi = {
+  async processSale(sale: SaleRequest): Promise<Transaction> {
+    // Convert to new Order API call
+    const orderRequest = {
+      branchId: sale.branchId,
+      customerId: sale.customerId,
+      items: sale.items,
+      amountPaid: sale.amountPaid,
+      paymentMethodId: sale.paymentMethod
+    };
+    
+    const response = await apiRequest<OrderDto>('/orders/sale', {
+      method: 'POST',
+      body: JSON.stringify(orderRequest),
+    });
+    
+    if (response.success && response.data) {
+      // For backward compatibility, we need to return a Transaction
+      // Since the new API returns OrderDto, we'll create a minimal Transaction
+      const transaction: Transaction = {
+        id: response.data.id,
+        transactionNumber: response.data.orderNumber,
+        transactionTypeId: 1, // Sale
+        transactionType: 'Sale',
+        transactionDate: response.data.orderDate,
+        branchId: response.data.branchId,
+        branchName: response.data.branchName,
+        customerId: response.data.customerId,
+        customerName: response.data.customerName,
+        processedByUserId: response.data.cashierId,
+        processedByName: response.data.cashierName,
+        orderId: response.data.id,
+        order: {
+          id: response.data.id,
+          orderNumber: response.data.orderNumber,
+          orderDate: response.data.orderDate,
+          orderType: response.data.orderType,
+          items: response.data.items.map(item => ({
+            id: item.id,
+            orderId: item.orderId,
+            productId: item.productId,
+            productName: item.productName,
+            productCode: item.productCode,
+            karatType: item.karatType || '',
+            quantity: item.quantity,
+            unitWeight: item.weight || 0,
+            totalWeight: (item.weight || 0) * item.quantity,
+            goldRatePerGram: item.unitPrice / (item.weight || 1),
+            unitPrice: item.unitPrice,
+            makingChargesAmount: item.makingCharges,
+            discountPercentage: item.discountPercentage,
+            discountAmount: item.discountAmount,
+            lineTotal: item.totalAmount || item.finalPrice
+          }))
+        },
+        subtotal: response.data.items.reduce((sum, item) => sum + (item.totalAmount || item.finalPrice), 0),
+        totalMakingCharges: response.data.items.reduce((sum, item) => sum + (item.makingCharges || 0), 0),
+        totalTaxAmount: 0, // Will be calculated by backend
+        discountAmount: response.data.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
+        totalAmount: response.data.items.reduce((sum, item) => sum + (item.totalAmount || item.finalPrice), 0),
+        amountPaid: 0, // Will be set by backend
+        changeGiven: 0, // Will be calculated by backend
+        paymentMethodId: 1, // Default to Cash
+        paymentMethod: 'Cash',
+        paymentMethodDescription: 'Cash',
+        statusId: 1, // Completed
+        status: 'Completed',
+        statusDisplayName: 'Completed',
+        statusDescription: 'Completed',
+        receiptPrinted: false,
+        generalLedgerPosted: false,
+        createdAt: response.data.createdAt,
+        totalDiscountAmount: response.data.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
+        items: response.data.items.map(item => ({
+          id: item.id,
+          orderId: item.orderId,
+          productId: item.productId,
+          productName: item.productName,
+          productCode: item.productCode,
+          karatType: item.karatType || '',
+          quantity: item.quantity,
+          unitWeight: item.weight || 0,
+          totalWeight: (item.weight || 0) * item.quantity,
+          goldRatePerGram: item.unitPrice / (item.weight || 1),
+          unitPrice: item.unitPrice,
+          makingChargesAmount: item.makingCharges,
+          discountPercentage: item.discountPercentage,
+          discountAmount: item.discountAmount,
+          lineTotal: item.totalAmount || item.finalPrice
+        })),
+        cashierName: response.data.cashierName
+      };
+      return transaction;
+    }
+    
+    throw new Error(response.message || 'Failed to process sale');
+  },
+
+  async processRepair(repair: RepairRequest): Promise<Transaction> {
+    // Convert to new Order API call
+    const orderRequest = {
+      branchId: repair.branchId,
+      customerId: repair.customerId,
+      repairDescription: repair.repairDescription,
+      repairAmount: repair.repairAmount,
+      estimatedCompletionDate: repair.estimatedCompletionDate,
+      amountPaid: repair.amountPaid,
+      paymentMethodId: repair.paymentMethod
+    };
+    
+    const response = await apiRequest<RepairOrderResultDto>('/orders/repair', {
+      method: 'POST',
+      body: JSON.stringify(orderRequest),
+    });
+    
+    if (response.success && response.data) {
+      // For backward compatibility, create a Transaction from the repair result
+      const transaction: Transaction = {
+        id: response.data.financialTransaction?.id || 0,
+        transactionNumber: response.data.financialTransaction?.transactionNumber || '',
+        transactionTypeId: 3, // Repair
+        transactionType: 'Repair',
+        transactionDate: response.data.financialTransaction?.transactionDate || new Date().toISOString(),
+        branchId: response.data.order?.branchId || 0,
+        branchName: response.data.order?.branchName || '',
+        customerId: response.data.order?.customerId,
+        customerName: response.data.order?.customerName,
+        processedByUserId: response.data.financialTransaction?.processedByUserId || '',
+        processedByName: response.data.financialTransaction?.processedByName || '',
+        orderId: response.data.order?.id,
+        order: response.data.order ? {
+          id: response.data.order.id,
+          orderNumber: response.data.order.orderNumber,
+          orderDate: response.data.order.orderDate,
+          orderType: response.data.order.orderType,
+          items: convertOrderItemDtosToOrderItems(response.data.order.items || [])
+        } : undefined,
+        subtotal: response.data.financialTransaction?.subtotal || 0,
+        totalMakingCharges: response.data.financialTransaction?.totalMakingCharges || 0,
+        totalTaxAmount: response.data.financialTransaction?.totalTaxAmount || 0,
+        discountAmount: response.data.financialTransaction?.discountAmount || 0,
+        totalAmount: response.data.financialTransaction?.totalAmount || 0,
+        amountPaid: response.data.financialTransaction?.amountPaid || 0,
+        changeGiven: response.data.financialTransaction?.changeGiven || 0,
+        paymentMethodId: response.data.financialTransaction?.paymentMethodId || 1,
+        paymentMethod: response.data.financialTransaction?.paymentMethod || 'Cash',
+        paymentMethodDescription: response.data.financialTransaction?.paymentMethodDescription || 'Cash',
+        statusId: response.data.financialTransaction?.statusId || 1,
+        status: (response.data.financialTransaction?.status || 'Completed') as 'Completed' | 'Pending' | 'Cancelled' | 'Voided',
+        statusDisplayName: response.data.financialTransaction?.statusDisplayName || 'Completed',
+        statusDescription: response.data.financialTransaction?.statusDescription || 'Completed',
+        receiptPrinted: response.data.financialTransaction?.receiptPrinted || false,
+        generalLedgerPosted: response.data.financialTransaction?.generalLedgerPosted || false,
+        createdAt: response.data.financialTransaction?.createdAt || new Date().toISOString(),
+        totalDiscountAmount: response.data.financialTransaction?.discountAmount || 0,
+        repairDescription: response.data.repairJob?.repairDescription,
+        estimatedCompletionDate: response.data.repairJob?.estimatedCompletionDate,
+        items: convertOrderItemDtosToOrderItems(response.data.order?.items || []),
+        cashierName: response.data.financialTransaction?.processedByName || ''
+      };
+      return transaction;
+    }
+    
+    throw new Error(response.message || 'Failed to process repair');
+  },
+
+  async processReturn(returnRequest: ReturnRequest): Promise<Transaction> {
+    // Convert to new FinancialTransaction API call
+    const response = await apiRequest<FinancialTransactionDto>('/financialtransactions/return', {
+      method: 'POST',
+      body: JSON.stringify(returnRequest),
+    });
+    
+    if (response.success && response.data) {
+      // Convert back to legacy Transaction format for backward compatibility
+      const transaction = convertFinancialTransactionDtoToTransaction({
+        ...response.data,
+        transactionType: mapTransactionTypeIdToString(response.data.transactionTypeId)
+      });
+      return transaction;
+    }
+    
+    throw new Error(response.message || 'Failed to process return');
+  },
+
+  async getTransaction(id: number): Promise<Transaction> {
+    const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}`);
+    
+    if (response.success && response.data) {
+      // Convert back to legacy Transaction format for backward compatibility
+      const transaction = convertFinancialTransactionDtoToTransaction({
+        ...response.data,
+        transactionType: mapTransactionTypeIdToString(response.data.transactionTypeId)
+      });
+      return transaction;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch transaction');
+  },
+
+  async searchTransactions(params: {
+    branchId?: number;
+    transactionNumber?: string;
+    transactionType?: 'Sale' | 'Return' | 'Repair';
+    status?: string;
+    customerId?: number;
+    fromDate?: string;
+    toDate?: string;
+    pageNumber?: number;
+    pageSize?: number;
+  } = {}): Promise<{
+    items: Transaction[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+  }> {
+    // Map parameters correctly for the financial transactions API
+    const apiParams = {
+      branchId: params.branchId,
+      transactionNumber: params.transactionNumber,
+      transactionTypeId: params.transactionType ? mapTransactionTypeStringToId(params.transactionType) : undefined,
+      statusId: params.status ? mapStatusStringToId(params.status) : undefined,
+      // Note: customerId is not supported in the financial transactions API
+      // You'll need to add it to the backend API or filter client-side
+      fromDate: params.fromDate,
+      toDate: params.toDate,
+      page: params.pageNumber || 1,
+      pageSize: params.pageSize || 20
+    };
+
+    const queryString = new URLSearchParams(
+      Object.entries(apiParams)
+        .filter(([_, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<{
+      items: FinancialTransactionDto[];
+      totalCount: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/financialtransactions/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      // Convert FinancialTransactionDto to Transaction format
+      const transactions: Transaction[] = response.data.items.map(item => 
+        convertFinancialTransactionDtoToTransaction(item)
+      );
+      
+      return {
+        items: transactions,
+        totalCount: response.data.totalCount,
+        pageNumber: response.data.page,
+        pageSize: response.data.pageSize
+      };
+    }
+    
+    throw new Error(response.message || 'Failed to search transactions');
+  },
+
+  async generateBrowserReceipt(transactionId: number): Promise<{
+    receiptData: any;
+    template: any;
+    htmlTemplate: string;
+    cssStyles: string;
+    transactionNumber: string;
+    transactionDate: string;
+    transactionType: string;
+  }> {
+    const response = await apiRequest<{
+      receiptData: any;
+      template: any;
+      htmlTemplate: string;
+      cssStyles: string;
+      transactionNumber: string;
+      transactionDate: string;
+      transactionType: string;
+    }>('/financialtransactions/generate-browser-receipt', {
+      method: 'POST',
+      body: JSON.stringify({
+        transactionId,
+        includeHtml: true,
+        includeCss: true
+      }),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to generate browser receipt');
+  }
+};
+
+// ProductOwnership API
+export const productOwnershipApi = {
+  async createOrUpdateOwnership(request: ProductOwnershipRequest): Promise<ProductOwnershipDto> {
+    const response = await apiRequest<ProductOwnershipDto>('/productownership', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create/update product ownership');
+  },
+
+  async validateOwnership(request: ValidateOwnershipRequest): Promise<OwnershipValidationResult> {
+    const response = await apiRequest<OwnershipValidationResult>('/productownership/validate', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to validate ownership');
+  },
+
+  async updateOwnershipAfterPayment(request: UpdateOwnershipPaymentRequest): Promise<boolean> {
+    const response = await apiRequest<boolean>('/productownership/payment', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success) {
+      return true;
+    }
+    
+    throw new Error(response.message || 'Failed to update ownership after payment');
+  },
+
+  async updateOwnershipAfterSale(request: UpdateOwnershipSaleRequest): Promise<boolean> {
+    const response = await apiRequest<boolean>('/productownership/sale', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success) {
+      return true;
+    }
+    
+    throw new Error(response.message || 'Failed to update ownership after sale');
+  },
+
+  async convertRawGoldToProducts(request: ConvertRawGoldRequest): Promise<ConvertRawGoldResponse> {
+    const response = await apiRequest<ConvertRawGoldResponse>('/productownership/convert-raw-gold', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to convert raw gold to products');
+  },
+
+  async getOwnershipAlerts(branchId?: number): Promise<OwnershipAlertDto[]> {
+    const queryString = branchId 
+      ? new URLSearchParams({ branchId: branchId.toString() }).toString()
+      : '';
+    
+    const response = await apiRequest<OwnershipAlertDto[]>(`/productownership/alerts${queryString ? `?${queryString}` : ''}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch ownership alerts');
+  },
+
+  async getProductOwnership(productId: number, branchId: number): Promise<ProductOwnershipDto[]> {
+    const response = await apiRequest<ProductOwnershipDto[]>(`/productownership/product/${productId}/branch/${branchId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch product ownership');
+  },
+
+  async getOwnershipMovements(productOwnershipId: number): Promise<OwnershipMovementDto[]> {
+    const response = await apiRequest<OwnershipMovementDto[]>(`/productownership/movements/${productOwnershipId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch ownership movements');
+  },
+
+  async getLowOwnershipProducts(threshold: number = 0.5): Promise<ProductOwnershipDto[]> {
+    const queryString = new URLSearchParams({
+      threshold: threshold.toString()
+    }).toString();
+    
+    const response = await apiRequest<ProductOwnershipDto[]>(`/productownership/low-ownership?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch low ownership products');
+  },
+
+  async getProductsWithOutstandingPayments(): Promise<ProductOwnershipDto[]> {
+    const response = await apiRequest<ProductOwnershipDto[]>('/productownership/outstanding-payments');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch products with outstanding payments');
+  }
+};
+
+// Additional helper functions for data conversion
+export const mapTransactionTypeStringToId = (type: string): number => {
+  switch (type.toLowerCase()) {
+    case 'sale': return 1;
+    case 'return': return 2;
+    case 'repair': return 3;
+    default: return 1;
+  }
+};
+
+export const mapStatusStringToId = (status: string): number => {
+  switch (status.toLowerCase()) {
+    case 'completed': return 1;
+    case 'pending': return 2;
+    case 'cancelled': return 3;
+    case 'voided': return 4;
+    default: return 1;
+  }
+};
 
 export default {
   auth: authApi,
@@ -2528,4 +3980,9 @@ export default {
   transactions: transactionsApi,
   customers: customersApi,
   lookups: lookupsApi,
+  repairJobs: repairJobsApi,
+  technicians: techniciansApi,
+  orders: ordersApi,
+  financialTransactions: financialTransactionsApi,
+  productOwnership: productOwnershipApi,
 };

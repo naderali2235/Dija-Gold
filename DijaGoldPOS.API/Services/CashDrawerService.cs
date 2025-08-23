@@ -1,7 +1,8 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 using DijaGoldPOS.API.Repositories;
+using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Services;
@@ -141,26 +142,26 @@ public class CashDrawerService : ICashDrawerService
         // Get opening balance
         var openingBalance = await GetOpeningBalanceAsync(branchId, date);
 
-        // Get cash transactions for the day
-        var cashTransactions = await _context.Transactions
-            .Where(t => t.BranchId == branchId && 
-                       t.TransactionDate >= startDate && 
-                       t.TransactionDate < endDate &&
-                       t.PaymentMethod == PaymentMethod.Cash &&
-                       t.Status == TransactionStatus.Completed)
+        // Get cash transactions for the day - using FinancialTransactions
+        var cashTransactions = await _context.FinancialTransactions
+            .Where(ft => ft.BranchId == branchId && 
+                       ft.TransactionDate >= startDate && 
+                       ft.TransactionDate < endDate &&
+                       ft.PaymentMethodId == LookupTableConstants.PaymentMethodCash &&
+                       ft.StatusId == LookupTableConstants.FinancialTransactionStatusCompleted)
             .ToListAsync();
 
         var cashSales = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Sale)
-            .Sum(t => t.AmountPaid);
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale)
+            .Sum(ft => ft.AmountPaid);
 
         var cashReturns = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Return)
-            .Sum(t => Math.Abs(t.ChangeGiven)); // Returns have negative change (refunds)
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeReturn)
+            .Sum(ft => Math.Abs(ft.ChangeGiven)); // Returns have negative change (refunds)
 
         var cashRepairs = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Repair)
-            .Sum(t => t.AmountPaid);
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeRepair)
+            .Sum(ft => ft.AmountPaid);
 
         return openingBalance + cashSales + cashRepairs - cashReturns;
     }
@@ -302,26 +303,26 @@ public class CashDrawerService : ICashDrawerService
         var startDate = date.Date;
         var endDate = startDate.AddDays(1);
 
-        // Get cash transactions for the day
-        var cashTransactions = await _context.Transactions
-            .Where(t => t.BranchId == branchId && 
-                       t.TransactionDate >= startDate && 
-                       t.TransactionDate < endDate &&
-                       t.PaymentMethod == PaymentMethod.Cash &&
-                       t.Status == TransactionStatus.Completed)
+        // Get cash transactions for the day - using FinancialTransactions
+        var cashTransactions = await _context.FinancialTransactions
+            .Where(ft => ft.BranchId == branchId && 
+                       ft.TransactionDate >= startDate && 
+                       ft.TransactionDate < endDate &&
+                       ft.PaymentMethodId == LookupTableConstants.PaymentMethodCash &&
+                       ft.StatusId == LookupTableConstants.FinancialTransactionStatusCompleted)
             .ToListAsync();
 
         var cashSales = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Sale)
-            .Sum(t => t.AmountPaid);
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeSale)
+            .Sum(ft => ft.AmountPaid);
 
         var cashReturns = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Return)
-            .Sum(t => Math.Abs(t.ChangeGiven)); // Returns have negative change (refunds)
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeReturn)
+            .Sum(ft => Math.Abs(ft.ChangeGiven)); // Returns have negative change (refunds)
 
         var cashRepairs = cashTransactions
-            .Where(t => t.TransactionType == TransactionType.Repair)
-            .Sum(t => t.AmountPaid);
+            .Where(ft => ft.TransactionTypeId == LookupTableConstants.FinancialTransactionTypeRepair)
+            .Sum(ft => ft.AmountPaid);
 
         return openingBalance + cashSales + cashRepairs - cashReturns;
     }

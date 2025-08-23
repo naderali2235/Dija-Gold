@@ -1,4 +1,3 @@
-using DijaGoldPOS.API.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace DijaGoldPOS.API.DTOs;
@@ -9,13 +8,13 @@ namespace DijaGoldPOS.API.DTOs;
 public class RepairJobDto
 {
     public int Id { get; set; }
-    public int TransactionId { get; set; }
-    public string TransactionNumber { get; set; } = string.Empty;
-    public RepairStatus Status { get; set; }
-    public string StatusDisplayName => Status.ToString().Replace("_", " ");
-    public RepairPriority Priority { get; set; }
-    public string PriorityDisplayName => Priority.ToString();
-    public string? AssignedTechnicianId { get; set; }
+    public int? FinancialTransactionId { get; set; }
+    public string? FinancialTransactionNumber { get; set; } = string.Empty;
+    public int StatusId { get; set; }
+    public string StatusDisplayName { get; set; } = string.Empty;
+    public int PriorityId { get; set; }
+    public string PriorityDisplayName { get; set; } = string.Empty;
+    public int? AssignedTechnicianId { get; set; }
     public string? AssignedTechnicianName { get; set; }
     public DateTime? StartedDate { get; set; }
     public DateTime? CompletedDate { get; set; }
@@ -25,7 +24,7 @@ public class RepairJobDto
     public decimal? ActualCost { get; set; }
     public string? MaterialsUsed { get; set; }
     public decimal? HoursSpent { get; set; }
-    public string? QualityCheckedBy { get; set; }
+    public int? QualityCheckedBy { get; set; }
     public string? QualityCheckerName { get; set; }
     public DateTime? QualityCheckDate { get; set; }
     public bool CustomerNotified { get; set; }
@@ -51,13 +50,13 @@ public class RepairJobDto
 /// </summary>
 public class CreateRepairJobRequestDto
 {
-    [Required(ErrorMessage = "Transaction ID is required")]
-    public int TransactionId { get; set; }
+    [Required(ErrorMessage = "Financial Transaction ID is required")]
+    public int FinancialTransactionId { get; set; }
 
     [Required(ErrorMessage = "Priority is required")]
-    public RepairPriority Priority { get; set; } = RepairPriority.Medium;
+    public int PriorityId { get; set; } = 2; // Default to Medium
 
-    public string? AssignedTechnicianId { get; set; }
+    public int? AssignedTechnicianId { get; set; }
     public string? TechnicianNotes { get; set; }
 }
 
@@ -67,12 +66,16 @@ public class CreateRepairJobRequestDto
 public class UpdateRepairJobStatusRequestDto
 {
     [Required(ErrorMessage = "Status is required")]
-    public RepairStatus Status { get; set; }
+    public int StatusId { get; set; }
 
     public string? TechnicianNotes { get; set; }
     public decimal? ActualCost { get; set; }
     public string? MaterialsUsed { get; set; }
     public decimal? HoursSpent { get; set; }
+    
+    // Payment fields for remaining balance
+    public decimal? AdditionalPaymentAmount { get; set; }
+    public int? PaymentMethodId { get; set; }
 }
 
 /// <summary>
@@ -81,7 +84,7 @@ public class UpdateRepairJobStatusRequestDto
 public class AssignTechnicianRequestDto
 {
     [Required(ErrorMessage = "Technician ID is required")]
-    public string TechnicianId { get; set; } = string.Empty;
+    public int TechnicianId { get; set; }
 
     public string? TechnicianNotes { get; set; }
 }
@@ -98,6 +101,10 @@ public class CompleteRepairRequestDto
     public string? TechnicianNotes { get; set; }
     public string? MaterialsUsed { get; set; }
     public decimal? HoursSpent { get; set; }
+    
+    // Payment fields for remaining balance
+    public decimal? AdditionalPaymentAmount { get; set; }
+    public int? PaymentMethodId { get; set; }
 }
 
 /// <summary>
@@ -119,6 +126,10 @@ public class DeliverRepairRequestDto
 {
     public string? DeliveryNotes { get; set; }
     public bool CustomerNotified { get; set; } = true;
+    
+    // Payment fields for remaining balance
+    public decimal? AdditionalPaymentAmount { get; set; }
+    public int? PaymentMethodId { get; set; }
 }
 
 /// <summary>
@@ -127,9 +138,9 @@ public class DeliverRepairRequestDto
 public class RepairJobSearchRequestDto
 {
     public int? BranchId { get; set; }
-    public RepairStatus? Status { get; set; }
-    public RepairPriority? Priority { get; set; }
-    public string? AssignedTechnicianId { get; set; }
+    public int? StatusId { get; set; }
+    public int? PriorityId { get; set; }
+    public int? AssignedTechnicianId { get; set; }
     public int? CustomerId { get; set; }
     public string? TransactionNumber { get; set; }
     public DateTime? FromDate { get; set; }

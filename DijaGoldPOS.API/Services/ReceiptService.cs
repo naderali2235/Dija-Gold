@@ -1,12 +1,14 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 using System.Runtime.InteropServices;
 using System.Text;
-#if WINDOWS
-using System.Drawing.Printing;
-#endif
+// Remove Windows-specific printing imports
+// #if WINDOWS
+// using System.Drawing.Printing;
+// #endif
 
 namespace DijaGoldPOS.API.Services;
 
@@ -35,20 +37,15 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Generate receipt content for a transaction
     /// </summary>
-    public async Task<string> GenerateReceiptContentAsync(Transaction transaction)
+    public async Task<string> GenerateReceiptContentAsync(FinancialTransaction transaction)
     {
         try
         {
-            // Load transaction with all related data
-            var fullTransaction = await _context.Transactions
-                .Include(t => t.Branch)
-                .Include(t => t.Customer)
-                .Include(t => t.Cashier)
-                .Include(t => t.TransactionItems)
-                .ThenInclude(ti => ti.Product)
-                .Include(t => t.TransactionTaxes)
-                .ThenInclude(tt => tt.TaxConfiguration)
-                .FirstOrDefaultAsync(t => t.Id == transaction.Id);
+            // Load transaction with all related data - using FinancialTransactions
+            var fullTransaction = await _context.FinancialTransactions
+                .Include(ft => ft.Branch)
+                .Include(ft => ft.ProcessedByUser)
+                .FirstOrDefaultAsync(ft => ft.Id == transaction.Id);
 
             if (fullTransaction == null)
             {
@@ -56,7 +53,7 @@ public class ReceiptService : IReceiptService
             }
 
             var receiptData = await BuildReceiptDataAsync(fullTransaction);
-            var template = await GetReceiptTemplateAsync(fullTransaction.TransactionType);
+            var template = await GetReceiptTemplateAsync(fullTransaction.TransactionTypeId);
             
             return GenerateReceiptFromTemplate(receiptData, template);
         }
@@ -70,9 +67,9 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Generate receipt content for a repair transaction
     /// </summary>
-    public async Task<string> GenerateRepairReceiptContentAsync(Transaction transaction)
+    public async Task<string> GenerateRepairReceiptContentAsync(FinancialTransaction transaction)
     {
-        if (transaction.TransactionType != TransactionType.Repair)
+        if (transaction.TransactionTypeId != LookupTableConstants.TransactionTypeRepair)
         {
             throw new ArgumentException("Transaction must be a repair transaction");
         }
@@ -83,9 +80,9 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Generate receipt content for a return transaction
     /// </summary>
-    public async Task<string> GenerateReturnReceiptContentAsync(Transaction transaction)
+    public async Task<string> GenerateReturnReceiptContentAsync(FinancialTransaction transaction)
     {
-        if (transaction.TransactionType != TransactionType.Return)
+        if (transaction.TransactionTypeId != LookupTableConstants.TransactionTypeReturn)
         {
             throw new ArgumentException("Transaction must be a return transaction");
         }
@@ -93,113 +90,12 @@ public class ReceiptService : IReceiptService
         return await GenerateReceiptContentAsync(transaction);
     }
 
-    /// <summary>
-    /// Print receipt to default printer
-    /// </summary>
-    public async Task<bool> PrintReceiptAsync(string receiptContent, int copies = 1)
-    {
-        var defaultPrinter = _configuration["ReceiptSettings:PrinterName"] ?? "Default";
-        return await PrintReceiptAsync(receiptContent, defaultPrinter, copies);
-    }
 
-    /// <summary>
-    /// Print receipt to specific printer
-    /// </summary>
-    public async Task<bool> PrintReceiptAsync(string receiptContent, string printerName, int copies = 1)
-    {
-        try
-        {
-            // Check if running on Windows before using Windows-specific printing
-            if (OperatingSystem.IsWindows())
-            {
-                return await PrintReceiptWindowsAsync(receiptContent, printerName, copies);
-            }
-            else
-            {
-                // For non-Windows platforms, use alternative printing method
-                return await PrintReceiptCrossPlatformAsync(receiptContent, printerName, copies);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error printing receipt to {PrinterName}", printerName);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Windows-specific printing implementation
-    /// </summary>
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private async Task<bool> PrintReceiptWindowsAsync(string receiptContent, string printerName, int copies)
-    {
-        await Task.Run(() =>
-        {
-            for (int i = 0; i < copies; i++)
-            {
-                var printDocument = new System.Drawing.Printing.PrintDocument();
-                printDocument.PrinterSettings.PrinterName = printerName;
-                
-                printDocument.PrintPage += (sender, e) =>
-                {
-                    if (e?.Graphics != null)
-                    {
-                        var font = new System.Drawing.Font("Courier New", 8);
-                        var brush = System.Drawing.Brushes.Black;
-                        var lines = receiptContent.Split('\n');
-                        
-                        float yPosition = 0;
-                        float lineHeight = font.GetHeight(e.Graphics);
-                        
-                        foreach (var line in lines)
-                        {
-                            e.Graphics.DrawString(line, font, brush, 0, yPosition);
-                            yPosition += lineHeight;
-                        }
-                    }
-                };
-                
-                printDocument.Print();
-            }
-        });
-
-        _logger.LogInformation("Receipt printed successfully to {PrinterName}, {Copies} copies (Windows)", printerName, copies);
-        return true;
-    }
-
-    /// <summary>
-    /// Cross-platform printing implementation (saves to file or uses system print command)
-    /// </summary>
-    private async Task<bool> PrintReceiptCrossPlatformAsync(string receiptContent, string printerName, int copies)
-    {
-        try
-        {
-            // For non-Windows platforms, save to file and optionally use system print commands
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var fileName = $"receipt_{timestamp}.txt";
-            var filePath = Path.Combine(Path.GetTempPath(), fileName);
-            
-            await File.WriteAllTextAsync(filePath, receiptContent);
-            
-            _logger.LogInformation("Receipt saved to file {FilePath} for printing on {PrinterName}, {Copies} copies", 
-                filePath, printerName, copies);
-            
-            // TODO: Implement actual cross-platform printing using system commands
-            // This could use lp command on Linux/Mac or other platform-specific solutions
-            
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in cross-platform printing");
-            return false;
-        }
-    }
 
     /// <summary>
     /// Generate receipt PDF
     /// </summary>
-    public async Task<byte[]> GenerateReceiptPdfAsync(Transaction transaction)
+    public async Task<byte[]> GenerateReceiptPdfAsync(FinancialTransaction transaction)
     {
         try
         {
@@ -221,7 +117,7 @@ public class ReceiptService : IReceiptService
     /// <summary>
     /// Get receipt template by transaction type
     /// </summary>
-    public Task<ReceiptTemplate> GetReceiptTemplateAsync(TransactionType transactionType)
+    public Task<ReceiptTemplate> GetReceiptTemplateAsync(int transactionTypeId)
     {
         // In a full implementation, this would come from database
         // For now, return default templates
@@ -231,9 +127,9 @@ public class ReceiptService : IReceiptService
         
         var template = new ReceiptTemplate
         {
-            Id = (int)transactionType,
-            TransactionType = transactionType,
-            TemplateName = $"{transactionType} Receipt Template",
+            Id = transactionTypeId,
+            TransactionTypeId = transactionTypeId,
+            TemplateName = $"Transaction Type {transactionTypeId} Receipt Template",
             HeaderLines = receiptSettings.GetSection("HeaderLines").Get<List<string>>() ?? new List<string>(),
             FooterLines = receiptSettings.GetSection("FooterLines").Get<List<string>>() ?? new List<string>(),
             Settings = new ReceiptSettings
@@ -269,18 +165,18 @@ public class ReceiptService : IReceiptService
                 "UPDATE_RECEIPT_TEMPLATE",
                 "ReceiptTemplate",
                 template.Id.ToString(),
-                $"Updated receipt template for {template.TransactionType}",
+                $"Updated receipt template for transaction type {template.TransactionTypeId}",
                 newValues: System.Text.Json.JsonSerializer.Serialize(template)
             );
 
-            _logger.LogInformation("Receipt template updated for {TransactionType} by user {UserId}", 
-                template.TransactionType, userId);
+            _logger.LogInformation("Receipt template updated for transaction type {TransactionTypeId} by user {UserId}", 
+                template.TransactionTypeId, userId);
             
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating receipt template for {TransactionType}", template.TransactionType);
+            _logger.LogError(ex, "Error updating receipt template for transaction type {TransactionTypeId}", template.TransactionTypeId);
             return false;
         }
     }
@@ -292,15 +188,10 @@ public class ReceiptService : IReceiptService
     {
         try
         {
-            var transaction = await _context.Transactions
-                .Include(t => t.Branch)
-                .Include(t => t.Customer)
-                .Include(t => t.Cashier)
-                .Include(t => t.TransactionItems)
-                .ThenInclude(ti => ti.Product)
-                .Include(t => t.TransactionTaxes)
-                .ThenInclude(tt => tt.TaxConfiguration)
-                .FirstOrDefaultAsync(t => t.Id == transactionId);
+            var transaction = await _context.FinancialTransactions
+                .Include(ft => ft.Branch)
+                .Include(ft => ft.ProcessedByUser)
+                .FirstOrDefaultAsync(ft => ft.Id == transactionId);
 
             if (transaction == null)
             {
@@ -308,26 +199,22 @@ public class ReceiptService : IReceiptService
             }
 
             var receiptContent = await GenerateReceiptContentAsync(transaction);
-            var printSuccess = await PrintReceiptAsync(receiptContent, copies);
+            
+            // Log the reprint action
+            await _auditService.LogAsync(
+                userId,
+                "REPRINT_RECEIPT",
+                "Transaction",
+                transactionId.ToString(),
+                $"Receipt reprinted for transaction {transaction.TransactionNumber}",
+                branchId: transaction.BranchId,
+                transactionId: transactionId
+            );
 
-            if (printSuccess)
-            {
-                // Log the reprint action
-                await _auditService.LogAsync(
-                    userId,
-                    "REPRINT_RECEIPT",
-                    "Transaction",
-                    transactionId.ToString(),
-                    $"Receipt reprinted for transaction {transaction.TransactionNumber}",
-                    branchId: transaction.BranchId,
-                    transactionId: transactionId
-                );
+            _logger.LogInformation("Receipt reprinted for transaction {TransactionNumber} by user {UserId}", 
+                transaction.TransactionNumber, userId);
 
-                _logger.LogInformation("Receipt reprinted for transaction {TransactionNumber} by user {UserId}", 
-                    transaction.TransactionNumber, userId);
-            }
-
-            return (printSuccess, receiptContent);
+            return (true, receiptContent);
         }
         catch (Exception ex)
         {
@@ -336,12 +223,331 @@ public class ReceiptService : IReceiptService
         }
     }
 
+    /// <summary>
+    /// Generate receipt data and template for browser printing
+    /// </summary>
+    public async Task<BrowserReceiptDataDto> GenerateBrowserReceiptAsync(int transactionId)
+    {
+        try
+        {
+            var transaction = await _context.FinancialTransactions
+                .Include(ft => ft.Branch)
+                .Include(ft => ft.ProcessedByUser)
+                .FirstOrDefaultAsync(ft => ft.Id == transactionId);
+
+            if (transaction == null)
+            {
+                throw new InvalidOperationException($"Transaction {transactionId} not found");
+            }
+
+            var receiptData = await BuildReceiptDataAsync(transaction);
+            var template = await GetReceiptTemplateAsync(transaction.TransactionTypeId);
+            var htmlTemplate = await GenerateHtmlReceiptTemplateAsync(receiptData, template);
+            var cssStyles = await GenerateReceiptCssStylesAsync(template);
+
+            var browserReceipt = new BrowserReceiptDataDto
+            {
+                ReceiptData = receiptData,
+                Template = template,
+                HtmlTemplate = htmlTemplate,
+                CssStyles = cssStyles,
+                TransactionNumber = transaction.TransactionNumber,
+                TransactionDate = transaction.TransactionDate,
+                TransactionTypeId = transaction.TransactionTypeId,
+                TransactionTypeName = $"Transaction Type {transaction.TransactionTypeId}"
+            };
+
+            _logger.LogInformation("Browser receipt generated for transaction {TransactionId}", transactionId);
+            return browserReceipt;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating browser receipt for transaction {TransactionId}", transactionId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Generate HTML receipt template
+    /// </summary>
+    public async Task<string> GenerateHtmlReceiptTemplateAsync(ReceiptData receiptData, ReceiptTemplate template)
+    {
+        var html = new StringBuilder();
+        
+        html.AppendLine("<!DOCTYPE html>");
+        html.AppendLine("<html lang=\"en\">");
+        html.AppendLine("<head>");
+        html.AppendLine("    <meta charset=\"UTF-8\">");
+        html.AppendLine("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        html.AppendLine("    <title>Receipt - " + receiptData.TransactionNumber + "</title>");
+        html.AppendLine("    <style>");
+        html.AppendLine(await GenerateReceiptCssStylesAsync(template));
+        html.AppendLine("    </style>");
+        html.AppendLine("</head>");
+        html.AppendLine("<body>");
+        html.AppendLine("    <div class=\"receipt-container\">");
+        
+        // Header
+        html.AppendLine("        <div class=\"receipt-header\">");
+        foreach (var headerLine in template.HeaderLines)
+        {
+            html.AppendLine($"            <div class=\"header-line\">{headerLine}</div>");
+        }
+        html.AppendLine("        </div>");
+        
+        html.AppendLine("        <div class=\"receipt-divider\"></div>");
+        
+        // Transaction Info
+        html.AppendLine("        <div class=\"transaction-info\">");
+        html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Receipt No:</span> <span class=\"value\">{receiptData.TransactionNumber}</span></div>");
+        html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Date:</span> <span class=\"value\">{receiptData.TransactionDate.ToString(template.Settings.DateTimeFormat)}</span></div>");
+        html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Cashier:</span> <span class=\"value\">{receiptData.CashierName}</span></div>");
+        html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Branch:</span> <span class=\"value\">{receiptData.BranchName}</span></div>");
+        
+        if (!string.IsNullOrEmpty(receiptData.CustomerName))
+        {
+            html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Customer:</span> <span class=\"value\">{receiptData.CustomerName}</span></div>");
+            if (!string.IsNullOrEmpty(receiptData.CustomerPhone))
+                html.AppendLine($"            <div class=\"info-line\"><span class=\"label\">Phone:</span> <span class=\"value\">{receiptData.CustomerPhone}</span></div>");
+        }
+        html.AppendLine("        </div>");
+        
+        html.AppendLine("        <div class=\"receipt-divider\"></div>");
+        
+        // Items
+        if (template.Settings.ShowItemDetails && receiptData.Items.Any())
+        {
+            html.AppendLine("        <div class=\"items-section\">");
+            html.AppendLine("            <div class=\"section-title\">ITEMS:</div>");
+            foreach (var item in receiptData.Items)
+            {
+                html.AppendLine("            <div class=\"item\">");
+                html.AppendLine($"                <div class=\"item-description\">{item.Description}</div>");
+                html.AppendLine($"                <div class=\"item-details\">{item.Quantity:F3} x {item.UnitPrice.ToString(template.Settings.CurrencyFormat)} = {item.Total.ToString(template.Settings.CurrencyFormat)}</div>");
+                if (!string.IsNullOrEmpty(item.AdditionalInfo))
+                    html.AppendLine($"                <div class=\"item-additional\">{item.AdditionalInfo}</div>");
+                html.AppendLine("            </div>");
+            }
+            html.AppendLine("        </div>");
+            html.AppendLine("        <div class=\"receipt-divider\"></div>");
+        }
+        
+        // Totals
+        html.AppendLine("        <div class=\"totals-section\">");
+        if (receiptData.Subtotal > 0)
+            html.AppendLine($"            <div class=\"total-line\"><span class=\"label\">Subtotal:</span> <span class=\"value\">{receiptData.Subtotal.ToString(template.Settings.CurrencyFormat)}</span></div>");
+        
+        if (receiptData.MakingCharges > 0)
+            html.AppendLine($"            <div class=\"total-line\"><span class=\"label\">Making Charges:</span> <span class=\"value\">{receiptData.MakingCharges.ToString(template.Settings.CurrencyFormat)}</span></div>");
+        
+        if (receiptData.DiscountAmount > 0)
+            html.AppendLine($"            <div class=\"total-line\"><span class=\"label\">Discount:</span> <span class=\"value\">{(-receiptData.DiscountAmount).ToString(template.Settings.CurrencyFormat)}</span></div>");
+        
+        // Taxes
+        if (template.Settings.ShowTaxBreakdown && receiptData.Taxes.Any())
+        {
+            foreach (var tax in receiptData.Taxes)
+            {
+                html.AppendLine($"            <div class=\"total-line\"><span class=\"label\">{tax.TaxName} ({tax.TaxRate:F2}%):</span> <span class=\"value\">{tax.TaxAmount.ToString(template.Settings.CurrencyFormat)}</span></div>");
+            }
+        }
+        
+        html.AppendLine("        </div>");
+        
+        html.AppendLine("        <div class=\"receipt-divider\"></div>");
+        html.AppendLine($"        <div class=\"grand-total\"><span class=\"label\">TOTAL:</span> <span class=\"value\">{receiptData.TotalAmount.ToString(template.Settings.CurrencyFormat)}</span></div>");
+        
+        if (receiptData.TransactionTypeId != LookupTableConstants.TransactionTypeReturn)
+        {
+            html.AppendLine($"        <div class=\"payment-info\"><span class=\"label\">Paid:</span> <span class=\"value\">{receiptData.AmountPaid.ToString(template.Settings.CurrencyFormat)}</span></div>");
+            
+            if (receiptData.ChangeGiven > 0)
+                html.AppendLine($"        <div class=\"payment-info\"><span class=\"label\">Change:</span> <span class=\"value\">{receiptData.ChangeGiven.ToString(template.Settings.CurrencyFormat)}</span></div>");
+            else if (receiptData.ChangeGiven < 0)
+                html.AppendLine($"        <div class=\"payment-info\"><span class=\"label\">Refund:</span> <span class=\"value\">{(-receiptData.ChangeGiven).ToString(template.Settings.CurrencyFormat)}</span></div>");
+        }
+        
+        html.AppendLine($"        <div class=\"payment-method\">Payment: {receiptData.PaymentMethod}</div>");
+        html.AppendLine("        <div class=\"receipt-divider\"></div>");
+        
+        // Transaction specific information
+        switch (receiptData.TransactionTypeId)
+        {
+            case LookupTableConstants.TransactionTypeReturn:
+                html.AppendLine("        <div class=\"transaction-type\">*** RETURN RECEIPT ***</div>");
+                if (!string.IsNullOrEmpty(receiptData.OriginalTransactionNumber))
+                    html.AppendLine($"        <div class=\"special-info\">Original Receipt: {receiptData.OriginalTransactionNumber}</div>");
+                if (!string.IsNullOrEmpty(receiptData.ReturnReason))
+                    html.AppendLine($"        <div class=\"special-info\">Reason: {receiptData.ReturnReason}</div>");
+                break;
+                
+            case LookupTableConstants.TransactionTypeRepair:
+                html.AppendLine("        <div class=\"transaction-type\">*** REPAIR RECEIPT ***</div>");
+                if (!string.IsNullOrEmpty(receiptData.RepairDescription))
+                    html.AppendLine($"        <div class=\"special-info\">Service: {receiptData.RepairDescription}</div>");
+                if (receiptData.EstimatedCompletionDate.HasValue)
+                    html.AppendLine($"        <div class=\"special-info\">Est. Completion: {receiptData.EstimatedCompletionDate.Value:dd/MM/yyyy}</div>");
+                break;
+        }
+        
+        // Footer
+        html.AppendLine("        <div class=\"receipt-footer\">");
+        foreach (var footerLine in template.FooterLines)
+        {
+            html.AppendLine($"            <div class=\"footer-line\">{footerLine}</div>");
+        }
+        html.AppendLine("        </div>");
+        
+        html.AppendLine("    </div>");
+        html.AppendLine("</body>");
+        html.AppendLine("</html>");
+        
+        return html.ToString();
+    }
+
+    /// <summary>
+    /// Generate CSS styles for receipt printing
+    /// </summary>
+    public Task<string> GenerateReceiptCssStylesAsync(ReceiptTemplate template)
+    {
+        var css = new StringBuilder();
+        
+        css.AppendLine("@media print {");
+        css.AppendLine("    body { margin: 0; padding: 0; }");
+        css.AppendLine("    .receipt-container { width: 80mm; margin: 0 auto; }");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine("@media screen {");
+        css.AppendLine("    body { font-family: Arial, sans-serif; margin: 20px; }");
+        css.AppendLine("    .receipt-container { width: 400px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; }");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".receipt-container {");
+        css.AppendLine("    font-family: 'Courier New', monospace;");
+        css.AppendLine($"    font-size: {template.Settings.FontSize}px;");
+        css.AppendLine("    line-height: 1.2;");
+        css.AppendLine("    text-align: center;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".receipt-header {");
+        css.AppendLine("    margin-bottom: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".header-line {");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".receipt-divider {");
+        css.AppendLine("    border-top: 1px dashed #000;");
+        css.AppendLine("    margin: 10px 0;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".transaction-info {");
+        css.AppendLine("    text-align: left;");
+        css.AppendLine("    margin-bottom: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".info-line {");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".label {");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".value {");
+        css.AppendLine("    margin-left: 5px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".items-section {");
+        css.AppendLine("    text-align: left;");
+        css.AppendLine("    margin-bottom: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".section-title {");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("    text-align: center;");
+        css.AppendLine("    margin-bottom: 5px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".item {");
+        css.AppendLine("    margin-bottom: 5px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".item-description {");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".item-details {");
+        css.AppendLine("    margin-left: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".item-additional {");
+        css.AppendLine("    margin-left: 10px;");
+        css.AppendLine("    font-size: 0.9em;");
+        css.AppendLine("    color: #666;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".totals-section {");
+        css.AppendLine("    text-align: left;");
+        css.AppendLine("    margin-bottom: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".total-line {");
+        css.AppendLine("    display: flex;");
+        css.AppendLine("    justify-content: space-between;");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".grand-total {");
+        css.AppendLine("    display: flex;");
+        css.AppendLine("    justify-content: space-between;");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("    font-size: 1.1em;");
+        css.AppendLine("    margin-bottom: 5px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".payment-info {");
+        css.AppendLine("    display: flex;");
+        css.AppendLine("    justify-content: space-between;");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".payment-method {");
+        css.AppendLine("    text-align: center;");
+        css.AppendLine("    margin-bottom: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".transaction-type {");
+        css.AppendLine("    text-align: center;");
+        css.AppendLine("    font-weight: bold;");
+        css.AppendLine("    margin-bottom: 5px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".special-info {");
+        css.AppendLine("    text-align: left;");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".receipt-footer {");
+        css.AppendLine("    margin-top: 10px;");
+        css.AppendLine("}");
+        css.AppendLine();
+        css.AppendLine(".footer-line {");
+        css.AppendLine("    font-size: 0.9em;");
+        css.AppendLine("    margin-bottom: 2px;");
+        css.AppendLine("}");
+        
+        return Task.FromResult(css.ToString());
+    }
+
     #region Private Helper Methods
 
     /// <summary>
     /// Build receipt data from transaction
     /// </summary>
-    private Task<ReceiptData> BuildReceiptDataAsync(Transaction transaction)
+    private Task<ReceiptData> BuildReceiptDataAsync(FinancialTransaction transaction)
     {
         var companyInfo = _configuration.GetSection("CompanyInfo");
         
@@ -361,19 +567,20 @@ public class ReceiptService : IReceiptService
             // Transaction Information
             TransactionNumber = transaction.TransactionNumber,
             TransactionDate = transaction.TransactionDate,
-            TransactionType = transaction.TransactionType,
-            CashierName = transaction.Cashier?.FullName ?? "",
+            TransactionTypeId = transaction.TransactionTypeId,
+            TransactionTypeName = $"Transaction Type {transaction.TransactionTypeId}",
+            CashierName = transaction.ProcessedByUser?.FullName ?? "",
 
-            // Customer Information
-            CustomerName = transaction.Customer?.FullName,
-            CustomerPhone = transaction.Customer?.MobileNumber,
-            CustomerEmail = transaction.Customer?.Email,
+            // Customer Information - Note: Customer info is now in the related Order
+            CustomerName = null, // Will be populated from Order if available
+            CustomerPhone = null, // Will be populated from Order if available
+            CustomerEmail = null, // Will be populated from Order if available
 
             // Transaction Details
             Subtotal = transaction.Subtotal,
-            MakingCharges = transaction.TotalMakingCharges,
-            DiscountAmount = transaction.DiscountAmount,
-            TaxableAmount = transaction.Subtotal + transaction.TotalMakingCharges - transaction.DiscountAmount,
+            MakingCharges = 0, // Making charges are now in Order items
+            DiscountAmount = transaction.TotalDiscountAmount,
+            TaxableAmount = transaction.Subtotal - transaction.TotalDiscountAmount,
             TotalAmount = transaction.TotalAmount,
             AmountPaid = transaction.AmountPaid,
             ChangeGiven = transaction.ChangeGiven,
@@ -384,43 +591,35 @@ public class ReceiptService : IReceiptService
             WarrantyInfo = "Gold purity guaranteed as marked"
         };
 
-        // Add items
-        foreach (var item in transaction.TransactionItems)
-        {
-            var receiptItem = new ReceiptLineItem
-            {
-                Description = $"{item.Product?.Name} ({item.Product?.KaratType}K)",
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                Total = item.LineTotal,
-                AdditionalInfo = $"Weight: {item.TotalWeight:F3}g"
-            };
-            receiptData.Items.Add(receiptItem);
-        }
+        // Add items from Order - Note: Order items are now accessed through BusinessEntityId
+        // For now, we'll leave items empty as they're in the related Order
+        // TODO: Implement proper Order loading when needed
 
-        // Add taxes
-        foreach (var tax in transaction.TransactionTaxes)
+        // Add taxes - using total tax amount from FinancialTransaction
+        if (transaction.TotalTaxAmount > 0)
         {
             var taxItem = new TaxLineItem
             {
-                TaxName = tax.TaxConfiguration?.TaxName ?? "",
-                TaxRate = tax.TaxRate,
-                TaxAmount = tax.TaxAmount
+                TaxName = "Tax",
+                TaxRate = 0, // Rate not available in FinancialTransaction
+                TaxAmount = transaction.TotalTaxAmount
             };
             receiptData.Taxes.Add(taxItem);
         }
 
         // Add specific information based on transaction type
-        switch (transaction.TransactionType)
+        switch (transaction.TransactionTypeId)
         {
-            case TransactionType.Return:
+            case LookupTableConstants.TransactionTypeReturn:
+#pragma warning disable CS8601 // Possible null reference assignment
                 receiptData.OriginalTransactionNumber = transaction.OriginalTransaction?.TransactionNumber;
-                receiptData.ReturnReason = transaction.ReturnReason;
+#pragma warning restore CS8601 // Possible null reference assignment
+                receiptData.ReturnReason = transaction.ReversalReason;
                 break;
                 
-            case TransactionType.Repair:
-                receiptData.RepairDescription = transaction.RepairDescription;
-                receiptData.EstimatedCompletionDate = transaction.EstimatedCompletionDate;
+            case LookupTableConstants.TransactionTypeRepair:
+                // Repair-specific info is now in the related RepairJob
+                // TODO: Implement proper RepairJob loading when needed
                 break;
         }
 
@@ -494,7 +693,7 @@ public class ReceiptService : IReceiptService
         receipt.AppendLine(new string('=', width));
         receipt.AppendLine($"{"TOTAL:",-20} {receiptData.TotalAmount.ToString(template.Settings.CurrencyFormat),20}");
         
-        if (receiptData.TransactionType != TransactionType.Return)
+        if (receiptData.TransactionTypeId != LookupTableConstants.TransactionTypeReturn)
         {
             receipt.AppendLine($"{"Paid:",-20} {receiptData.AmountPaid.ToString(template.Settings.CurrencyFormat),20}");
             
@@ -508,9 +707,9 @@ public class ReceiptService : IReceiptService
         receipt.AppendLine(new string('=', width));
         
         // Transaction specific information
-        switch (receiptData.TransactionType)
+        switch (receiptData.TransactionTypeId)
         {
-            case TransactionType.Return:
+            case LookupTableConstants.TransactionTypeReturn:
                 receipt.AppendLine("*** RETURN RECEIPT ***");
                 if (!string.IsNullOrEmpty(receiptData.OriginalTransactionNumber))
                     receipt.AppendLine($"Original Receipt: {receiptData.OriginalTransactionNumber}");
@@ -518,7 +717,7 @@ public class ReceiptService : IReceiptService
                     receipt.AppendLine($"Reason: {receiptData.ReturnReason}");
                 break;
                 
-            case TransactionType.Repair:
+            case LookupTableConstants.TransactionTypeRepair:
                 receipt.AppendLine("*** REPAIR RECEIPT ***");
                 if (!string.IsNullOrEmpty(receiptData.RepairDescription))
                     receipt.AppendLine($"Service: {receiptData.RepairDescription}");

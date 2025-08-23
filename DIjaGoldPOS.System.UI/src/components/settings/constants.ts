@@ -60,3 +60,45 @@ export const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
   { value: 'ar', label: 'Arabic' },
 ];
+
+export const DEFAULT_OWNERSHIP_SETTINGS = {
+  lowOwnershipThreshold: '50',
+  highOwnershipThreshold: '80',
+  criticalOwnershipThreshold: '30',
+  enableOwnershipValidation: true,
+  enableOwnershipAlerts: true,
+  enablePaymentTracking: true,
+  autoGenerateAlerts: true,
+  alertSeverityLevels: {
+    low: '20',
+    medium: '50',
+    high: '80',
+  },
+  validationRules: {
+    preventSaleBelowThreshold: true,
+    requirePaymentConfirmation: true,
+    enableTransferValidation: true,
+    enableInventoryValidation: true,
+  },
+  notificationSettings: {
+    emailAlerts: true,
+    dashboardAlerts: true,
+    reportAlerts: true,
+    lowOwnershipAlerts: true,
+    outstandingPaymentAlerts: true,
+  },
+};
+
+export const OWNERSHIP_SEVERITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
+
+export const VALIDATION_RULE_OPTIONS = [
+  { value: 'preventSaleBelowThreshold', label: 'Prevent sales below ownership threshold' },
+  { value: 'requirePaymentConfirmation', label: 'Require payment confirmation' },
+  { value: 'enableTransferValidation', label: 'Validate ownership during transfers' },
+  { value: 'enableInventoryValidation', label: 'Validate ownership during inventory operations' },
+];

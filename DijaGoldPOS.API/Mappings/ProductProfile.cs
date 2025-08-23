@@ -10,7 +10,12 @@ public class ProductProfile : Profile
     public ProductProfile()
     {
         CreateMap<Product, ProductDto>()
-            .ForMember(d => d.SupplierName, o => o.MapFrom(s => s.Supplier != null ? s.Supplier.CompanyName : null));
+            .ForMember(d => d.CategoryTypeId, o => o.MapFrom(s => s.CategoryTypeId))
+            .ForMember(d => d.CategoryTypeName, o => o.MapFrom(s => s.CategoryType != null ? s.CategoryType.Name : string.Empty))
+            .ForMember(d => d.KaratTypeId, o => o.MapFrom(s => s.KaratTypeId))
+            .ForMember(d => d.KaratTypeName, o => o.MapFrom(s => s.KaratType != null ? s.KaratType.Name : string.Empty))
+            .ForMember(d => d.SupplierName, o => o.MapFrom(s => s.Supplier != null ? s.Supplier.CompanyName : null))
+            .ForMember(d => d.SubCategoryName, o => o.MapFrom(s => s.SubCategoryLookup != null ? s.SubCategoryLookup.Name : null));
 
         CreateMap<Inventory, ProductInventoryDto>()
             .ForMember(d => d.BranchId, o => o.MapFrom(s => s.BranchId))

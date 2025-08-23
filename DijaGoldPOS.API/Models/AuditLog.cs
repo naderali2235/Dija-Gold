@@ -84,9 +84,14 @@ public class AuditLog
     public int? BranchId { get; set; }
     
     /// <summary>
-    /// Transaction ID if the action is related to a transaction
+    /// Financial Transaction ID if the action is related to a financial transaction
     /// </summary>
-    public int? TransactionId { get; set; }
+    public int? FinancialTransactionId { get; set; }
+    
+    /// <summary>
+    /// Order ID if the action is related to an order
+    /// </summary>
+    public int? OrderId { get; set; }
     
     /// <summary>
     /// Timestamp when the action occurred
@@ -122,7 +127,12 @@ public class AuditLog
     public virtual Branch? Branch { get; set; }
     
     /// <summary>
-    /// Navigation property to transaction
+    /// Navigation property to financial transaction
     /// </summary>
-    public virtual Transaction? Transaction { get; set; }
+    public virtual FinancialTransaction? FinancialTransaction { get; set; }
+    
+    /// <summary>
+    /// Navigation property to order
+    /// </summary>
+    public virtual Order? Order { get; set; }
 }

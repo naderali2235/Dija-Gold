@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.Enums;
+
 
 namespace DijaGoldPOS.API.Services;
 
@@ -39,9 +39,9 @@ public interface IReportService
     /// <param name="branchId">Branch ID (null for all branches)</param>
     /// <param name="fromDate">From date</param>
     /// <param name="toDate">To date</param>
-    /// <param name="categoryType">Product category filter</param>
+    /// <param name="categoryTypeId">Product category ID filter</param>
     /// <returns>Profit analysis report</returns>
-    Task<ProfitAnalysisReport> GetProfitAnalysisReportAsync(int? branchId, DateTime fromDate, DateTime toDate, ProductCategoryType? categoryType = null);
+    Task<ProfitAnalysisReport> GetProfitAnalysisReportAsync(int? branchId, DateTime fromDate, DateTime toDate, int? categoryTypeId = null);
 
     /// <summary>
     /// Generate customer analysis report
@@ -118,7 +118,8 @@ public class DailySalesSummaryReport
 
 public class CategorySalesBreakdown
 {
-    public ProductCategoryType Category { get; set; }
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
     public decimal TotalSales { get; set; }
     public decimal TotalWeight { get; set; }
     public int TransactionCount { get; set; }
@@ -126,7 +127,8 @@ public class CategorySalesBreakdown
 
 public class PaymentMethodBreakdown
 {
-    public PaymentMethod PaymentMethod { get; set; }
+    public int PaymentMethodId { get; set; }
+    public string PaymentMethodName { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public int TransactionCount { get; set; }
 }
@@ -158,7 +160,8 @@ public class InventoryMovementSummary
 {
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public ProductCategoryType Category { get; set; }
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
     public decimal OpeningQuantity { get; set; }
     public decimal OpeningWeight { get; set; }
     public decimal Purchases { get; set; }
@@ -187,7 +190,8 @@ public class ProductProfitAnalysis
 {
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public ProductCategoryType Category { get; set; }
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
     public decimal Revenue { get; set; }
     public decimal CostOfGoodsSold { get; set; }
     public decimal GrossProfit { get; set; }
@@ -246,8 +250,10 @@ public class InventoryValuationSummary
 {
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public ProductCategoryType Category { get; set; }
-    public KaratType KaratType { get; set; }
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public int KaratTypeId { get; set; }
+    public string KaratTypeName { get; set; } = string.Empty;
     public decimal QuantityOnHand { get; set; }
     public decimal WeightOnHand { get; set; }
     public decimal CurrentGoldRate { get; set; }
@@ -285,9 +291,9 @@ public class TransactionLogEntry
 {
     public string TransactionNumber { get; set; } = string.Empty;
     public DateTime TransactionDate { get; set; }
-    public TransactionType TransactionType { get; set; }
+    public int TransactionTypeId { get; set; }
     public string? CustomerName { get; set; }
     public string CashierName { get; set; } = string.Empty;
     public decimal TotalAmount { get; set; }
-    public TransactionStatus Status { get; set; }
+    public int StatusId { get; set; }
 }

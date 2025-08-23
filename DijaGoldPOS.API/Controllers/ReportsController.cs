@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models.Enums;
+
 using DijaGoldPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -141,7 +141,7 @@ public class ReportsController : ControllerBase
     /// <param name="fromDate">From date</param>
     /// <param name="toDate">To date</param>
     /// <param name="branchId">Branch ID (optional)</param>
-    /// <param name="categoryType">Product category filter (optional)</param>
+    /// <param name="categoryTypeId">Category type ID (optional)</param>
     /// <returns>Profit analysis report</returns>
     [HttpGet("profit-analysis")]
     [Authorize(Policy = "ManagerOnly")]
@@ -150,11 +150,11 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime fromDate,
         [FromQuery] DateTime toDate,
         [FromQuery] int? branchId = null,
-        [FromQuery] ProductCategoryType? categoryType = null)
+        [FromQuery] int? categoryTypeId = null)
     {
         try
         {
-            var report = await _reportService.GetProfitAnalysisReportAsync(branchId, fromDate, toDate, categoryType);
+            var report = await _reportService.GetProfitAnalysisReportAsync(branchId, fromDate, toDate, categoryTypeId);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
             await _auditService.LogAsync(

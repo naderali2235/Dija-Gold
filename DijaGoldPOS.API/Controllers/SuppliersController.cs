@@ -526,7 +526,9 @@ public class SuppliersController : ControllerBase
                 AvailableCredit = availableCredit,
                 PaymentTermsDays = supplier.PaymentTermsDays,
                 CreditLimitEnforced = supplier.CreditLimitEnforced,
+#pragma warning disable CS8601 // Possible null reference assignment
                 LastTransactionDate = supplier.LastTransactionDate,
+#pragma warning restore CS8601 // Possible null reference assignment
                 RecentTransactions = recentTransactions
             };
 

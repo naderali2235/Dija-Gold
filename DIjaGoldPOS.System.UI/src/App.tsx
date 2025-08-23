@@ -4,10 +4,12 @@ import LoginScreen from './components/LoginScreen';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Sales from './components/Sales';
-// import Returns from './components/Returns'; // Hidden per user request
+import Orders from './components/Orders';
 import Repairs from './components/Repairs';
+import Technicians from './components/Technicians';
 import Products from './components/Products';
 import Inventory from './components/Inventory';
+import ProductOwnership from './components/ProductOwnership';
 import Customers from './components/Customers';
 import Suppliers from './components/Suppliers';
 import PurchaseOrders from './components/PurchaseOrders';
@@ -50,14 +52,18 @@ function AppContent() {
         return <Dashboard onNavigate={setCurrentPage} />;
       case 'sales':
         return <Sales />;
-      // case 'returns': // Hidden per user request
-      //   return <Returns />;
+      case 'orders':
+        return <Orders />;
       case 'repairs':
         return <Repairs />;
+      case 'technicians':
+        return <Technicians />;
       case 'products':
         return <Products />;
       case 'inventory':
         return <Inventory />;
+      case 'product-ownership':
+        return <ProductOwnership />;
       case 'customers':
         return <Customers />;
       case 'suppliers':
