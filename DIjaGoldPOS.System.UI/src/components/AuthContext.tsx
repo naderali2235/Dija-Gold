@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api, { User as ApiUser, getAuthToken, testApiConnection } from '../services/api';
+import { useLogin, useCurrentUser } from '../hooks/useApi';
+import { User as ApiUser } from '../services/api';
 
 interface User {
   id: string;
@@ -26,6 +27,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isManager: boolean;
   isLoading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,54 +56,59 @@ function mapApiUserToUser(apiUser: ApiUser): User {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Use the hooks from useApi.ts
+  const { execute: loginExecute, loading: loginLoading, error: loginError } = useLogin();
+  const { fetchUser, logout: logoutExecute, loading: userLoading, error: userError } = useCurrentUser();
+
+  // Combined loading state
+  const isLoading = loginLoading || userLoading;
+
+  // Handle errors from hooks
+  useEffect(() => {
+    if (loginError) {
+      setError(loginError);
+    }
+  }, [loginError]);
+
+  useEffect(() => {
+    if (userError) {
+      setError(userError);
+    }
+  }, [userError]);
 
   useEffect(() => {
     // Check for stored token and validate with API
     const initializeAuth = async () => {
       console.log('Initializing auth...');
       
-      // Test API connectivity first
-      /*
-      const isApiConnected = await testApiConnection();
-      console.log('API connectivity test:', isApiConnected);
-      
-      if (!isApiConnected) {
-        console.error('API is not accessible. Check if the backend is running on the configured URL.');
-        setIsLoading(false);
-        return;
-      }
-      */
-      
-      const token = getAuthToken();
-      console.log('Found stored token:', !!token);
-      
-      if (token) {
-        try {
-          console.log('Attempting to get current user from API...');
-          const apiUser = await api.auth.getCurrentUser();
+      try {
+        console.log('Attempting to get current user from API...');
+        const apiUser = await fetchUser();
+        if (apiUser) {
           const mappedUser = mapApiUserToUser(apiUser);
           console.log('Successfully validated stored token for user:', mappedUser.username);
           console.log('User branch information:', mappedUser.branch);
           setUser(mappedUser);
-        } catch (error) {
-          // Token invalid or expired, clear it
-          console.warn('Failed to validate stored token:', error);
-          api.auth.logout(); // This will clear the token
         }
+      } catch (error) {
+        // Token invalid or expired, clear it
+        console.warn('Failed to validate stored token:', error);
+        setUser(null);
+        setError(null); // Clear any previous errors
       }
-      setIsLoading(false);
     };
 
     initializeAuth();
-  }, []);
+  }, [fetchUser]);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      setIsLoading(true);
+      setError(null); // Clear previous errors
       console.log('Starting login process for user:', username);
       
-      const response = await api.auth.login({
+      const response = await loginExecute({
         username,
         password,
         rememberMe: true
@@ -123,20 +130,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Re-throw the error - no redirect on failure, let the UI handle it
       throw error;
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const logout = async () => {
     try {
-      setIsLoading(true);
-      await api.auth.logout();
+      await logoutExecute();
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
       setUser(null);
-      setIsLoading(false);
+      setError(null);
     }
   };
 
@@ -144,7 +148,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isManager = !!(user?.role === 'Manager' || user?.roles?.includes('Manager'));
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated, isManager, isLoading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      isAuthenticated, 
+      isManager, 
+      isLoading,
+      error 
+    }}>
       {children}
     </AuthContext.Provider>
   );

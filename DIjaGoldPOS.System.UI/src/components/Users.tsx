@@ -141,21 +141,10 @@ export default function Users() {
     setPage,
   } = usePaginatedUsers({
     searchTerm: searchQuery,
-    role: roleFilter,
-    branchId: branchFilter ? parseInt(branchFilter) : undefined,
+    Role: roleFilter === 'all' ? undefined : roleFilter,
+    branchId: branchFilter === 'all' ? undefined : (branchFilter ? parseInt(branchFilter) : undefined),
     isActive: true,
-  }) as {
-    data: { items: UserDto[]; totalCount: number; pageNumber: number; pageSize: number } | null;
-    loading: boolean;
-    error: string | null;
-    fetchData: () => Promise<any>;
-    updateParams: (params: any) => void;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-    nextPage: () => void;
-    prevPage: () => void;
-    setPage: (page: number) => void;
-  };
+  });
 
   const { execute: createUser, loading: createLoading } = useCreateUser();
   const { execute: updateUser, loading: updateLoading } = useUpdateUser();
@@ -175,8 +164,8 @@ export default function Users() {
     const timeoutId = setTimeout(() => {
       updateUsersParams({
         searchTerm: searchQuery || undefined,
-        role: roleFilter || undefined,
-        branchId: branchFilter ? parseInt(branchFilter) : undefined,
+        Role: roleFilter === 'all' ? undefined : roleFilter,
+        branchId: branchFilter === 'all' ? undefined : (branchFilter ? parseInt(branchFilter) : undefined),
         pageNumber: 1,
       });
     }, 300);
@@ -217,14 +206,14 @@ export default function Users() {
 
     try {
       const createUserData: CreateUserRequest = {
-        userName: userForm.userName,
-        fullName: userForm.fullName,
-        email: userForm.email,
-        employeeCode: userForm.employeeCode || undefined,
-        password: userForm.password,
-        roles: userForm.roles,
-        branchId: userForm.branchId || undefined,
-        isActive: userForm.isActive,
+        UserName: userForm.userName,
+        FullName: userForm.fullName,
+        Email: userForm.email,
+        EmployeeCode: userForm.employeeCode || undefined,
+        Password: userForm.password,
+        Roles: userForm.roles,
+        BranchId: userForm.branchId || undefined,
+        IsActive: userForm.isActive,
       };
 
       await createUser(createUserData);
@@ -242,20 +231,20 @@ export default function Users() {
 
     try {
       const updateUserData: UpdateUserRequest = {
-        id: selectedUser.id,
-        fullName: userForm.fullName,
-        email: userForm.email,
-        employeeCode: userForm.employeeCode || undefined,
-        branchId: userForm.branchId || undefined,
+        Id: selectedUser.Id,
+        FullName: userForm.fullName,
+        Email: userForm.email,
+        EmployeeCode: userForm.employeeCode || undefined,
+        BranchId: userForm.branchId || undefined,
       };
 
-      await updateUser(selectedUser.id, updateUserData);
+      await updateUser(selectedUser.Id, updateUserData);
       
       // Update roles if changed
-      if (JSON.stringify(userForm.roles.sort()) !== JSON.stringify(selectedUser.roles.sort())) {
-        await updateUserRoles(selectedUser.id, {
-          userId: selectedUser.id,
-          roles: userForm.roles,
+      if (JSON.stringify(userForm.roles.sort()) !== JSON.stringify(selectedUser.Roles.sort())) {
+        await updateUserRoles(selectedUser.Id, {
+          UserId: selectedUser.Id,
+          Roles: userForm.roles,
         });
       }
 
@@ -272,9 +261,9 @@ export default function Users() {
   const handleToggleUserStatus = async (userId: string, isActive: boolean) => {
     try {
       await updateUserStatus(userId, {
-        userId,
-        isActive,
-        reason: isActive ? 'Account reactivated' : 'Account deactivated',
+        UserId: userId,
+        IsActive: isActive,
+        Reason: isActive ? 'Account reactivated' : 'Account deactivated',
       });
       
       toast.success(`User ${isActive ? 'activated' : 'deactivated'} successfully`);
@@ -298,10 +287,10 @@ export default function Users() {
     }
 
     try {
-      await resetUserPassword(selectedUser.id, {
-        userId: selectedUser.id,
-        newPassword,
-        forcePasswordChange: true,
+      await resetUserPassword(selectedUser.Id, {
+        UserId: selectedUser.Id,
+        NewPassword: newPassword,
+        ForcePasswordChange: true,
       });
 
       toast.success('Password reset successfully');
@@ -320,8 +309,8 @@ export default function Users() {
     // Fetch user activity and permissions
     try {
       const [activity, permissions] = await Promise.all([
-        fetchUserActivity(user.id, { pageSize: 10 }),
-        fetchUserPermissions(user.id),
+        fetchUserActivity(user.Id, { pageSize: 10 }),
+        fetchUserPermissions(user.Id),
       ]);
       setUserActivity(activity);
       setUserPermissions(permissions);
@@ -336,15 +325,15 @@ export default function Users() {
 
   const populateForm = (user: UserDto) => {
     setUserForm({
-      userName: user.userName,
-      fullName: user.fullName,
-      email: user.email,
-      employeeCode: user.employeeCode || '',
+      userName: user.UserName,
+      fullName: user.FullName,
+      email: user.Email,
+      employeeCode: user.EmployeeCode || '',
       password: '',
       confirmPassword: '',
-      roles: user.roles,
-      branchId: user.branchId || null,
-      isActive: user.isActive,
+      roles: user.Roles,
+      branchId: user.BranchId || null,
+      isActive: user.IsActive,
     });
   };
 
@@ -460,28 +449,28 @@ export default function Users() {
                 </TableHeader>
                 <TableBody>
                   {usersData.items.map((user) => (
-                    <TableRow key={user.id}>
+                    <TableRow key={user.Id}>
                       <TableCell>
                         <div className="flex items-center space-x-3">
                           <UserIcon className="h-8 w-8 text-muted-foreground" />
                           <div>
-                            <div className="font-medium">{user.fullName}</div>
+                            <div className="font-medium">{user.FullName}</div>
                             <div className="text-sm text-muted-foreground">
-                              @{user.userName}
+                              @{user.UserName}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {user.email}
+                              {user.Email}
                             </div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
-                          {user.roles.map((role: string) => (
+                          {user.Roles.map((role: string) => (
                             <Badge 
                               key={role} 
                               variant="secondary" 
-                              className={getRoleBadgeColor(user.roles)}
+                              className={getRoleBadgeColor(user.Roles)}
                             >
                               {role}
                             </Badge>
@@ -489,19 +478,19 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {user.branchName || 'No Branch'}
+                        {user.BranchName || 'No Branch'}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Switch
-                            checked={user.isActive}
+                            checked={user.IsActive}
                             onCheckedChange={(checked: boolean) => 
-                              handleToggleUserStatus(user.id, checked)
+                              handleToggleUserStatus(user.Id, checked)
                             }
                             disabled={statusLoading}
                           />
                           <span className="text-sm">
-                            {user.isActive ? (
+                            {user.IsActive ? (
                               <span className="flex items-center text-green-600">
                                 <CheckCircle className="h-4 w-4 mr-1" />
                                 Active
@@ -517,7 +506,7 @@ export default function Users() {
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
+                          {user.LastLoginAt ? formatDate(user.LastLoginAt) : 'Never'}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -726,8 +715,8 @@ export default function Users() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <UserIcon className="h-5 w-5" />
-                {selectedUser.fullName}
-                {!selectedUser.isActive && (
+                {selectedUser.FullName}
+                {!selectedUser.IsActive && (
                   <Badge variant="secondary" className="bg-red-100 text-red-800">
                     Inactive
                   </Badge>
@@ -794,8 +783,8 @@ export default function Users() {
                       </Select>
                     ) : (
                       <div className="flex gap-2">
-                        {selectedUser.roles.map(role => (
-                          <Badge key={role} variant="secondary" className={getRoleBadgeColor(selectedUser.roles)}>
+                        {selectedUser.Roles.map(role => (
+                          <Badge key={role} variant="secondary" className={getRoleBadgeColor(selectedUser.Roles)}>
                             {role}
                           </Badge>
                         ))}
@@ -826,19 +815,19 @@ export default function Users() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input value={selectedUser.branchName || 'No Branch'} readOnly />
+                      <Input value={selectedUser.BranchName || 'No Branch'} readOnly />
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Last Login</Label>
                     <div className="p-2 bg-muted rounded">
-                      {selectedUser.lastLoginAt ? formatDate(selectedUser.lastLoginAt) : 'Never'}
+                      {selectedUser.LastLoginAt ? formatDate(selectedUser.LastLoginAt) : 'Never'}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Account Created</Label>
                     <div className="p-2 bg-muted rounded">
-                      {formatDate(selectedUser.createdAt)}
+                      {formatDate(selectedUser.CreatedAt)}
                     </div>
                   </div>
                 </div>
@@ -877,26 +866,26 @@ export default function Users() {
                 ) : userActivity && userActivity.activities.length > 0 ? (
                   <div className="space-y-3">
                     {userActivity.activities.map((activity) => (
-                      <div key={activity.id} className="flex items-start space-x-3 p-3 border rounded">
+                      <div key={activity.Id} className="flex items-start space-x-3 p-3 border rounded">
                         <Activity className="h-5 w-5 text-muted-foreground mt-0.5" />
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium">{activity.action}</p>
+                            <p className="text-sm font-medium">{activity.Action}</p>
                             <span className="text-xs text-muted-foreground">
-                              {formatDate(activity.timestamp)}
+                              {formatDate(activity.Timestamp)}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {activity.details}
+                            {activity.Details}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{activity.entityType}</span>
+                            <span>{activity.EntityType}</span>
                             <span>•</span>
-                            <span>{activity.ipAddress}</span>
-                            {activity.branchName && (
+                            <span>{activity.IpAddress}</span>
+                            {activity.BranchName && (
                               <>
                                 <span>•</span>
-                                <span>{activity.branchName}</span>
+                                <span>{activity.BranchName}</span>
                               </>
                             )}
                           </div>
@@ -915,13 +904,13 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Account Status</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.isActive ? 'Account is active and can log in' : 'Account is disabled'}
+                        {selectedUser.IsActive ? 'Account is active and can log in' : 'Account is disabled'}
                       </p>
                     </div>
                     <Switch
-                      checked={selectedUser.isActive}
+                      checked={selectedUser.IsActive}
                       onCheckedChange={(checked: boolean) => 
-                        handleToggleUserStatus(selectedUser.id, checked)
+                        handleToggleUserStatus(selectedUser.Id, checked)
                       }
                       disabled={statusLoading}
                     />
@@ -931,11 +920,11 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Email Confirmed</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.emailConfirmed ? 'Email address is verified' : 'Email needs verification'}
+                        {selectedUser.EmailConfirmed ? 'Email address is verified' : 'Email needs verification'}
                       </p>
                     </div>
-                    <Badge variant={selectedUser.emailConfirmed ? "default" : "secondary"}>
-                      {selectedUser.emailConfirmed ? 'Verified' : 'Unverified'}
+                    <Badge variant={selectedUser.EmailConfirmed ? "default" : "secondary"}>
+                      {selectedUser.EmailConfirmed ? 'Verified' : 'Unverified'}
                     </Badge>
                   </div>
                   
@@ -943,11 +932,11 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Account Lockout</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.lockoutEnd ? 'Account is temporarily locked' : 'Account is not locked'}
+                        {selectedUser.LockoutEnd ? 'Account is temporarily locked' : 'Account is not locked'}
                       </p>
                     </div>
-                    <Badge variant={selectedUser.lockoutEnd ? "destructive" : "default"}>
-                      {selectedUser.lockoutEnd ? 'Locked' : 'Unlocked'}
+                    <Badge variant={selectedUser.LockoutEnd ? "destructive" : "default"}>
+                      {selectedUser.LockoutEnd ? 'Locked' : 'Unlocked'}
                     </Badge>
                   </div>
                 </div>
@@ -991,7 +980,7 @@ export default function Users() {
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
-              {selectedUser && `Set a new password for ${selectedUser.fullName} (${selectedUser.userName})`}
+              {selectedUser && `Set a new password for ${selectedUser.FullName} (${selectedUser.UserName})`}
             </DialogDescription>
           </DialogHeader>
           

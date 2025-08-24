@@ -11,15 +11,14 @@ public class ProductDto
     public string ProductCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int CategoryTypeId { get; set; }
-    public string CategoryTypeName { get; set; } = string.Empty;
+    public ProductCategoryTypeLookupDto? CategoryType { get; set; }
     public int KaratTypeId { get; set; }
-    public string KaratTypeName { get; set; } = string.Empty;
+    public KaratTypeLookupDto? KaratType { get; set; }
     public decimal Weight { get; set; }
     public string? Brand { get; set; }
     public string? DesignStyle { get; set; }
     public int? SubCategoryId { get; set; }
-    public string? SubCategoryName { get; set; }
-    public string? SubCategory { get; set; } // Legacy field for backward compatibility
+    public SubCategoryLookupDto? SubCategory { get; set; }
     public string? Shape { get; set; }
     public string? PurityCertificateNumber { get; set; }
     public string? CountryOfOrigin { get; set; }
@@ -31,7 +30,6 @@ public class ProductDto
     public decimal? ProductMakingChargesValue { get; set; }
     public bool UseProductMakingCharges { get; set; }
     public int? SupplierId { get; set; }
-    public string? SupplierName { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
 }
@@ -141,7 +139,6 @@ public class ProductWithInventoryDto : ProductDto
 public class ProductInventoryDto
 {
     public int BranchId { get; set; }
-    public string BranchName { get; set; } = string.Empty;
     public decimal QuantityOnHand { get; set; }
     public decimal WeightOnHand { get; set; }
     public decimal MinimumStockLevel { get; set; }

@@ -1,6 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Services;
 
 namespace DijaGoldPOS.API.Mappings;
 
@@ -12,9 +13,16 @@ public class FinancialTransactionProfile : Profile
         CreateMap<FinancialTransaction, FinancialTransactionDto>()
             .ForMember(d => d.TransactionTypeId, o => o.MapFrom(s => s.TransactionTypeId))
             .ForMember(d => d.TransactionTypeDescription, o => o.MapFrom(s => s.TransactionType != null ? s.TransactionType.Name : string.Empty))
+            .ForMember(d => d.TransactionType, o => o.MapFrom(s => s.TransactionType))
             .ForMember(d => d.BusinessEntityType, o => o.MapFrom(s => s.BusinessEntityType != null ? s.BusinessEntityType.Name : string.Empty))
             .ForMember(d => d.PaymentMethodDescription, o => o.MapFrom(s => s.PaymentMethod != null ? s.PaymentMethod.Name : string.Empty))
-            .ForMember(d => d.StatusDescription, o => o.MapFrom(s => s.Status != null ? s.Status.Name : string.Empty));
+            .ForMember(d => d.PaymentMethod, o => o.MapFrom(s => s.PaymentMethod))
+            .ForMember(d => d.StatusDescription, o => o.MapFrom(s => s.Status != null ? s.Status.Name : string.Empty))
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status))
+            .ForMember(d => d.BranchName, o => o.MapFrom(s => s.Branch != null ? s.Branch.Name : string.Empty))
+            .ForMember(d => d.ProcessedByUserName, o => o.MapFrom(s => s.ProcessedByUser != null ? s.ProcessedByUser.UserName : string.Empty))
+            .ForMember(d => d.ApprovedByUserName, o => o.MapFrom(s => s.ApprovedByUser != null ? s.ApprovedByUser.UserName : string.Empty))
+            .ForMember(d => d.UpdatedAt, o => o.MapFrom(s => s.ModifiedAt));
 
         // Map CreateFinancialTransactionRequestDto to FinancialTransaction
         CreateMap<CreateFinancialTransactionRequestDto, FinancialTransaction>()
@@ -102,7 +110,7 @@ public class FinancialTransactionProfile : Profile
             .ForMember(d => d.PaymentMethod, o => o.Ignore())
             .ForMember(d => d.Status, o => o.Ignore());
 
-        // Map FinancialTransactionSummaryDto
-        CreateMap<FinancialTransactionSummaryDto, FinancialTransactionSummaryDto>();
+        // Map FinancialTransactionSummary to FinancialTransactionSummaryDto
+        CreateMap<FinancialTransactionSummary, FinancialTransactionSummaryDto>();
     }
 }

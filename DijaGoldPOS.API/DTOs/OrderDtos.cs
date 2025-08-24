@@ -11,6 +11,7 @@ public class OrderDto
     public string OrderNumber { get; set; } = string.Empty;
     public int OrderTypeId { get; set; }
     public string OrderTypeDescription { get; set; } = string.Empty;
+    public OrderTypeLookupDto? OrderType { get; set; }
     public DateTime OrderDate { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
@@ -23,6 +24,7 @@ public class OrderDto
     public string? ApprovedByName { get; set; }
     public int StatusId { get; set; }
     public string StatusDescription { get; set; } = string.Empty;
+    public OrderStatusLookupDto? Status { get; set; }
     public int? OriginalOrderId { get; set; }
     public string? ReturnReason { get; set; }
     public string? Notes { get; set; }
@@ -58,6 +60,7 @@ public class OrderItemDto
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public string? KaratType { get; set; }
+    public KaratTypeLookupDto? KaratTypeLookup { get; set; }
     public decimal? Weight { get; set; }
     public string? Notes { get; set; }
 }

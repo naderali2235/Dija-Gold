@@ -4,8 +4,27 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import api, { ApiResponse, GoldRate, MakingCharges, TaxConfigurationDto } from '../services/api';
-import { EnumLookupDto } from '../types/enums';
+import api, { 
+  ApiResponse, 
+  GoldRate, 
+  MakingCharges, 
+  TaxConfigurationDto,
+  // Lookup DTOs for navigation properties
+  BaseLookupDto,
+  ProductCategoryTypeLookupDto,
+  KaratTypeLookupDto,
+  SubCategoryLookupDto,
+  FinancialTransactionTypeLookupDto,
+  PaymentMethodLookupDto,
+  FinancialTransactionStatusLookupDto,
+  ChargeTypeLookupDto,
+  RepairStatusLookupDto,
+  RepairPriorityLookupDto,
+  OrderTypeLookupDto,
+  OrderStatusLookupDto,
+  BusinessEntityTypeLookupDto
+} from '../services/api';
+import { EnumLookupDto } from '../types/lookups';
 
 // Generic hook for API state management
 export interface ApiState<T> {
@@ -102,6 +121,24 @@ export function useProductPricing() {
   return useApiCall(api.products.getProductPricing);
 }
 
+// Specialized Products hook with pagination
+export function usePaginatedProducts(initialParams: any = {}) {
+  const wrapperFunction = async (params: any) => {
+    const result = await api.products.getProducts(params);
+    return {
+      ...result,
+      totalPages: Math.ceil(result.totalCount / result.pageSize)
+    };
+  };
+  
+  return usePaginatedApi(wrapperFunction, {
+    pageNumber: 1,
+    pageSize: 20,
+    isActive: true,
+    ...initialParams
+  });
+}
+
 // Pricing hooks
 export function useGoldRates() {
   const [state, { setData, setLoading, setError }] = useApiState<GoldRate[]>([]);
@@ -123,7 +160,7 @@ export function useGoldRates() {
   }, [setData, setLoading, setError]);
 
   const updateRates = useCallback(async (rates: Array<{
-    karatType: number;
+    karatTypeId: number;
     ratePerGram: number;
     effectiveFrom: string;
   }>) => {
@@ -253,18 +290,7 @@ export function useTaxConfigurations() {
   };
 }
 
-// Transaction hooks
-export function useProcessSale() {
-  return useApiCall(api.transactions.processSale);
-}
 
-export function useTransaction() {
-  return useApiCall(api.transactions.getTransaction);
-}
-
-export function useSearchTransactions() {
-  return useApiCall(api.transactions.searchTransactions);
-}
 
 // Authentication hooks
 export function useLogin() {
@@ -403,6 +429,36 @@ export function useCreateCustomer() {
 
 export function useUpdateCustomer() {
   return useApiCall(api.customers.updateCustomer);
+}
+
+export function useDeleteCustomer() {
+  return useApiCall(api.customers.deleteCustomer);
+}
+
+export function useGetCustomerOrders() {
+  return useApiCall(api.customers.getCustomerOrders);
+}
+
+export function useCustomerLoyalty() {
+  return useApiCall(api.customers.getCustomerLoyalty);
+}
+
+export function useUpdateCustomerLoyalty() {
+  return useApiCall(api.customers.updateCustomerLoyalty);
+}
+
+export function useSearchCustomers() {
+  return useApiCall(api.customers.searchCustomers);
+}
+
+// Specialized Customers hook with pagination
+export function usePaginatedCustomers(initialParams: any = {}) {
+  return usePaginatedApi(api.customers.getCustomers, {
+    pageNumber: 1,
+    pageSize: 20,
+    isActive: true,
+    ...initialParams
+  });
 }
 
 // Users Management hooks
@@ -656,9 +712,6 @@ export function useDecodeQrPayload() {
 }
 
 // Lookups API hooks
-export function useAllLookups() {
-  return useApiCall(api.lookups.getAllLookups);
-}
 
 export function useTransactionTypes() {
   return useApiCall(api.lookups.getTransactionTypes);
@@ -673,7 +726,7 @@ export function useTransactionStatuses() {
 }
 
 export function useKaratTypes() {
-  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+  const [state, { setData, setLoading, setError }] = useApiState<KaratTypeLookupDto[]>([]);
 
   const fetchKaratTypes = useCallback(async () => {
     try {
@@ -700,7 +753,7 @@ export function useKaratTypes() {
 }
 
 export function useProductCategoryTypes() {
-  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+  const [state, { setData, setLoading, setError }] = useApiState<ProductCategoryTypeLookupDto[]>([]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -727,7 +780,7 @@ export function useProductCategoryTypes() {
 }
 
 export function useChargeTypes() {
-  const [state, { setData, setLoading, setError }] = useApiState<EnumLookupDto[]>([]);
+  const [state, { setData, setLoading, setError }] = useApiState<ChargeTypeLookupDto[]>([]);
 
   const fetchChargeTypes = useCallback(async () => {
     try {
@@ -755,6 +808,8 @@ export function useChargeTypes() {
 
 
 
+
+
 // Purchase Orders hooks
 export function useCreatePurchaseOrder() {
   return useApiCall(api.purchaseOrders.createPurchaseOrder);
@@ -765,7 +820,18 @@ export function usePurchaseOrder() {
 }
 
 export function useSearchPurchaseOrders() {
-  return useApiCall(api.purchaseOrders.searchPurchaseOrders);
+  const wrapperFunction = async (params: any) => {
+    const result = await api.purchaseOrders.searchPurchaseOrders(params);
+    return {
+      items: result.items,
+      totalCount: result.total,
+      pageNumber: params.pageNumber || 1,
+      pageSize: params.pageSize || 20,
+      totalPages: Math.ceil(result.total / (params.pageSize || 20))
+    };
+  };
+  
+  return useApiCall(wrapperFunction);
 }
 
 export function useReceivePurchaseOrder() {
@@ -834,8 +900,11 @@ export default {
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,
+  useProductPricing,
+  usePaginatedProducts,
   useGoldRates,
-  useProcessSale,
+  useMakingCharges,
+  useTaxConfigurations,
   useCreateSaleOrder,
   useCreateRepairOrder,
   useOrder,
@@ -849,8 +918,6 @@ export default {
   useVoidFinancialTransaction,
   useMarkReceiptPrinted,
   useGenerateBrowserReceipt,
-  useTransaction,
-  useSearchTransactions,
   useLogin,
   useCurrentUser,
   useRefreshToken,
@@ -858,6 +925,13 @@ export default {
   useCustomers,
   useCustomer,
   useCreateCustomer,
+  useUpdateCustomer,
+  useDeleteCustomer,
+  useGetCustomerOrders,
+  useCustomerLoyalty,
+  useUpdateCustomerLoyalty,
+  useSearchCustomers,
+  usePaginatedCustomers,
   useUsers,
   useUser,
   useCreateUser,
@@ -912,11 +986,230 @@ export default {
   useGenerateProductLabelZpl,
   usePrintProductLabel,
   useDecodeQrPayload,
-  useAllLookups,
   useTransactionTypes,
   usePaymentMethods,
   useTransactionStatuses,
   useKaratTypes,
   useProductCategoryTypes,
   useChargeTypes,
+  useRepairStatuses,
+  useRepairPriorities,
+  // Repair Jobs hooks
+  useCreateRepairJob,
+  useRepairJob,
+  useRepairJobByFinancialTransactionId,
+  useUpdateRepairJobStatus,
+  useAssignTechnician,
+  useCompleteRepair,
+  useMarkReadyForPickup,
+  useDeliverRepair,
+  useCancelRepair,
+  useSearchRepairJobs,
+  useRepairJobStatistics,
+  useRepairJobsByStatus,
+  useRepairJobsByTechnician,
+  useOverdueRepairJobs,
+  useRepairJobsDueToday,
+  usePaginatedRepairJobs,
+  // Technicians hooks
+  useActiveTechnicians,
+  useTechnician,
+  useCreateTechnician,
+  useUpdateTechnician,
+  useDeleteTechnician,
+  useSearchTechnicians,
 };
+
+// Repair Jobs hooks
+export function useCreateRepairJob() {
+  return useApiCall(api.repairJobs.createRepairJob);
+}
+
+export function useRepairJob() {
+  return useApiCall(api.repairJobs.getRepairJob);
+}
+
+export function useRepairJobByFinancialTransactionId() {
+  return useApiCall(api.repairJobs.getRepairJobByFinancialTransactionId);
+}
+
+export function useUpdateRepairJobStatus() {
+  return useApiCall(api.repairJobs.updateRepairJobStatus);
+}
+
+export function useAssignTechnician() {
+  return useApiCall(api.repairJobs.assignTechnician);
+}
+
+export function useCompleteRepair() {
+  return useApiCall(api.repairJobs.completeRepair);
+}
+
+export function useMarkReadyForPickup() {
+  return useApiCall(api.repairJobs.markReadyForPickup);
+}
+
+export function useDeliverRepair() {
+  return useApiCall(api.repairJobs.deliverRepair);
+}
+
+export function useCancelRepair() {
+  return useApiCall(api.repairJobs.cancelRepair);
+}
+
+export function useSearchRepairJobs() {
+  return useApiCall(api.repairJobs.searchRepairJobs);
+}
+
+export function useRepairJobStatistics() {
+  return useApiCall(api.repairJobs.getRepairJobStatistics);
+}
+
+export function useRepairJobsByStatus() {
+  return useApiCall(api.repairJobs.getRepairJobsByStatus);
+}
+
+export function useRepairJobsByTechnician() {
+  return useApiCall(api.repairJobs.getRepairJobsByTechnician);
+}
+
+export function useOverdueRepairJobs() {
+  return useApiCall(api.repairJobs.getOverdueRepairJobs);
+}
+
+export function useRepairJobsDueToday() {
+  return useApiCall(api.repairJobs.getRepairJobsDueToday);
+}
+
+// Specialized Repair Jobs hook with pagination
+export function usePaginatedRepairJobs(initialParams: any = {}) {
+  return usePaginatedApi(api.repairJobs.searchRepairJobs, {
+    pageNumber: 1,
+    pageSize: 20,
+    ...initialParams
+  });
+}
+
+// Technicians hooks
+export function useActiveTechnicians() {
+  return useApiCall(api.technicians.getActiveTechnicians);
+}
+
+export function useTechnician() {
+  return useApiCall(api.technicians.getTechnician);
+}
+
+export function useCreateTechnician() {
+  return useApiCall(api.technicians.createTechnician);
+}
+
+export function useUpdateTechnician() {
+  return useApiCall(api.technicians.updateTechnician);
+}
+
+export function useDeleteTechnician() {
+  return useApiCall(api.technicians.deleteTechnician);
+}
+
+export function useSearchTechnicians() {
+  return useApiCall(api.technicians.searchTechnicians);
+}
+
+// Lookups hooks
+export function useRepairStatuses() {
+  return useApiCall(api.lookups.getRepairStatuses);
+}
+
+export function useRepairPriorities() {
+  return useApiCall(api.lookups.getRepairPriorities);
+}
+
+// ProductOwnership hooks
+export function useCreateOrUpdateOwnership() {
+  return useApiCall(api.productOwnership.createOrUpdateOwnership);
+}
+
+export function useGetProductOwnershipList() {
+  return useApiCall(api.productOwnership.getProductOwnershipList);
+}
+
+export function useValidateOwnership() {
+  return useApiCall(api.productOwnership.validateOwnership);
+}
+
+export function useUpdateOwnershipAfterPayment() {
+  return useApiCall(api.productOwnership.updateOwnershipAfterPayment);
+}
+
+export function useUpdateOwnershipAfterSale() {
+  return useApiCall(api.productOwnership.updateOwnershipAfterSale);
+}
+
+export function useConvertRawGoldToProducts() {
+  return useApiCall(api.productOwnership.convertRawGoldToProducts);
+}
+
+export function useGetOwnershipAlerts() {
+  return useApiCall(api.productOwnership.getOwnershipAlerts);
+}
+
+export function useGetProductOwnership() {
+  return useApiCall(api.productOwnership.getProductOwnership);
+}
+
+export function useGetOwnershipMovements() {
+  return useApiCall(api.productOwnership.getOwnershipMovements);
+}
+
+export function useGetLowOwnershipProducts() {
+  return useApiCall(api.productOwnership.getLowOwnershipProducts);
+}
+
+export function useGetProductsWithOutstandingPayments() {
+  return useApiCall(api.productOwnership.getProductsWithOutstandingPayments);
+}
+
+// Specialized ProductOwnership hook with pagination
+export function usePaginatedProductOwnership(branchId: number, initialParams: any = {}) {
+  return usePaginatedApi(
+    (params) => api.productOwnership.getProductOwnershipList(branchId, params),
+    {
+      pageNumber: 1,
+      pageSize: 20,
+      ...initialParams
+    }
+  );
+}
+
+// Cash Drawer Management hooks
+export function useOpenCashDrawer() {
+  return useApiCall(api.cashDrawer.openDrawer);
+}
+
+export function useCloseCashDrawer() {
+  return useApiCall(api.cashDrawer.closeDrawer);
+}
+
+export function useGetCashDrawerBalance() {
+  return useApiCall(api.cashDrawer.getBalance);
+}
+
+export function useGetCashDrawerOpeningBalance() {
+  return useApiCall(api.cashDrawer.getOpeningBalance);
+}
+
+export function useIsCashDrawerOpen() {
+  return useApiCall(api.cashDrawer.isDrawerOpen);
+}
+
+export function useGetCashDrawerBalances() {
+  return useApiCall(api.cashDrawer.getBalances);
+}
+
+export function useSettleCashDrawerShift() {
+  return useApiCall(api.cashDrawer.settleShift);
+}
+
+export function useRefreshCashDrawerBalance() {
+  return useApiCall(api.cashDrawer.refreshExpectedClosingBalance);
+}

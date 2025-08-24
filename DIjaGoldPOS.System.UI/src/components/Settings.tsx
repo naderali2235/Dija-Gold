@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { useGoldRates } from '../hooks/useApi';
 import { productOwnershipApi } from '../services/api';
 import { PricingSettings } from './settings/PricingSettings';
+import { GoldRatesDisplay, transformGoldRates, headerToKaratMapping, GoldRatesMap } from './shared/GoldRatesDisplay';
 import { SystemSettings } from './settings/SystemSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
 import { NotificationSettings } from './settings/NotificationSettings';
@@ -25,12 +26,13 @@ export default function Settings() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { data: goldRatesData, updateRates, fetchRates } = useGoldRates();
 
+
   // Original values to compare against for detecting changes
   const [originalGoldRates, setOriginalGoldRates] = useState<Record<string, string>>({
-    '24k': '0',
-    '22k': '0',
-    '21k': '0',
-    '18k': '0'
+    '18K GOLD': '0',
+    '21K GOLD': '0',
+    '22K GOLD': '0',
+    '24K GOLD': '0'
   });
   const [originalTaxSettings, setOriginalTaxSettings] = useState(DEFAULT_TAX_SETTINGS);
   const [originalSystemSettings, setOriginalSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
@@ -40,10 +42,10 @@ export default function Settings() {
 
   // Settings states
   const [goldRates, setGoldRates] = useState<Record<string, string>>({
-    '24k': '0',
-    '22k': '0',
-    '21k': '0',
-    '18k': '0'
+    '18K GOLD': '0',
+    '21K GOLD': '0',
+    '22K GOLD': '0',
+    '24K GOLD': '0'
   });
   const [taxSettings, setTaxSettings] = useState(DEFAULT_TAX_SETTINGS);
   const [systemSettings, setSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
@@ -69,24 +71,7 @@ export default function Settings() {
     setHasUnsavedChanges(hasChanges);
   }, [goldRates, originalGoldRates, taxSettings, originalTaxSettings, systemSettings, originalSystemSettings, securitySettings, originalSecuritySettings, notificationSettings, originalNotificationSettings, ownershipSettings, originalOwnershipSettings]);
 
-  // Transform API gold rates to the format expected by the component
-  const transformGoldRates = (apiRates: any[]): Record<string, string> => {
-    const transformed: Record<string, string> = {
-      '24k': '0',
-      '22k': '0', 
-      '21k': '0',
-      '18k': '0'
-    };
 
-    apiRates?.forEach(rate => {
-      const karatKey = `${rate.karatType}k`;
-      if (transformed.hasOwnProperty(karatKey)) {
-        transformed[karatKey] = rate.ratePerGram.toString();
-      }
-    });
-
-    return transformed;
-  };
 
   // Fetch data when component mounts
   useEffect(() => {
@@ -96,13 +81,14 @@ export default function Settings() {
   }, [isManager]); // Only depend on isManager, fetchRates is stable
 
   // Update gold rates when API data is fetched
+
   useEffect(() => {
     if (goldRatesData && goldRatesData.length > 0) {
       const transformedRates = transformGoldRates(goldRatesData);
       setGoldRates(transformedRates);
       setOriginalGoldRates(transformedRates);
     }
-  }, [goldRatesData]);
+  }, [goldRatesData]); // Removed karatTypesData dependency since we use fixed headers
 
   // Check for changes whenever any setting changes
   useEffect(() => {
@@ -155,11 +141,15 @@ export default function Settings() {
       setIsSaving(true);
       
       // Convert gold rates to the format expected by the API
-      const goldRateUpdates = Object.entries(goldRates).map(([karat, rate]) => ({
-        karatType: parseInt(karat.replace('k', '')),
-        ratePerGram: parseFloat(rate),
-        effectiveFrom: new Date().toISOString()
-      }));
+      const goldRateUpdates = Object.entries(goldRates).map(([karatDisplayName, rate]) => {
+        const karatTypeId = headerToKaratMapping[karatDisplayName] || 1; // Default to 1 if not found
+        
+        return {
+          karatTypeId: karatTypeId, // Use correct property name expected by backend
+          ratePerGram: parseFloat(rate),
+          effectiveFrom: new Date().toISOString()
+        };
+      });
 
       // Save gold rates to API
       await updateRates(goldRateUpdates);

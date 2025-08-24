@@ -68,7 +68,15 @@ public class PricingController : ControllerBase
                         EffectiveTo = rate.EffectiveTo,
                         IsCurrent = rate.IsCurrent,
                         CreatedAt = rate.CreatedAt,
-                        CreatedBy = rate.CreatedBy
+                        CreatedBy = rate.CreatedBy,
+                        KaratType = new KaratTypeLookupDto
+                        {
+                            Id = karatType.Id,
+                            Name = karatType.Name,
+                            Description = karatType.Description,
+                            SortOrder = karatType.SortOrder,
+                            IsActive = karatType.IsActive
+                        }
                     });
                 }
             }
@@ -487,6 +495,7 @@ public class GoldRateDto
     public bool IsCurrent { get; set; }
     public DateTime CreatedAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
+    public KaratTypeLookupDto? KaratType { get; set; }
 }
 
 /// <summary>

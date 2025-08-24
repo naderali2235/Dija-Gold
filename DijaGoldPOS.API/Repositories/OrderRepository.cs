@@ -24,8 +24,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.ApprovedByUser)
             .Include(o => o.GoldRate)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber && o.BranchId == branchId);
     }
 
@@ -35,8 +38,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Branch)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.CustomerId == customerId);
 
         if (fromDate.HasValue)
@@ -56,8 +62,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Branch)
             .Include(o => o.Customer)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.CashierId == cashierId);
 
         if (fromDate.HasValue)
@@ -88,8 +97,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .AsQueryable();
 
         // Apply filters
@@ -203,8 +215,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.OriginalOrderId == originalOrderId)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
@@ -217,8 +232,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.BranchId == branchId && o.OrderDate >= fromDate && o.OrderDate <= toDate)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
@@ -231,8 +249,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.StatusId == statusId);
 
         if (branchId.HasValue)
@@ -250,8 +271,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.OrderTypeId == orderTypeId);
 
         if (branchId.HasValue)
@@ -275,8 +299,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.BranchId == branchId && 
                        o.OrderDate >= fromDate && 
                        o.OrderDate <= toDate &&
@@ -291,8 +318,11 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .Include(o => o.Branch)
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
+            .Include(o => o.OrderType)
+            .Include(o => o.Status)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p.KaratType)
             .Where(o => o.FinancialTransactionId == null && o.StatusId == LookupTableConstants.OrderStatusCompleted);
 
         if (branchId.HasValue)

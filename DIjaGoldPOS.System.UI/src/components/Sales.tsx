@@ -46,10 +46,10 @@ import {
   Printer,
 } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCustomers, useCreateSaleOrder, useGoldRates, useMakingCharges, useKaratTypes, usePaymentMethods, useTaxConfigurations, useSearchOrders } from '../hooks/useApi';
+import { useProducts, useSearchCustomers, useCreateSaleOrder, useGoldRates, useMakingCharges, useKaratTypes, useProductCategoryTypes, usePaymentMethods, useTaxConfigurations, useSearchOrders } from '../hooks/useApi';
 import { useAuth } from './AuthContext';
 import api, { Product, Customer, OrderDto, productOwnershipApi } from '../services/api';
-import { EnumMapper, EnumLookupDto, ProductCategoryType, KaratType } from '../types/enums';
+import { LookupHelper, EnumLookupDto } from '../types/lookups';
 import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
 // import TransactionDetailsDialog from './TransactionDetailsDialog'; // Temporarily removed
 import ReceiptPrinter from './ReceiptPrinter';
@@ -98,11 +98,12 @@ export default function Sales() {
   
   // API hooks
   const { data: productsData, loading: productsLoading, execute: fetchProducts } = useProducts();
-  const { data: customersData, loading: customersLoading, execute: fetchCustomers } = useCustomers();
+  const { data: searchResults, loading: customersLoading, execute: searchCustomers } = useSearchCustomers();
   const { execute: createSaleOrder } = useCreateSaleOrder();
   const { data: goldRatesData, loading: goldRatesLoading, fetchRates } = useGoldRates();
   const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
   const { data: karatTypesData, fetchKaratTypes } = useKaratTypes();
+  const { data: categoryTypesData, fetchCategories: fetchCategoryTypes } = useProductCategoryTypes();
   const { data: paymentMethodsData, execute: fetchPaymentMethods } = usePaymentMethods();
   const { data: taxConfigurationsData, fetchTaxConfigurations } = useTaxConfigurations();
   const { data: ordersData, loading: ordersLoading, execute: fetchOrders } = useSearchOrders();
@@ -121,6 +122,7 @@ export default function Sales() {
       pageSize: 50
     });
     fetchKaratTypes();
+    fetchCategoryTypes();
     fetchPaymentMethods();
     fetchTaxConfigurations();
     fetchRates();
@@ -146,13 +148,12 @@ export default function Sales() {
 
   useEffect(() => {
     if (customerSearch.trim()) {
-      fetchCustomers({ 
+      searchCustomers({ 
         searchTerm: customerSearch,
-        pageNumber: 1,
-        pageSize: 20
+        limit: 20
       });
     }
-  }, [customerSearch, fetchCustomers]);
+  }, [customerSearch, searchCustomers]);
 
   // Fetch today's orders
   useEffect(() => {
@@ -183,11 +184,11 @@ export default function Sales() {
   }, [selectedCustomer, isPricingDataReady]);
 
   const products = productsData?.items || [];
-  const customers = customersData?.items || [];
+  const customers = searchResults || [];
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    EnumMapper.productCategoryEnumToString(product.categoryType).toLowerCase().includes(searchQuery.toLowerCase())
+    LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const validateOwnership = async (productId: number, quantity: number): Promise<boolean> => {
@@ -267,8 +268,8 @@ export default function Sales() {
           id: Date.now(), // Temporary ID for cart management
           productId: product.id,
           name: product.name,
-          category: EnumMapper.productCategoryEnumToString(product.categoryType),
-          karat: EnumMapper.karatEnumToString(product.karatType),
+          category: LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId),
+          karat: LookupHelper.getDisplayName(karatTypesData || [], product.karatTypeId),
           weight: product.weight,
           rate: goldRate,
           makingCharges: makingCharges,
@@ -313,8 +314,8 @@ export default function Sales() {
             id: Date.now(),
             productId: product.id,
             name: product.name,
-            category: EnumMapper.productCategoryEnumToString(product.categoryType),
-            karat: EnumMapper.karatEnumToString(product.karatType),
+            category: LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId),
+            karat: LookupHelper.getDisplayName(karatTypesData || [], product.karatTypeId),
             weight: product.weight,
             rate: pricing.goldRate,
             makingCharges: pricing.makingChargesAmount,
@@ -591,20 +592,12 @@ export default function Sales() {
         customDiscountPercentage: item.discountPercentage || undefined,
       })),
       amountPaid: amountPaid,
-      paymentMethod: EnumMapper.paymentMethodStringToEnum(paymentMethod),
+      paymentMethod: LookupHelper.getValue(paymentMethodsData || [], paymentMethod) || 1,
     };
 
     try {
-      const response = await fetch('/api/transactions/debug-calculation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(saleRequest)
-      });
-
-      const result = await response.json();
+      // Use the API service instead of direct fetch
+      const result = await api.financialTransactions.debugCalculation(saleRequest);
       console.log('=== BACKEND DEBUG RESULT ===');
       console.log(result);
       console.log('=== END BACKEND DEBUG ===');
@@ -667,7 +660,7 @@ export default function Sales() {
           customDiscountPercentage: item.discountPercentage || undefined,
         })),
         amountPaid: amountPaid,
-        paymentMethodId: EnumMapper.paymentMethodStringToEnum(paymentMethod),
+        paymentMethodId: LookupHelper.getValue(paymentMethodsData || [], paymentMethod) || 1,
       };
 
       const order = await createSaleOrder(saleRequest);
@@ -822,7 +815,7 @@ export default function Sales() {
                       No customers found
                     </div>
                   ) : (
-                    customers.map((customer) => (
+                    customers.map((customer: Customer) => (
                       <div
                         key={customer.id}
                         className="p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
@@ -930,7 +923,7 @@ export default function Sales() {
                       >
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="font-medium">{product.name}</h3>
-                          <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType)}</Badge>
+                          <Badge variant="outline">{LookupHelper.getDisplayName(karatTypesData || [], product.karatTypeId)}</Badge>
                         </div>
                         <div className="space-y-1 text-sm text-muted-foreground mb-3">
                           <p>Weight: {product.weight}g</p>
@@ -1096,13 +1089,13 @@ export default function Sales() {
                       </SelectTrigger>
                       <SelectContent className="bg-white border-gray-200 shadow-lg">
                         {paymentMethodsData ? (
-                          paymentMethodsData.map((method: EnumLookupDto) => (
+                          paymentMethodsData.map((method: any) => (
                             <SelectItem 
-                              key={method.value} 
+                              key={method.id} 
                               value={method.name}
                               className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                             >
-                              {method.displayName}
+                              {method.name}
                             </SelectItem>
                           ))
                         ) : (
@@ -1396,7 +1389,7 @@ export default function Sales() {
                 </div>
                 <div>
                   <p><strong>Cashier:</strong> {selectedOrder.cashierName}</p>
-                  <p><strong>Branch:</strong> {selectedOrder.branchName}</p>
+                  <p><strong>Branch ID:</strong> {selectedOrder.branchId}</p>
                 </div>
               </div>
               

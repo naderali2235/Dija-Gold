@@ -4,10 +4,10 @@
  */
 
 import { API_CONFIG, STORAGE_KEYS } from '../config/environment';
-import { EnumLookupDto, ApiLookupsResponse, LookupTableConstants } from '../types/enums';
+import { EnumLookupDto } from '../types/lookups';
 
 // Base API configuration
-const API_BASE_URL = API_CONFIG.BASE_URL;
+const API_BASE_URL = `${API_CONFIG.BASE_URL}/api`;
 
 // Auth token management
 let authToken: string | null = null;
@@ -212,17 +212,53 @@ export const authApi = {
   }
 };
 
+// Lookup DTOs - Updated to match backend structure
+export interface BaseLookupDto {
+  id: number;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ProductCategoryTypeLookupDto extends BaseLookupDto {}
+
+export interface KaratTypeLookupDto extends BaseLookupDto {}
+
+export interface SubCategoryLookupDto extends BaseLookupDto {}
+
+export interface FinancialTransactionTypeLookupDto extends BaseLookupDto {}
+
+export interface PaymentMethodLookupDto extends BaseLookupDto {}
+
+export interface FinancialTransactionStatusLookupDto extends BaseLookupDto {}
+
+export interface ChargeTypeLookupDto extends BaseLookupDto {}
+
+export interface RepairStatusLookupDto extends BaseLookupDto {}
+
+export interface RepairPriorityLookupDto extends BaseLookupDto {}
+
+export interface OrderTypeLookupDto extends BaseLookupDto {}
+
+export interface OrderStatusLookupDto extends BaseLookupDto {}
+
+export interface BusinessEntityTypeLookupDto extends BaseLookupDto {}
+
 // Products API
 export interface Product {
   id: number;
   productCode: string;
   name: string;
-  categoryType: number; // ProductCategoryType enum value
-  karatType: number; // KaratType enum value
+  categoryTypeId: number; // ProductCategoryType enum value
+  categoryType?: ProductCategoryTypeLookupDto;
+  karatTypeId: number; // KaratType enum value
+  karatType?: KaratTypeLookupDto;
   weight: number;
   brand?: string;
   designStyle?: string;
-  subCategory?: string;
+  subCategoryId?: number;
+  subCategory?: SubCategoryLookupDto;
   shape?: string;
   purityCertificateNumber?: string;
   countryOfOrigin?: string;
@@ -234,15 +270,14 @@ export interface Product {
   productMakingChargesValue?: number;
   useProductMakingCharges: boolean;
   supplierId?: number;
-  supplierName?: string;
   createdAt: string;
   isActive: boolean;
 }
 
 export interface ProductSearchRequest {
   searchTerm?: string;
-  categoryType?: string;
-  karatType?: string;
+  categoryTypeId?: number;
+  karatTypeId?: number;
   brand?: string;
   isActive?: boolean;
   pageNumber?: number;
@@ -351,13 +386,20 @@ export const productsApi = {
 // Pricing API
 export interface GoldRate {
   id: number;
-  karatType: number; // KaratType enum value (18, 21, 22, 24)
+  karatTypeId: number; // KaratType enum value (1, 2, 3, 4)
   ratePerGram: number;
   effectiveFrom: string;
   effectiveTo?: string;
   isCurrent: boolean;
   createdAt: string;
   createdBy: string;
+  karatType?: {
+    id: number;
+    name: string;
+    description?: string;
+    sortOrder: number;
+    isActive: boolean;
+  };
 }
 
 export interface MakingCharges {
@@ -391,20 +433,26 @@ export interface TaxConfigurationDto {
 
 export const pricingApi = {
   async getGoldRates(): Promise<GoldRate[]> {
-    const response = await apiRequest<any[]>('/Pricing/gold-rates');
+    const response = await apiRequest<any[]>('/pricing/gold-rates');
     
     if (response.success && response.data) {
-      // Map backend response to frontend interface
-      // Backend sends KaratType (enum), frontend expects karatType (number)
+      // Map backend response to frontend camelCase (handling both PascalCase and camelCase)
       return response.data.map((rate: any) => ({
-        id: rate.id,
-        karatType: rate.karatType || rate.KaratType, // Handle both cases
+        id: rate.id || rate.Id,
+        karatTypeId: rate.karatTypeId || rate.KaratTypeId,
         ratePerGram: rate.ratePerGram || rate.RatePerGram,
         effectiveFrom: rate.effectiveFrom || rate.EffectiveFrom,
         effectiveTo: rate.effectiveTo || rate.EffectiveTo,
-        isCurrent: rate.isCurrent !== undefined ? rate.isCurrent : rate.IsCurrent,
+        isCurrent: rate.isCurrent || rate.IsCurrent,
         createdAt: rate.createdAt || rate.CreatedAt,
-        createdBy: rate.createdBy || rate.CreatedBy
+        createdBy: rate.createdBy || rate.CreatedBy,
+        karatType: rate.karatType || rate.KaratType ? {
+          id: (rate.karatType || rate.KaratType).id || (rate.karatType || rate.KaratType).Id,
+          name: (rate.karatType || rate.KaratType).name || (rate.karatType || rate.KaratType).Name,
+          description: (rate.karatType || rate.KaratType).description || (rate.karatType || rate.KaratType).Description,
+          sortOrder: (rate.karatType || rate.KaratType).sortOrder || (rate.karatType || rate.KaratType).SortOrder,
+          isActive: (rate.karatType || rate.KaratType).isActive || (rate.karatType || rate.KaratType).IsActive
+        } : undefined
       }));
     }
     
@@ -412,13 +460,22 @@ export const pricingApi = {
   },
 
   async updateGoldRates(goldRates: {
-    karatType: number;
+    karatTypeId: number;
     ratePerGram: number;
     effectiveFrom: string;
   }[]): Promise<void> {
-    const response = await apiRequest<void>('/Pricing/gold-rates', {
+    // Map frontend camelCase to backend PascalCase
+    const requestData = {
+      GoldRates: goldRates.map(rate => ({
+        KaratTypeId: rate.karatTypeId,
+        RatePerGram: rate.ratePerGram,
+        EffectiveFrom: rate.effectiveFrom
+      }))
+    };
+    
+    const response = await apiRequest<void>('/pricing/gold-rates', {
       method: 'POST',
-      body: JSON.stringify({ goldRates }),
+      body: JSON.stringify(requestData),
     });
     
     if (!response.success) {
@@ -427,21 +484,20 @@ export const pricingApi = {
   },
 
   async getMakingCharges(): Promise<MakingCharges[]> {
-    const response = await apiRequest<any[]>('/Pricing/making-charges');
+    const response = await apiRequest<any[]>('/pricing/making-charges');
     
     if (response.success && response.data) {
-      // Map backend response to frontend interface
-      // Backend sends ProductCategory (enum), frontend expects productCategory (number)
+      // Map backend response to frontend camelCase (handling both PascalCase and camelCase)
       return response.data.map((charge: any) => ({
-        id: charge.id,
+        id: charge.id || charge.Id,
         name: charge.name || charge.Name,
-        productCategory: charge.productCategory || charge.ProductCategory,
+        productCategory: charge.productCategoryId || charge.ProductCategoryId,
         subCategory: charge.subCategory || charge.SubCategory,
-        chargeType: charge.chargeType || charge.ChargeType,
+        chargeType: charge.chargeTypeId || charge.ChargeTypeId,
         chargeValue: charge.chargeValue || charge.ChargeValue,
         effectiveFrom: charge.effectiveFrom || charge.EffectiveFrom,
         effectiveTo: charge.effectiveTo || charge.EffectiveTo,
-        isCurrent: charge.isCurrent !== undefined ? charge.isCurrent : charge.IsCurrent,
+        isCurrent: charge.isCurrent || charge.IsCurrent,
         createdAt: charge.createdAt || charge.CreatedAt,
         createdBy: charge.createdBy || charge.CreatedBy
       }));
@@ -459,9 +515,20 @@ export const pricingApi = {
     chargeValue: number;
     effectiveFrom: string;
   }): Promise<void> {
-    const response = await apiRequest<void>('/Pricing/making-charges', {
+    // Map frontend camelCase to backend PascalCase
+    const requestData = {
+      Id: charges.id,
+      Name: charges.name,
+      ProductCategoryId: charges.productCategory,
+      SubCategory: charges.subCategory,
+      ChargeTypeId: charges.chargeType,
+      ChargeValue: charges.chargeValue,
+      EffectiveFrom: charges.effectiveFrom
+    };
+
+    const response = await apiRequest<void>('/pricing/making-charges', {
       method: 'POST',
-      body: JSON.stringify(charges),
+      body: JSON.stringify(requestData),
     });
     
     if (!response.success) {
@@ -470,10 +537,24 @@ export const pricingApi = {
   },
 
   async getTaxConfigurations(): Promise<TaxConfigurationDto[]> {
-    const response = await apiRequest<TaxConfigurationDto[]>('/Pricing/taxes');
+    const response = await apiRequest<any[]>('/pricing/taxes');
     
     if (response.success && response.data) {
-      return response.data;
+      // Map backend response to frontend camelCase (handling both PascalCase and camelCase)
+      return response.data.map((tax: any) => ({
+        id: tax.id || tax.Id,
+        taxName: tax.taxName || tax.TaxName,
+        taxCode: tax.taxCode || tax.TaxCode,
+        taxType: tax.taxTypeId || tax.TaxTypeId,
+        taxRate: tax.taxRate || tax.TaxRate,
+        isMandatory: tax.isMandatory || tax.IsMandatory,
+        effectiveFrom: tax.effectiveFrom || tax.EffectiveFrom,
+        effectiveTo: tax.effectiveTo || tax.EffectiveTo,
+        isCurrent: tax.isCurrent || tax.IsCurrent,
+        displayOrder: tax.displayOrder || tax.DisplayOrder,
+        createdAt: tax.createdAt || tax.CreatedAt,
+        createdBy: tax.createdBy || tax.CreatedBy
+      }));
     }
     
     throw new Error(response.message || 'Failed to fetch tax configurations');
@@ -489,19 +570,19 @@ export const pricingApi = {
     effectiveFrom: string;
     displayOrder: number;
   }): Promise<void> {
-    // Transform the data to match the backend DTO structure
+    // Map frontend camelCase to backend PascalCase
     const requestData = {
-      id: taxConfig.id,
-      taxName: taxConfig.taxName,
-      taxCode: taxConfig.taxCode,
-      taxType: taxConfig.taxType, // This should be ChargeType enum value
-      taxRate: taxConfig.taxRate,
-      isMandatory: taxConfig.isMandatory,
-      effectiveFrom: taxConfig.effectiveFrom,
-      displayOrder: taxConfig.displayOrder
+      Id: taxConfig.id,
+      TaxName: taxConfig.taxName,
+      TaxCode: taxConfig.taxCode,
+      TaxTypeId: taxConfig.taxType, // This should be ChargeType enum value
+      TaxRate: taxConfig.taxRate,
+      IsMandatory: taxConfig.isMandatory,
+      EffectiveFrom: taxConfig.effectiveFrom,
+      DisplayOrder: taxConfig.displayOrder
     };
 
-    const response = await apiRequest<void>('/Pricing/taxes', {
+    const response = await apiRequest<void>('/pricing/taxes', {
       method: 'POST',
       body: JSON.stringify(requestData),
     });
@@ -514,55 +595,55 @@ export const pricingApi = {
 
 // User Management API interfaces
 export interface UserDto {
-  id: string;
-  userName: string;
-  fullName: string;
-  email: string;
-  employeeCode?: string;
-  roles: string[];
-  branchId?: number;
-  branchName?: string;
-  isActive: boolean;
-  createdAt: string;
-  lastLoginAt?: string;
-  emailConfirmed: boolean;
-  lockoutEnabled: boolean;
-  lockoutEnd?: string;
+  Id: string;
+  UserName: string;
+  FullName: string;
+  Email: string;
+  EmployeeCode?: string;
+  Roles: string[];
+  BranchId?: number;
+  BranchName?: string;
+  IsActive: boolean;
+  CreatedAt: string;
+  LastLoginAt?: string;
+  EmailConfirmed: boolean;
+  LockoutEnabled: boolean;
+  LockoutEnd?: string;
 }
 
 export interface CreateUserRequest {
-  userName: string;
-  fullName: string;
-  email: string;
-  employeeCode?: string;
-  password: string;
-  roles: string[];
-  branchId?: number;
-  isActive: boolean;
+  UserName: string;
+  FullName: string;
+  Email: string;
+  EmployeeCode?: string;
+  Password: string;
+  Roles: string[];
+  BranchId?: number;
+  IsActive: boolean;
 }
 
 export interface UpdateUserRequest {
-  id: string;
-  fullName: string;
-  email: string;
-  employeeCode?: string;
-  branchId?: number;
+  Id: string;
+  FullName: string;
+  Email: string;
+  EmployeeCode?: string;
+  BranchId?: number;
 }
 
 export interface UpdateUserRoleRequest {
-  userId: string;
-  roles: string[];
+  UserId: string;
+  Roles: string[];
 }
 
 export interface UpdateUserStatusRequest {
-  userId: string;
-  isActive: boolean;
-  reason?: string;
+  UserId: string;
+  IsActive: boolean;
+  Reason?: string;
 }
 
 export interface UserSearchRequest {
   searchTerm?: string;
-  role?: string;
+  Role?: string;
   branchId?: number;
   isActive?: boolean;
   isLocked?: boolean;
@@ -579,20 +660,20 @@ export interface UserActivityDto {
 }
 
 export interface UserActivityLogDto {
-  id: number;
-  timestamp: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  details: string;
-  branchName?: string;
-  ipAddress: string;
+  Id: number;
+  Timestamp: string;
+  Action: string;
+  EntityType: string;
+  EntityId: string;
+  Details: string;
+  BranchName?: string;
+  IpAddress: string;
 }
 
 export interface ResetPasswordRequest {
-  userId: string;
-  newPassword: string;
-  forcePasswordChange: boolean;
+  UserId: string;
+  NewPassword: string;
+  ForcePasswordChange: boolean;
 }
 
 export interface UserPermissionsDto {
@@ -662,7 +743,7 @@ export const usersApi = {
   async updateUser(id: string, user: UpdateUserRequest): Promise<void> {
     const response = await apiRequest(`/users/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ ...user, id }),
+      body: JSON.stringify(user),
     });
     
     if (!response.success) {
@@ -673,7 +754,7 @@ export const usersApi = {
   async updateUserRoles(id: string, request: UpdateUserRoleRequest): Promise<void> {
     const response = await apiRequest(`/users/${id}/roles`, {
       method: 'PUT',
-      body: JSON.stringify({ ...request, userId: id }),
+      body: JSON.stringify(request),
     });
     
     if (!response.success) {
@@ -684,7 +765,7 @@ export const usersApi = {
   async updateUserStatus(id: string, request: UpdateUserStatusRequest): Promise<void> {
     const response = await apiRequest(`/users/${id}/status`, {
       method: 'PUT',
-      body: JSON.stringify({ ...request, userId: id }),
+      body: JSON.stringify(request),
     });
     
     if (!response.success) {
@@ -718,7 +799,7 @@ export const usersApi = {
   async resetPassword(id: string, request: ResetPasswordRequest): Promise<void> {
     const response = await apiRequest(`/users/${id}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ ...request, userId: id }),
+      body: JSON.stringify(request),
     });
     
     if (!response.success) {
@@ -739,7 +820,7 @@ export const usersApi = {
   async updateUserPermissions(id: string, request: UpdateUserPermissionsRequest): Promise<void> {
     const response = await apiRequest(`/users/${id}/permissions`, {
       method: 'PUT',
-      body: JSON.stringify({ ...request, userId: id }),
+      body: JSON.stringify(request),
     });
     
     if (!response.success) {
@@ -1094,7 +1175,7 @@ export const inventoryApi = {
 // Cash Drawer API
 export const cashDrawerApi = {
   async openDrawer(branchId: number, openingBalance: number, date?: string, notes?: string): Promise<CashDrawerBalance> {
-    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/open', {
+    const response = await apiRequest<CashDrawerBalance>('/cashdrawer/open', {
       method: 'POST',
       body: JSON.stringify({
         branchId,
@@ -1112,7 +1193,7 @@ export const cashDrawerApi = {
   },
 
   async closeDrawer(branchId: number, actualClosingBalance: number, date?: string, notes?: string): Promise<CashDrawerBalance> {
-    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/close', {
+    const response = await apiRequest<CashDrawerBalance>('/cashdrawer/close', {
       method: 'POST',
       body: JSON.stringify({
         branchId,
@@ -1135,7 +1216,7 @@ export const cashDrawerApi = {
       date: date
     }).toString();
     
-    const response = await apiRequest<CashDrawerBalance>(`/CashDrawer/balance?${queryString}`);
+    const response = await apiRequest<CashDrawerBalance>(`/cashdrawer/balance?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -1150,7 +1231,7 @@ export const cashDrawerApi = {
       date: date
     }).toString();
     
-    const response = await apiRequest<number>(`/CashDrawer/opening-balance?${queryString}`);
+    const response = await apiRequest<number>(`/cashdrawer/opening-balance?${queryString}`);
     
     if (response.success && response.data !== undefined) {
       return response.data;
@@ -1165,7 +1246,7 @@ export const cashDrawerApi = {
       date: date
     }).toString();
     
-    const response = await apiRequest<boolean>(`/CashDrawer/is-open?${queryString}`);
+    const response = await apiRequest<boolean>(`/cashdrawer/is-open?${queryString}`);
     
     if (response.success && response.data !== undefined) {
       return response.data;
@@ -1181,7 +1262,7 @@ export const cashDrawerApi = {
       toDate
     }).toString();
     
-    const response = await apiRequest<CashDrawerBalance[]>(`/CashDrawer/balances?${queryString}`);
+    const response = await apiRequest<CashDrawerBalance[]>(`/cashdrawer/balances?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -1191,7 +1272,7 @@ export const cashDrawerApi = {
   },
 
   async settleShift(branchId: number, actualClosingBalance: number, settledAmount: number, date?: string, settlementNotes?: string, notes?: string): Promise<CashDrawerBalance> {
-    const response = await apiRequest<CashDrawerBalance>('/CashDrawer/settle-shift', {
+    const response = await apiRequest<CashDrawerBalance>('/cashdrawer/settle-shift', {
       method: 'POST',
       body: JSON.stringify({
         branchId,
@@ -1216,7 +1297,7 @@ export const cashDrawerApi = {
       ...(date && { date })
     }).toString();
     
-    const response = await apiRequest<CashDrawerBalance>(`/CashDrawer/refresh-balance?${queryString}`, {
+    const response = await apiRequest<CashDrawerBalance>(`/cashdrawer/refresh-balance?${queryString}`, {
       method: 'POST'
     });
     
@@ -1408,7 +1489,7 @@ export const reportsApi = {
   },
 
   async exportToExcel(request: ExportReportRequest): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/api/reports/export/excel`, {
+    const response = await fetch(`${API_BASE_URL}/reports/export/excel`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1439,7 +1520,7 @@ export const reportsApi = {
   },
 
   async exportToPdf(request: ExportReportRequest): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/api/reports/export/pdf`, {
+    const response = await fetch(`${API_BASE_URL}/reports/export/pdf`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1614,7 +1695,6 @@ export interface BranchSearchRequest {
 
 export interface BranchInventorySummaryDto {
   branchId: number;
-  branchName: string;
   branchCode: string;
   totalProducts: number;
   totalWeight: number;
@@ -1637,7 +1717,6 @@ export interface BranchInventoryItemDto {
 
 export interface BranchStaffDto {
   branchId: number;
-  branchName: string;
   staff: BranchStaffMemberDto[];
   totalStaffCount: number;
 }
@@ -1654,7 +1733,6 @@ export interface BranchStaffMemberDto {
 
 export interface BranchPerformanceDto {
   branchId: number;
-  branchName: string;
   branchCode: string;
   reportDate: string;
   dailySales: number;
@@ -1741,7 +1819,6 @@ export interface SupplierSearchRequest {
 
 export interface SupplierBalanceDto {
   supplierId: number;
-  supplierName: string;
   creditLimit: number;
   currentBalance: number;
   availableCredit: number;
@@ -1770,7 +1847,6 @@ export interface UpdateSupplierBalanceRequest {
 
 export interface SupplierProductsDto {
   supplierId: number;
-  supplierName: string;
   products: SupplierProductDto[];
   totalProductCount: number;
 }
@@ -1792,7 +1868,6 @@ export interface InventoryDto {
   productName: string;
   productCode: string;
   branchId: number;
-  branchName: string;
   quantityOnHand: number;
   weightOnHand: number;
   minimumStockLevel: number;
@@ -1856,7 +1931,6 @@ export interface InventoryMovementDto {
   productName: string;
   productCode: string;
   branchId: number;
-  branchName: string;
   movementType: string;
   referenceNumber?: string;
   quantityChange: number;
@@ -1884,7 +1958,6 @@ export interface ExportReportRequest {
 
 export interface DailySalesSummaryReport {
   branchId: number;
-  branchName: string;
   reportDate: string;
   totalSales: number;
   totalReturns: number;
@@ -1910,7 +1983,6 @@ export interface PaymentMethodBreakdown {
 export interface CashDrawerBalance {
   id: number;
   branchId: number;
-  branchName?: string;
   balanceDate: string;
   openingBalance: number;
   expectedClosingBalance: number;
@@ -1934,7 +2006,6 @@ export interface CashDrawerBalance {
 
 export interface CashReconciliationReport {
   branchId: number;
-  branchName: string;
   reportDate: string;
   openingBalance: number;
   cashSales: number;
@@ -1947,7 +2018,6 @@ export interface CashReconciliationReport {
 
 export interface InventoryMovementReport {
   branchId: number;
-  branchName: string;
   fromDate: string;
   toDate: string;
   movements: InventoryMovementSummary[];
@@ -1970,7 +2040,6 @@ export interface InventoryMovementSummary {
 
 export interface ProfitAnalysisReport {
   branchId?: number;
-  branchName?: string;
   fromDate: string;
   toDate: string;
   totalRevenue: number;
@@ -1993,7 +2062,6 @@ export interface ProductProfitAnalysis {
 
 export interface CustomerAnalysisReport {
   branchId?: number;
-  branchName?: string;
   fromDate: string;
   toDate: string;
   topCustomers: CustomerAnalysisSummary[];
@@ -2018,7 +2086,6 @@ export interface SupplierBalanceReport {
 
 export interface SupplierBalanceSummary {
   supplierId: number;
-  supplierName: string;
   currentBalance: number;
   overdueAmount: number;
   daysOverdue: number;
@@ -2027,7 +2094,6 @@ export interface SupplierBalanceSummary {
 
 export interface InventoryValuationReport {
   branchId?: number;
-  branchName?: string;
   asOfDate: string;
   items: InventoryValuationSummary[];
   totalInventoryValue: number;
@@ -2046,7 +2112,6 @@ export interface InventoryValuationSummary {
 
 export interface TaxReport {
   branchId?: number;
-  branchName?: string;
   fromDate: string;
   toDate: string;
   taxSummaries: TaxSummary[];
@@ -2063,7 +2128,6 @@ export interface TaxSummary {
 
 export interface TransactionLogReport {
   branchId: number;
-  branchName: string;
   reportDate: string;
   transactions: TransactionLogEntry[];
 }
@@ -2171,22 +2235,96 @@ export interface GenerateZplRequest {
 // Customer API interfaces
 export interface Customer {
   id: number;
-  customerNumber: string;
   fullName: string;
+  nationalId?: string;
   mobileNumber?: string;
   email?: string;
   address?: string;
-  city?: string;
-  dateOfBirth?: string;
-  anniversaryDate?: string;
+  registrationDate: string;
   loyaltyTier: number;
-  defaultDiscountPercentage?: number;
+  loyaltyPoints: number;
+  totalPurchaseAmount: number;
+  defaultDiscountPercentage: number;
   makingChargesWaived: boolean;
-  totalPurchases: number;
-  lastPurchaseDate?: string;
-  customerSince: string;
-  isActive: boolean;
   notes?: string;
+  lastPurchaseDate?: string;
+  totalOrders: number;
+  createdAt: string;
+  isActive: boolean;
+}
+
+export interface CreateCustomerRequest {
+  fullName: string;
+  nationalId?: string;
+  mobileNumber?: string;
+  email?: string;
+  address?: string;
+  loyaltyTier: number;
+  defaultDiscountPercentage: number;
+  makingChargesWaived: boolean;
+  notes?: string;
+}
+
+export interface UpdateCustomerRequest {
+  id: number;
+  fullName: string;
+  nationalId?: string;
+  mobileNumber?: string;
+  email?: string;
+  address?: string;
+  loyaltyTier: number;
+  defaultDiscountPercentage: number;
+  makingChargesWaived: boolean;
+  notes?: string;
+}
+
+export interface CustomerSearchRequest {
+  searchTerm?: string;
+  nationalId?: string;
+  mobileNumber?: string;
+  email?: string;
+  loyaltyTier?: number;
+  isActive?: boolean;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface CustomerOrderDto {
+  orderId: number;
+  orderNumber: string;
+  orderDate: string;
+  orderType: string;
+  totalAmount: number;
+  cashierName: string;
+}
+
+export interface CustomerOrdersHistoryDto {
+  customerId: number;
+  customerName: string;
+  orders: CustomerOrderDto[];
+  totalAmount: number;
+  totalOrderCount: number;
+}
+
+export interface CustomerLoyaltyDto {
+  customerId: number;
+  customerName: string;
+  currentTier: number;
+  currentPoints: number;
+  pointsToNextTier: number;
+  totalPurchaseAmount: number;
+  defaultDiscountPercentage: number;
+  makingChargesWaived: boolean;
+  lastPurchaseDate?: string;
+  totalOrders: number;
+}
+
+export interface UpdateCustomerLoyaltyRequest {
+  customerId: number;
+  loyaltyTier: number;
+  loyaltyPoints: number;
+  defaultDiscountPercentage: number;
+  makingChargesWaived: boolean;
 }
 
 // Financial Transactions API interfaces (New Architecture)
@@ -2226,7 +2364,6 @@ export interface FinancialTransaction {
   transactionType: 'Sale' | 'Return' | 'Repair';
   transactionDate: string;
   branchId: number;
-  branchName: string;
   branchCode?: string;
   customerId?: number;
   customerName?: string;
@@ -2241,7 +2378,8 @@ export interface FinancialTransaction {
     id: number;
     orderNumber: string;
     orderDate: string;
-    orderType: string;
+    orderTypeId: number;
+    orderType?: OrderTypeLookupDto;
     items: OrderItem[];
   };
   subtotal: number;
@@ -2282,7 +2420,8 @@ export interface Transaction extends Omit<FinancialTransactionDto, 'order'> {
     id: number;
     orderNumber: string;
     orderDate: string;
-    orderType: string;
+    orderTypeId: number;
+    orderType?: OrderTypeLookupDto;
     items: OrderItem[];
   };
 }
@@ -2292,14 +2431,16 @@ export interface OrderDto {
   id: number;
   orderNumber: string;
   orderDate: string;
-  orderType: string;
+  orderTypeId: number;
+  orderType?: OrderTypeLookupDto;
+  orderTypeDescription: string;
   branchId: number;
-  branchName: string;
   customerId?: number;
   customerName?: string;
   cashierId: string;
   cashierName: string;
-  status: number;
+  statusId: number;
+  status?: OrderStatusLookupDto;
   statusDescription: string;
   notes?: string;
   estimatedCompletionDate?: string;
@@ -2361,30 +2502,19 @@ export function convertFinancialTransactionDtoToTransaction(dto: FinancialTransa
   return {
     ...dto,
     items: convertOrderItemDtosToOrderItems(dto.order?.items || []),
-    cashierName: dto.processedByName,
+    cashierName: dto.processedByUserName,
     order: dto.order ? {
       id: dto.order.id,
       orderNumber: dto.order.orderNumber,
       orderDate: dto.order.orderDate,
+      orderTypeId: dto.order.orderTypeId,
       orderType: dto.order.orderType,
       items: convertOrderItemDtosToOrderItems(dto.order.items)
     } : undefined
   };
 }
 
-// Helper function to map transaction type ID to string
-export function mapTransactionTypeIdToString(transactionTypeId: number): 'Sale' | 'Return' | 'Repair' {
-  switch (transactionTypeId) {
-    case LookupTableConstants.FinancialTransactionTypeSale:
-      return 'Sale';
-    case LookupTableConstants.FinancialTransactionTypeReturn:
-      return 'Return';
-    case LookupTableConstants.FinancialTransactionTypeRepair:
-      return 'Repair';
-    default:
-      return 'Sale';
-  }
-}
+
 
 export interface CreateSaleOrderRequestDto {
   branchId: number;
@@ -2412,7 +2542,7 @@ export interface CreateRepairOrderRequestDto {
   amountPaid: number;
   paymentMethodId: number;
   estimatedCompletionDate?: string;
-  priority: number; // RepairPriority enum value
+  priorityId: number; // RepairPriority enum value
   assignedTechnicianId?: number;
   technicianNotes?: string;
 }
@@ -2420,24 +2550,17 @@ export interface CreateRepairOrderRequestDto {
 export interface FinancialTransactionDto {
   id: number;
   transactionNumber: string;
-  transactionTypeId: number;
-  transactionType: string;
   transactionDate: string;
   branchId: number;
-  branchName: string;
-  customerId?: number;
-  customerName?: string;
+  transactionTypeId: number;
+  transactionType?: FinancialTransactionTypeLookupDto;
+  transactionTypeDescription: string;
+  businessEntityId?: number;
+  businessEntityType?: BusinessEntityTypeLookupDto;
   processedByUserId: string;
-  processedByName: string;
-  processedByUserName?: string;
+  processedByUserName: string;
   approvedByUserId?: string;
   approvedByUserName?: string;
-  businessEntityId?: number;
-  businessEntityType?: string;
-  orderId?: number;
-  order?: OrderDto;
-  repairJobId?: number;
-  repairJob?: RepairJobDto;
   subtotal: number;
   totalTaxAmount: number;
   totalDiscountAmount: number;
@@ -2445,21 +2568,26 @@ export interface FinancialTransactionDto {
   amountPaid: number;
   changeGiven: number;
   paymentMethodId: number;
-  paymentMethod: string;
+  paymentMethod?: PaymentMethodLookupDto;
   paymentMethodDescription: string;
   statusId: number;
-  status: string;
+  status?: FinancialTransactionStatusLookupDto;
   statusDescription: string;
-  statusDisplayName?: string;
   originalTransactionId?: number;
   reversalReason?: string;
+  notes?: string;
   receiptPrinted: boolean;
   generalLedgerPosted: boolean;
-  notes?: string;
   createdAt: string;
   updatedAt?: string;
+  // Additional fields for UI compatibility
+  customerId?: number;
+  customerName?: string;
+  orderId?: number;
+  order?: OrderDto;
+  repairJobId?: number;
+  repairJob?: RepairJobDto;
   taxes?: FinancialTransactionTax[];
-  // Legacy compatibility fields for UI
   totalMakingCharges?: number;
   discountAmount?: number;
   repairDescription?: string;
@@ -2471,9 +2599,11 @@ export interface RepairJobDto {
   id: number;
   financialTransactionId?: number;
   financialTransactionNumber?: string;
-  status: number; // RepairStatus enum value
+  statusId: number; // RepairStatus enum value
+  status?: RepairStatusLookupDto;
   statusDisplayName: string;
-  priority: number; // RepairPriority enum value
+  priorityId: number; // RepairPriority enum value
+  priority?: RepairPriorityLookupDto;
   priorityDisplayName: string;
   assignedTechnicianId?: number;
   assignedTechnicianName?: string;
@@ -2501,13 +2631,39 @@ export interface RepairJobDto {
   customerName?: string;
   customerPhone?: string;
   branchId: number;
-  branchName: string;
 }
 
 export interface RepairOrderResultDto {
   order?: OrderDto;
   financialTransaction?: FinancialTransactionDto;
   repairJob?: RepairJobDto;
+}
+
+export interface UpdateOrderRequestDto {
+  statusId: number;
+  notes?: string;
+  estimatedCompletionDate?: string;
+  returnReason?: string;
+}
+
+export interface OrderSummaryDto {
+  totalOrders: number;
+  totalValue: number;
+  orderTypeCounts: { [key: number]: number };
+  statusCounts: { [key: number]: number };
+}
+
+export interface OrderSearchRequestDto {
+  branchId?: number;
+  orderTypeId?: number;
+  statusId?: number;
+  fromDate?: string;
+  toDate?: string;
+  orderNumber?: string;
+  customerId?: number;
+  cashierId?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export const ordersApi = {
@@ -2547,18 +2703,21 @@ export const ordersApi = {
     throw new Error(response.message || 'Failed to fetch order');
   },
 
-  async searchOrders(params: {
-    branchId?: number;
-    orderTypeId?: number;
-    statusId?: number;
-    fromDate?: string;
-    toDate?: string;
-    orderNumber?: string;
-    customerId?: number;
-    cashierId?: string;
-    page?: number;
-    pageSize?: number;
-  } = {}): Promise<{
+  async getOrderByNumber(orderNumber: string, branchId: number): Promise<OrderDto> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString()
+    }).toString();
+    
+    const response = await apiRequest<OrderDto>(`/orders/number/${orderNumber}?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch order by number');
+  },
+
+  async searchOrders(params: OrderSearchRequestDto = {}): Promise<{
     items: OrderDto[];
     totalCount: number;
     page: number;
@@ -2590,14 +2749,14 @@ export const ordersApi = {
     branchId?: number;
     fromDate?: string;
     toDate?: string;
-  } = {}): Promise<any> {
+  } = {}): Promise<OrderSummaryDto> {
     const queryString = new URLSearchParams(
       Object.entries(params)
         .filter(([_, value]) => value !== undefined)
         .map(([key, value]) => [key, String(value)])
     ).toString();
     
-    const response = await apiRequest<any>(`/orders/summary?${queryString}`);
+    const response = await apiRequest<OrderSummaryDto>(`/orders/summary?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -2644,7 +2803,7 @@ export const ordersApi = {
     throw new Error(response.message || 'Failed to get cashier orders');
   },
 
-  async updateOrder(id: number, request: any): Promise<OrderDto> {
+  async updateOrder(id: number, request: UpdateOrderRequestDto): Promise<OrderDto> {
     const response = await apiRequest<OrderDto>(`/orders/${id}`, {
       method: 'PUT',
       body: JSON.stringify(request),
@@ -2658,7 +2817,64 @@ export const ordersApi = {
   }
 };
 
+// Financial Transaction API interfaces
+export interface CreateFinancialTransactionRequestDto {
+  branchId: number;
+  transactionTypeId: number;
+  businessEntityId?: number;
+  businessEntityTypeId: number;
+  subtotal: number;
+  totalTaxAmount: number;
+  totalDiscountAmount: number;
+  totalAmount: number;
+  amountPaid: number;
+  changeGiven: number;
+  paymentMethodId: number;
+  notes?: string;
+  approvedByUserId?: string;
+}
+
+export interface FinancialTransactionSearchRequestDto {
+  branchId?: number;
+  transactionTypeId?: number;
+  statusId?: number;
+  fromDate?: string;
+  toDate?: string;
+  transactionNumber?: string;
+  processedByUserId?: string;
+  businessEntityId?: number;
+  businessEntityTypeId?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface FinancialTransactionSummaryDto {
+  totalTransactions: number;
+  totalAmount: number;
+  totalTaxAmount: number;
+  totalDiscountAmount: number;
+  transactionTypeCounts: { [key: number]: number };
+  statusCounts: { [key: number]: number };
+}
+
+export interface VoidFinancialTransactionRequestDto {
+  reason: string;
+}
+
 export const financialTransactionsApi = {
+  async createFinancialTransaction(request: CreateFinancialTransactionRequestDto): Promise<FinancialTransactionDto> {
+    const response = await apiRequest<FinancialTransactionDto>('/financialtransactions', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to create financial transaction');
+  },
+
   async getFinancialTransaction(id: number): Promise<FinancialTransactionDto> {
     const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}`);
     
@@ -2669,21 +2885,26 @@ export const financialTransactionsApi = {
     throw new Error(response.message || 'Failed to fetch financial transaction');
   },
 
-  async searchFinancialTransactions(params: {
-    branchId?: number;
-    transactionNumber?: string;
-    transactionTypeId?: number;
-    statusId?: number;
-    customerId?: number;
-    fromDate?: string;
-    toDate?: string;
-    pageNumber?: number;
-    pageSize?: number;
-  } = {}): Promise<{
+  async getFinancialTransactionByNumber(transactionNumber: string, branchId: number): Promise<FinancialTransactionDto> {
+    const queryString = new URLSearchParams({
+      branchId: branchId.toString()
+    }).toString();
+    
+    const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/number/${transactionNumber}?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch financial transaction by number');
+  },
+
+  async searchFinancialTransactions(params: FinancialTransactionSearchRequestDto = {}): Promise<{
     items: FinancialTransactionDto[];
     totalCount: number;
-    pageNumber: number;
+    page: number;
     pageSize: number;
+    totalPages: number;
   }> {
     const queryString = new URLSearchParams(
       Object.entries(params)
@@ -2694,8 +2915,9 @@ export const financialTransactionsApi = {
     const response = await apiRequest<{
       items: FinancialTransactionDto[];
       totalCount: number;
-      pageNumber: number;
+      page: number;
       pageSize: number;
+      totalPages: number;
     }>(`/financialtransactions/search?${queryString}`);
     
     if (response.success && response.data) {
@@ -2705,10 +2927,30 @@ export const financialTransactionsApi = {
     throw new Error(response.message || 'Failed to search financial transactions');
   },
 
-  async voidFinancialTransaction(id: number, reason: string): Promise<FinancialTransactionDto> {
+  async getFinancialTransactionSummary(params: {
+    branchId?: number;
+    fromDate?: string;
+    toDate?: string;
+  } = {}): Promise<FinancialTransactionSummaryDto> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<FinancialTransactionSummaryDto>(`/financialtransactions/summary?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get financial transaction summary');
+  },
+
+  async voidFinancialTransaction(id: number, request: VoidFinancialTransactionRequestDto): Promise<FinancialTransactionDto> {
     const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}/void`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify(request),
     });
     
     if (response.success && response.data) {
@@ -2728,6 +2970,18 @@ export const financialTransactionsApi = {
     }
     
     throw new Error(response.message || 'Failed to mark receipt as printed');
+  },
+
+  async markGeneralLedgerPosted(id: number): Promise<boolean> {
+    const response = await apiRequest<boolean>(`/financialtransactions/${id}/mark-gl-posted`, {
+      method: 'POST',
+    });
+    
+    if (response.success) {
+      return true;
+    }
+    
+    throw new Error(response.message || 'Failed to mark general ledger as posted');
   },
 
   async generateBrowserReceipt(transactionId: number): Promise<{
@@ -2761,6 +3015,19 @@ export const financialTransactionsApi = {
     }
     
     throw new Error(response.message || 'Failed to generate browser receipt');
+  },
+
+  async debugCalculation(request: any): Promise<any> {
+    const response = await apiRequest<any>('/financialtransactions/debug-calculation', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to debug calculation');
   }
 };
 
@@ -2779,9 +3046,7 @@ export interface ProductOwnershipDto {
   productName: string;
   productCode: string;
   branchId: number;
-  branchName: string;
   supplierId?: number;
-  supplierName?: string;
   purchaseOrderId?: number;
   purchaseOrderNumber?: string;
   customerPurchaseId?: number;
@@ -2858,7 +3123,6 @@ export interface OwnershipAlertDto {
   productId: number;
   productName: string;
   supplierId?: number;
-  supplierName?: string;
   ownershipPercentage: number;
   outstandingAmount: number;
   createdAt: string;
@@ -2905,19 +3169,19 @@ export interface ConvertRawGoldResponse {
 // Missing interfaces for Repair Jobs and Technicians
 export interface CreateRepairJobRequestDto {
   financialTransactionId: number;
-  priority: number; // RepairPriority enum value
+  priorityId: number; // RepairPriority enum value
   assignedTechnicianId?: number;
   technicianNotes?: string;
 }
 
 export interface UpdateRepairJobStatusRequestDto {
-  status: number; // RepairStatus enum value
+  statusId: number; // RepairStatus enum value
   technicianNotes?: string;
   actualCost?: number;
   materialsUsed?: string;
   hoursSpent?: number;
   additionalPaymentAmount?: number;
-  paymentMethod?: number; // PaymentMethod enum value
+  paymentMethodId?: number; // PaymentMethod enum value
 }
 
 export interface AssignTechnicianRequestDto {
@@ -2931,20 +3195,24 @@ export interface CompleteRepairRequestDto {
   materialsUsed?: string;
   hoursSpent?: number;
   additionalPaymentAmount?: number;
-  paymentMethod?: number; // PaymentMethod enum value
+  paymentMethodId?: number; // PaymentMethod enum value
 }
 
 export interface DeliverRepairRequestDto {
   deliveryNotes?: string;
   customerNotified?: boolean;
   additionalPaymentAmount?: number;
-  paymentMethod?: number; // PaymentMethod enum value
+  paymentMethodId?: number; // PaymentMethod enum value
+}
+
+export interface CancelRepairRequestDto {
+  reason: string;
 }
 
 export interface RepairJobSearchRequestDto {
   branchId?: number;
-  status?: number; // RepairStatus enum value
-  priority?: number; // RepairPriority enum value
+  statusId?: number; // RepairStatus enum value
+  priorityId?: number; // RepairPriority enum value
   assignedTechnicianId?: number;
   customerId?: number;
   transactionNumber?: string;
@@ -2976,7 +3244,6 @@ export interface TechnicianDto {
   specialization?: string;
   isActive: boolean;
   branchId: number;
-  branchName?: string;
   createdAt: string;
   createdBy: string;
   createdByName: string;
@@ -3007,65 +3274,18 @@ export interface TechnicianSearchRequestDto {
   pageSize?: number;
 }
 
-// Legacy transaction interfaces for backward compatibility
-export interface SaleRequest {
-  branchId: number;
-  customerId?: number;
-  items: Array<{
-    productId: number;
-    quantity: number;
-    customDiscountPercentage?: number;
-  }>;
-  amountPaid: number;
-  paymentMethod: number; // PaymentMethod enum value (1 for Cash)
-}
 
-export interface RepairRequest {
-  branchId: number;
-  customerId?: number;
-  repairDescription: string;
-  repairAmount: number;
-  estimatedCompletionDate?: string;
-  amountPaid: number;
-  paymentMethod: number; // PaymentMethod enum value (1 for Cash)
-}
 
-export interface ReturnRequest {
-  originalTransactionId: number;
-  returnReason: string;
-  returnAmount: number;
-  items: Array<{
-    originalTransactionItemId: number;
-    returnQuantity: number;
-  }>;
-}
-
-// Missing APIs
+// Customers API
 export const customersApi = {
-  async getCustomers(params: {
-    searchTerm?: string;
-    mobileNumber?: string;
-    email?: string;
-    pageNumber?: number;
-    pageSize?: number;
-  } = {}): Promise<{
-    items: Customer[];
-    totalCount: number;
-    pageNumber: number;
-    pageSize: number;
-  }> {
+  async getCustomers(params: CustomerSearchRequest = {}): Promise<PagedResult<Customer>> {
     const queryString = new URLSearchParams(
       Object.entries(params)
         .filter(([_, value]) => value !== undefined)
         .map(([key, value]) => [key, String(value)])
     ).toString();
     
-    const response = await apiRequest<{
-      items: Customer[];
-      totalCount: number;
-      pageNumber: number;
-      pageSize: number;
-    }>(`/customers?${queryString}`);
+    const response = await apiRequest<PagedResult<Customer>>(`/customers?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -3084,7 +3304,7 @@ export const customersApi = {
     throw new Error(response.message || 'Failed to fetch customer');
   },
 
-  async createCustomer(customer: Omit<Customer, 'id' | 'customerNumber' | 'customerSince' | 'totalPurchases' | 'lastPurchaseDate'>): Promise<Customer> {
+  async createCustomer(customer: CreateCustomerRequest): Promise<Customer> {
     const response = await apiRequest<Customer>('/customers', {
       method: 'POST',
       body: JSON.stringify(customer),
@@ -3097,7 +3317,7 @@ export const customersApi = {
     throw new Error(response.message || 'Failed to create customer');
   },
 
-  async updateCustomer(id: number, customer: Partial<Omit<Customer, 'id' | 'customerNumber' | 'customerSince' | 'totalPurchases' | 'lastPurchaseDate'>>): Promise<Customer> {
+  async updateCustomer(id: number, customer: UpdateCustomerRequest): Promise<Customer> {
     const response = await apiRequest<Customer>(`/customers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(customer),
@@ -3108,22 +3328,84 @@ export const customersApi = {
     }
     
     throw new Error(response.message || 'Failed to update customer');
-  }
-};
+  },
 
-export const lookupsApi = {
-  async getAllLookups(): Promise<ApiLookupsResponse> {
-    const response = await apiRequest<ApiLookupsResponse>('/lookups');
+  async deleteCustomer(id: number): Promise<void> {
+    const response = await apiRequest(`/customers/${id}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to delete customer');
+    }
+  },
+
+  async getCustomerOrders(id: number, params: {
+    fromDate?: string;
+    toDate?: string;
+  } = {}): Promise<CustomerOrdersHistoryDto> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<CustomerOrdersHistoryDto>(`/customers/${id}/Orders?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
     }
     
-    throw new Error(response.message || 'Failed to fetch lookup data');
+    throw new Error(response.message || 'Failed to fetch customer orders');
   },
 
-  async getTransactionTypes(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/transaction-types');
+  async getCustomerLoyalty(id: number): Promise<CustomerLoyaltyDto> {
+    const response = await apiRequest<CustomerLoyaltyDto>(`/customers/${id}/loyalty`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch customer loyalty');
+  },
+
+  async updateCustomerLoyalty(id: number, request: UpdateCustomerLoyaltyRequest): Promise<CustomerLoyaltyDto> {
+    const response = await apiRequest<CustomerLoyaltyDto>(`/customers/${id}/loyalty`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update customer loyalty');
+  },
+
+  async searchCustomers(params: {
+    searchTerm: string;
+    limit?: number;
+  }): Promise<Customer[]> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const response = await apiRequest<Customer[]>(`/customers/search?${queryString}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to search customers');
+  }
+};
+
+export const lookupsApi = {
+
+  async getTransactionTypes(): Promise<FinancialTransactionTypeLookupDto[]> {
+    const response = await apiRequest<FinancialTransactionTypeLookupDto[]>('/lookups/transaction-types');
     
     if (response.success && response.data) {
       return response.data;
@@ -3132,8 +3414,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch transaction types');
   },
 
-  async getPaymentMethods(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/payment-methods');
+  async getPaymentMethods(): Promise<PaymentMethodLookupDto[]> {
+    const response = await apiRequest<PaymentMethodLookupDto[]>('/lookups/payment-methods');
     
     if (response.success && response.data) {
       return response.data;
@@ -3142,8 +3424,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch payment methods');
   },
 
-  async getTransactionStatuses(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/transaction-statuses');
+  async getTransactionStatuses(): Promise<FinancialTransactionStatusLookupDto[]> {
+    const response = await apiRequest<FinancialTransactionStatusLookupDto[]>('/lookups/transaction-statuses');
     
     if (response.success && response.data) {
       return response.data;
@@ -3152,8 +3434,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch transaction statuses');
   },
 
-  async getKaratTypes(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/karat-types');
+  async getKaratTypes(): Promise<KaratTypeLookupDto[]> {
+    const response = await apiRequest<KaratTypeLookupDto[]>('/lookups/karat-types');
     
     if (response.success && response.data) {
       return response.data;
@@ -3162,8 +3444,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch karat types');
   },
 
-  async getProductCategoryTypes(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/product-category-types');
+  async getProductCategoryTypes(): Promise<ProductCategoryTypeLookupDto[]> {
+    const response = await apiRequest<ProductCategoryTypeLookupDto[]>('/lookups/product-category-types');
     
     if (response.success && response.data) {
       return response.data;
@@ -3172,8 +3454,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch product category types');
   },
 
-  async getChargeTypes(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/charge-types');
+  async getChargeTypes(): Promise<ChargeTypeLookupDto[]> {
+    const response = await apiRequest<ChargeTypeLookupDto[]>('/lookups/charge-types');
     
     if (response.success && response.data) {
       return response.data;
@@ -3182,8 +3464,8 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch charge types');
   },
 
-  async getRepairStatuses(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/repair-statuses');
+  async getRepairStatuses(): Promise<RepairStatusLookupDto[]> {
+    const response = await apiRequest<RepairStatusLookupDto[]>('/lookups/repair-statuses');
     
     if (response.success && response.data) {
       return response.data;
@@ -3192,14 +3474,54 @@ export const lookupsApi = {
     throw new Error(response.message || 'Failed to fetch repair statuses');
   },
 
-  async getRepairPriorities(): Promise<EnumLookupDto[]> {
-    const response = await apiRequest<EnumLookupDto[]>('/lookups/repair-priorities');
+  async getRepairPriorities(): Promise<RepairPriorityLookupDto[]> {
+    const response = await apiRequest<RepairPriorityLookupDto[]>('/lookups/repair-priorities');
     
     if (response.success && response.data) {
       return response.data;
     }
     
     throw new Error(response.message || 'Failed to fetch repair priorities');
+  },
+
+  async getOrderTypes(): Promise<OrderTypeLookupDto[]> {
+    const response = await apiRequest<OrderTypeLookupDto[]>('/lookups/order-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch order types');
+  },
+
+  async getOrderStatuses(): Promise<OrderStatusLookupDto[]> {
+    const response = await apiRequest<OrderStatusLookupDto[]>('/lookups/order-statuses');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch order statuses');
+  },
+
+  async getBusinessEntityTypes(): Promise<BusinessEntityTypeLookupDto[]> {
+    const response = await apiRequest<BusinessEntityTypeLookupDto[]>('/lookups/business-entity-types');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch business entity types');
+  },
+
+  async getSubCategories(categoryId: number): Promise<SubCategoryLookupDto[]> {
+    const response = await apiRequest<SubCategoryLookupDto[]>(`/lookups/sub-categories/${categoryId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch sub-categories');
   },
 
   async getTaxConfigurations(): Promise<TaxConfigurationDto[]> {
@@ -3301,10 +3623,10 @@ export const repairJobsApi = {
     }
   },
 
-  async cancelRepair(id: number, reason: string): Promise<void> {
+  async cancelRepair(id: number, request: CancelRepairRequestDto): Promise<void> {
     const response = await apiRequest(`/repairjobs/${id}/cancel`, {
       method: 'PUT',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify(request),
     });
     
     if (!response.success) {
@@ -3368,12 +3690,12 @@ export const repairJobsApi = {
     throw new Error(response.message || 'Failed to fetch repair job statistics');
   },
 
-  async getRepairJobsByStatus(status: string, branchId?: number): Promise<RepairJobDto[]> {
+  async getRepairJobsByStatus(statusId: number, branchId?: number): Promise<RepairJobDto[]> {
     const queryString = branchId 
       ? new URLSearchParams({ branchId: branchId.toString() }).toString()
       : '';
     
-    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/by-status/${status}${queryString ? `?${queryString}` : ''}`);
+    const response = await apiRequest<RepairJobDto[]>(`/repairjobs/by-status/${statusId}${queryString ? `?${queryString}` : ''}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -3485,12 +3807,19 @@ export const techniciansApi = {
     const response = await apiRequest<{
       items: TechnicianDto[];
       totalCount: number;
-      pageNumber: number;
+      page: number;
       pageSize: number;
+      totalPages: number;
     }>(`/technicians/search?${queryString}`);
     
     if (response.success && response.data) {
-      return response.data;
+      // Map backend response to frontend expected format
+      return {
+        items: response.data.items,
+        totalCount: response.data.totalCount,
+        pageNumber: response.data.page,
+        pageSize: response.data.pageSize
+      };
     }
     
     throw new Error(response.message || 'Failed to search technicians');
@@ -3511,7 +3840,7 @@ export const techniciansApi = {
   },
 
   async getTechniciansByBranch(branchId: number): Promise<TechnicianDto[]> {
-    const response = await apiRequest<TechnicianDto[]>(`/technicians/branch/${branchId}`);
+    const response = await apiRequest<TechnicianDto[]>(`/technicians/by-branch/${branchId}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -3524,301 +3853,7 @@ export const techniciansApi = {
 // Helper functions for data conversion between FinancialTransactionDto and Transaction
 // Note: These functions already exist above, so we're just adding the missing ones here
 
-// Legacy Transactions API (for backward compatibility)
-export const transactionsApi = {
-  async processSale(sale: SaleRequest): Promise<Transaction> {
-    // Convert to new Order API call
-    const orderRequest = {
-      branchId: sale.branchId,
-      customerId: sale.customerId,
-      items: sale.items,
-      amountPaid: sale.amountPaid,
-      paymentMethodId: sale.paymentMethod
-    };
-    
-    const response = await apiRequest<OrderDto>('/orders/sale', {
-      method: 'POST',
-      body: JSON.stringify(orderRequest),
-    });
-    
-    if (response.success && response.data) {
-      // For backward compatibility, we need to return a Transaction
-      // Since the new API returns OrderDto, we'll create a minimal Transaction
-      const transaction: Transaction = {
-        id: response.data.id,
-        transactionNumber: response.data.orderNumber,
-        transactionTypeId: 1, // Sale
-        transactionType: 'Sale',
-        transactionDate: response.data.orderDate,
-        branchId: response.data.branchId,
-        branchName: response.data.branchName,
-        customerId: response.data.customerId,
-        customerName: response.data.customerName,
-        processedByUserId: response.data.cashierId,
-        processedByName: response.data.cashierName,
-        orderId: response.data.id,
-        order: {
-          id: response.data.id,
-          orderNumber: response.data.orderNumber,
-          orderDate: response.data.orderDate,
-          orderType: response.data.orderType,
-          items: response.data.items.map(item => ({
-            id: item.id,
-            orderId: item.orderId,
-            productId: item.productId,
-            productName: item.productName,
-            productCode: item.productCode,
-            karatType: item.karatType || '',
-            quantity: item.quantity,
-            unitWeight: item.weight || 0,
-            totalWeight: (item.weight || 0) * item.quantity,
-            goldRatePerGram: item.unitPrice / (item.weight || 1),
-            unitPrice: item.unitPrice,
-            makingChargesAmount: item.makingCharges,
-            discountPercentage: item.discountPercentage,
-            discountAmount: item.discountAmount,
-            lineTotal: item.totalAmount || item.finalPrice
-          }))
-        },
-        subtotal: response.data.items.reduce((sum, item) => sum + (item.totalAmount || item.finalPrice), 0),
-        totalMakingCharges: response.data.items.reduce((sum, item) => sum + (item.makingCharges || 0), 0),
-        totalTaxAmount: 0, // Will be calculated by backend
-        discountAmount: response.data.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
-        totalAmount: response.data.items.reduce((sum, item) => sum + (item.totalAmount || item.finalPrice), 0),
-        amountPaid: 0, // Will be set by backend
-        changeGiven: 0, // Will be calculated by backend
-        paymentMethodId: 1, // Default to Cash
-        paymentMethod: 'Cash',
-        paymentMethodDescription: 'Cash',
-        statusId: 1, // Completed
-        status: 'Completed',
-        statusDisplayName: 'Completed',
-        statusDescription: 'Completed',
-        receiptPrinted: false,
-        generalLedgerPosted: false,
-        createdAt: response.data.createdAt,
-        totalDiscountAmount: response.data.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
-        items: response.data.items.map(item => ({
-          id: item.id,
-          orderId: item.orderId,
-          productId: item.productId,
-          productName: item.productName,
-          productCode: item.productCode,
-          karatType: item.karatType || '',
-          quantity: item.quantity,
-          unitWeight: item.weight || 0,
-          totalWeight: (item.weight || 0) * item.quantity,
-          goldRatePerGram: item.unitPrice / (item.weight || 1),
-          unitPrice: item.unitPrice,
-          makingChargesAmount: item.makingCharges,
-          discountPercentage: item.discountPercentage,
-          discountAmount: item.discountAmount,
-          lineTotal: item.totalAmount || item.finalPrice
-        })),
-        cashierName: response.data.cashierName
-      };
-      return transaction;
-    }
-    
-    throw new Error(response.message || 'Failed to process sale');
-  },
 
-  async processRepair(repair: RepairRequest): Promise<Transaction> {
-    // Convert to new Order API call
-    const orderRequest = {
-      branchId: repair.branchId,
-      customerId: repair.customerId,
-      repairDescription: repair.repairDescription,
-      repairAmount: repair.repairAmount,
-      estimatedCompletionDate: repair.estimatedCompletionDate,
-      amountPaid: repair.amountPaid,
-      paymentMethodId: repair.paymentMethod
-    };
-    
-    const response = await apiRequest<RepairOrderResultDto>('/orders/repair', {
-      method: 'POST',
-      body: JSON.stringify(orderRequest),
-    });
-    
-    if (response.success && response.data) {
-      // For backward compatibility, create a Transaction from the repair result
-      const transaction: Transaction = {
-        id: response.data.financialTransaction?.id || 0,
-        transactionNumber: response.data.financialTransaction?.transactionNumber || '',
-        transactionTypeId: 3, // Repair
-        transactionType: 'Repair',
-        transactionDate: response.data.financialTransaction?.transactionDate || new Date().toISOString(),
-        branchId: response.data.order?.branchId || 0,
-        branchName: response.data.order?.branchName || '',
-        customerId: response.data.order?.customerId,
-        customerName: response.data.order?.customerName,
-        processedByUserId: response.data.financialTransaction?.processedByUserId || '',
-        processedByName: response.data.financialTransaction?.processedByName || '',
-        orderId: response.data.order?.id,
-        order: response.data.order ? {
-          id: response.data.order.id,
-          orderNumber: response.data.order.orderNumber,
-          orderDate: response.data.order.orderDate,
-          orderType: response.data.order.orderType,
-          items: convertOrderItemDtosToOrderItems(response.data.order.items || [])
-        } : undefined,
-        subtotal: response.data.financialTransaction?.subtotal || 0,
-        totalMakingCharges: response.data.financialTransaction?.totalMakingCharges || 0,
-        totalTaxAmount: response.data.financialTransaction?.totalTaxAmount || 0,
-        discountAmount: response.data.financialTransaction?.discountAmount || 0,
-        totalAmount: response.data.financialTransaction?.totalAmount || 0,
-        amountPaid: response.data.financialTransaction?.amountPaid || 0,
-        changeGiven: response.data.financialTransaction?.changeGiven || 0,
-        paymentMethodId: response.data.financialTransaction?.paymentMethodId || 1,
-        paymentMethod: response.data.financialTransaction?.paymentMethod || 'Cash',
-        paymentMethodDescription: response.data.financialTransaction?.paymentMethodDescription || 'Cash',
-        statusId: response.data.financialTransaction?.statusId || 1,
-        status: (response.data.financialTransaction?.status || 'Completed') as 'Completed' | 'Pending' | 'Cancelled' | 'Voided',
-        statusDisplayName: response.data.financialTransaction?.statusDisplayName || 'Completed',
-        statusDescription: response.data.financialTransaction?.statusDescription || 'Completed',
-        receiptPrinted: response.data.financialTransaction?.receiptPrinted || false,
-        generalLedgerPosted: response.data.financialTransaction?.generalLedgerPosted || false,
-        createdAt: response.data.financialTransaction?.createdAt || new Date().toISOString(),
-        totalDiscountAmount: response.data.financialTransaction?.discountAmount || 0,
-        repairDescription: response.data.repairJob?.repairDescription,
-        estimatedCompletionDate: response.data.repairJob?.estimatedCompletionDate,
-        items: convertOrderItemDtosToOrderItems(response.data.order?.items || []),
-        cashierName: response.data.financialTransaction?.processedByName || ''
-      };
-      return transaction;
-    }
-    
-    throw new Error(response.message || 'Failed to process repair');
-  },
-
-  async processReturn(returnRequest: ReturnRequest): Promise<Transaction> {
-    // Convert to new FinancialTransaction API call
-    const response = await apiRequest<FinancialTransactionDto>('/financialtransactions/return', {
-      method: 'POST',
-      body: JSON.stringify(returnRequest),
-    });
-    
-    if (response.success && response.data) {
-      // Convert back to legacy Transaction format for backward compatibility
-      const transaction = convertFinancialTransactionDtoToTransaction({
-        ...response.data,
-        transactionType: mapTransactionTypeIdToString(response.data.transactionTypeId)
-      });
-      return transaction;
-    }
-    
-    throw new Error(response.message || 'Failed to process return');
-  },
-
-  async getTransaction(id: number): Promise<Transaction> {
-    const response = await apiRequest<FinancialTransactionDto>(`/financialtransactions/${id}`);
-    
-    if (response.success && response.data) {
-      // Convert back to legacy Transaction format for backward compatibility
-      const transaction = convertFinancialTransactionDtoToTransaction({
-        ...response.data,
-        transactionType: mapTransactionTypeIdToString(response.data.transactionTypeId)
-      });
-      return transaction;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch transaction');
-  },
-
-  async searchTransactions(params: {
-    branchId?: number;
-    transactionNumber?: string;
-    transactionType?: 'Sale' | 'Return' | 'Repair';
-    status?: string;
-    customerId?: number;
-    fromDate?: string;
-    toDate?: string;
-    pageNumber?: number;
-    pageSize?: number;
-  } = {}): Promise<{
-    items: Transaction[];
-    totalCount: number;
-    pageNumber: number;
-    pageSize: number;
-  }> {
-    // Map parameters correctly for the financial transactions API
-    const apiParams = {
-      branchId: params.branchId,
-      transactionNumber: params.transactionNumber,
-      transactionTypeId: params.transactionType ? mapTransactionTypeStringToId(params.transactionType) : undefined,
-      statusId: params.status ? mapStatusStringToId(params.status) : undefined,
-      // Note: customerId is not supported in the financial transactions API
-      // You'll need to add it to the backend API or filter client-side
-      fromDate: params.fromDate,
-      toDate: params.toDate,
-      page: params.pageNumber || 1,
-      pageSize: params.pageSize || 20
-    };
-
-    const queryString = new URLSearchParams(
-      Object.entries(apiParams)
-        .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => [key, String(value)])
-    ).toString();
-    
-    const response = await apiRequest<{
-      items: FinancialTransactionDto[];
-      totalCount: number;
-      page: number;
-      pageSize: number;
-      totalPages: number;
-    }>(`/financialtransactions/search?${queryString}`);
-    
-    if (response.success && response.data) {
-      // Convert FinancialTransactionDto to Transaction format
-      const transactions: Transaction[] = response.data.items.map(item => 
-        convertFinancialTransactionDtoToTransaction(item)
-      );
-      
-      return {
-        items: transactions,
-        totalCount: response.data.totalCount,
-        pageNumber: response.data.page,
-        pageSize: response.data.pageSize
-      };
-    }
-    
-    throw new Error(response.message || 'Failed to search transactions');
-  },
-
-  async generateBrowserReceipt(transactionId: number): Promise<{
-    receiptData: any;
-    template: any;
-    htmlTemplate: string;
-    cssStyles: string;
-    transactionNumber: string;
-    transactionDate: string;
-    transactionType: string;
-  }> {
-    const response = await apiRequest<{
-      receiptData: any;
-      template: any;
-      htmlTemplate: string;
-      cssStyles: string;
-      transactionNumber: string;
-      transactionDate: string;
-      transactionType: string;
-    }>('/financialtransactions/generate-browser-receipt', {
-      method: 'POST',
-      body: JSON.stringify({
-        transactionId,
-        includeHtml: true,
-        includeCss: true
-      }),
-    });
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to generate browser receipt');
-  }
-};
 
 // ProductOwnership API
 export const productOwnershipApi = {
@@ -3833,6 +3868,40 @@ export const productOwnershipApi = {
     }
     
     throw new Error(response.message || 'Failed to create/update product ownership');
+  },
+
+  async getProductOwnershipList(branchId: number, params: {
+    searchTerm?: string;
+    supplierId?: number;
+    pageNumber?: number;
+    pageSize?: number;
+  } = {}): Promise<{
+    items: ProductOwnershipDto[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    const queryParams = new URLSearchParams({
+      branchId: branchId.toString(),
+      ...Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .reduce((acc, [key, value]) => ({ ...acc, [key]: String(value) }), {})
+    }).toString();
+    
+    const response = await apiRequest<{
+      items: ProductOwnershipDto[];
+      totalCount: number;
+      pageNumber: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/productownership/list?${queryParams}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch product ownership list');
   },
 
   async validateOwnership(request: ValidateOwnershipRequest): Promise<OwnershipValidationResult> {
@@ -3977,7 +4046,6 @@ export default {
   reports: reportsApi,
   purchaseOrders: purchaseOrdersApi,
   labels: labelsApi,
-  transactions: transactionsApi,
   customers: customersApi,
   lookups: lookupsApi,
   repairJobs: repairJobsApi,
@@ -3985,4 +4053,5 @@ export default {
   orders: ordersApi,
   financialTransactions: financialTransactionsApi,
   productOwnership: productOwnershipApi,
+  cashDrawer: cashDrawerApi,
 };

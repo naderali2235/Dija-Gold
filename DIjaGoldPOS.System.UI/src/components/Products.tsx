@@ -50,7 +50,7 @@ import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes, useSuppliers, useGoldRates, useMakingCharges } from '../hooks/useApi';
 import { Product, SupplierDto } from '../services/api';
-import { EnumMapper, ProductCategoryType, KaratType } from '../types/enums';
+import { LookupHelper } from '../types/lookups';
 import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
 
 // Component to handle async price display
@@ -122,11 +122,29 @@ export default function Products() {
   const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
 
   // Form state for new/edit product
-  const [productForm, setProductForm] = useState({
+  const [productForm, setProductForm] = useState<{
+    productCode: string;
+    name: string;
+    categoryType: string;
+    karatType: string;
+    weight: string;
+    brand: string;
+    designStyle: string;
+    subCategory: string;
+    shape: string;
+    purityCertificateNumber: string;
+    countryOfOrigin: string;
+    yearOfMinting: string;
+    faceValue: string;
+    hasNumismaticValue: boolean;
+    makingChargesApplicable: boolean;
+    useProductMakingCharges: boolean;
+    supplierId: string;
+  }>({
     productCode: '',
     name: '',
-    categoryType: 'GoldJewelry' as 'GoldJewelry' | 'Bullion' | 'Coins',
-    karatType: '22K' as '18K' | '21K' | '22K' | '24K',
+    categoryType: 'GoldJewelry',
+    karatType: '22K',
     weight: '',
     brand: '',
     designStyle: '',
@@ -155,13 +173,13 @@ export default function Products() {
   useEffect(() => {
     fetchProducts({
       searchTerm: searchQuery || undefined,
-      categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
-      karatType: karatFilter !== 'all' ? karatFilter : undefined,
+      categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
+      karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
       isActive: true,
       pageNumber: 1,
       pageSize: 100,
     });
-  }, [searchQuery, categoryFilter, karatFilter, fetchProducts]);
+  }, [searchQuery, categoryFilter, karatFilter, fetchProducts, categoryTypesData, karatTypesData]);
 
   // Get products from API
   const products = productsData?.items || [];
@@ -173,7 +191,7 @@ export default function Products() {
     'Bullion': 'Bullion',
     'Coins': 'Gold Coins'
   };
-  const karats = karatTypesData ? EnumMapper.lookupToSelectOptions(karatTypesData).map((option: {value: string, label: string}) => option.value) : ['18K', '21K', '22K', '24K'];
+  const karats = karatTypesData ? LookupHelper.toSelectOptionsByName(karatTypesData).map((option: {value: string, label: string}) => option.value) : ['18K', '21K', '22K', '24K'];
   const suppliers = suppliersData?.items || [];
   const supplierOptions = suppliers.map(supplier => ({
     value: supplier.id.toString(),
@@ -210,12 +228,12 @@ export default function Products() {
     const formData = {
       productCode: product.productCode,
       name: product.name,
-      categoryType: EnumMapper.productCategoryEnumToString(product.categoryType),
-      karatType: EnumMapper.karatEnumToString(product.karatType),
+      categoryType: LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId),
+      karatType: LookupHelper.getDisplayName(karatTypesData || [], product.karatTypeId),
       weight: product.weight.toString(),
       brand: product.brand || '',
       designStyle: product.designStyle || '',
-      subCategory: product.subCategory || '',
+      subCategory: typeof product.subCategory === 'string' ? product.subCategory : product.subCategory?.name || '',
       shape: product.shape || '',
       purityCertificateNumber: product.purityCertificateNumber || '',
       countryOfOrigin: product.countryOfOrigin || '',
@@ -272,12 +290,12 @@ export default function Products() {
       const productData = {
         productCode: productForm.productCode.trim(),
         name: productForm.name.trim(),
-        categoryType: EnumMapper.productCategoryStringToEnum(productForm.categoryType),
-        karatType: EnumMapper.karatStringToEnum(productForm.karatType),
+        categoryTypeId: LookupHelper.getValue(categoryTypesData || [], productForm.categoryType) || 1,
+        karatTypeId: LookupHelper.getValue(karatTypesData || [], productForm.karatType) || 3,
         weight: weight,
         brand: productForm.brand?.trim() || undefined,
         designStyle: productForm.designStyle?.trim() || undefined,
-        subCategory: productForm.subCategory?.trim() || undefined,
+        subCategoryId: productForm.subCategory?.trim() ? undefined : undefined, // TODO: Handle subCategory properly
         shape: productForm.shape?.trim() || undefined,
         purityCertificateNumber: productForm.purityCertificateNumber?.trim() || undefined,
         countryOfOrigin: productForm.countryOfOrigin?.trim() || undefined,
@@ -302,8 +320,8 @@ export default function Products() {
 
       await fetchProducts({
         searchTerm: searchQuery || undefined,
-        categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
-        karatType: karatFilter !== 'all' ? karatFilter : undefined,
+        categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
+        karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
         isActive: true,
         pageNumber: 1,
         pageSize: 100,
@@ -355,8 +373,8 @@ export default function Products() {
       
       await fetchProducts({
         searchTerm: searchQuery || undefined,
-        categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
-        karatType: karatFilter !== 'all' ? karatFilter : undefined,
+        categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
+        karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
         isActive: true,
         pageNumber: 1,
         pageSize: 100,
@@ -626,8 +644,8 @@ export default function Products() {
               <Button 
                 onClick={() => fetchProducts({
                   searchTerm: searchQuery || undefined,
-                  categoryType: categoryFilter !== 'all' ? categoryFilter : undefined,
-                  karatType: karatFilter !== 'all' ? karatFilter : undefined,
+                  categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
+                  karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
                   isActive: true,
                   pageNumber: 1,
                   pageSize: 100,
@@ -669,17 +687,16 @@ export default function Products() {
                         <div>
                           <p className="font-medium">{product.name}</p>
                           {product.brand && <p className="text-sm text-muted-foreground">{product.brand}</p>}
-                          {product.supplierName && <p className="text-sm text-muted-foreground">by {product.supplierName}</p>}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p>{categoryDisplayNames[EnumMapper.productCategoryEnumToString(product.categoryType) as keyof typeof categoryDisplayNames]}</p>
-                          {product.subCategory && <p className="text-sm text-muted-foreground">{product.subCategory}</p>}
+                          <p>{LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId)}</p>
+                          {product.subCategory && <p className="text-sm text-muted-foreground">{typeof product.subCategory === 'string' ? product.subCategory : product.subCategory.name}</p>}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{EnumMapper.karatEnumToString(product.karatType)}</Badge>
+                        <Badge variant="outline">{LookupHelper.getDisplayName(karatTypesData || [], product.karatTypeId)}</Badge>
                       </TableCell>
                       <TableCell>{product.weight}g</TableCell>
                       <TableCell>

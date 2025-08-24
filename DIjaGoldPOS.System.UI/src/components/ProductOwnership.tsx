@@ -61,9 +61,6 @@ import {
 import { formatCurrency } from './utils/currency';
 import { useAuth } from './AuthContext';
 import { 
-  productOwnershipApi,
-  productsApi,
-  suppliersApi,
   ProductOwnershipDto,
   ProductOwnershipRequest,
   OwnershipAlertDto,
@@ -73,6 +70,18 @@ import {
   Product,
   SupplierDto
 } from '../services/api';
+import { 
+  usePaginatedProductOwnership,
+  useGetOwnershipAlerts,
+  useGetLowOwnershipProducts,
+  useGetProductsWithOutstandingPayments,
+  useCreateOrUpdateOwnership,
+  useConvertRawGoldToProducts,
+  useGetOwnershipMovements,
+  useUpdateOwnershipAfterPayment,
+  useProducts,
+  useSuppliers
+} from '../hooks/useApi';
 import { toast } from 'sonner';
 
 export default function ProductOwnership() {
@@ -82,11 +91,7 @@ export default function ProductOwnership() {
   const [isConvertRawGoldOpen, setIsConvertRawGoldOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOwnership, setSelectedOwnership] = useState<ProductOwnershipDto | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
-  const [alerts, setAlerts] = useState<OwnershipAlertDto[]>([]);
-  const [lowOwnershipProducts, setLowOwnershipProducts] = useState<ProductOwnershipDto[]>([]);
-  const [outstandingPayments, setOutstandingPayments] = useState<ProductOwnershipDto[]>([]);
+  const [selectedOwnershipForDetails, setSelectedOwnershipForDetails] = useState<ProductOwnershipDto | null>(null);
   const [ownershipMovements, setOwnershipMovements] = useState<OwnershipMovementDto[]>([]);
 
   // Form state for new ownership
@@ -111,7 +116,6 @@ export default function ProductOwnership() {
 
   // State for ownership details dialog
   const [ownershipDetailsOpen, setOwnershipDetailsOpen] = useState(false);
-  const [selectedOwnershipForDetails, setSelectedOwnershipForDetails] = useState<ProductOwnershipDto | null>(null);
 
   // State for payment dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -120,56 +124,40 @@ export default function ProductOwnership() {
     referenceNumber: '',
   });
 
-  // State for ownership data
-  const [ownershipData, setOwnershipData] = useState<ProductOwnershipDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  // API hooks
+  const productOwnershipList = usePaginatedProductOwnership(user?.branch?.id || 0, {
+    searchTerm: searchQuery,
+    pageSize: 50
+  });
+  
+  const ownershipAlerts = useGetOwnershipAlerts();
+  const lowOwnershipProducts = useGetLowOwnershipProducts();
+  const outstandingPayments = useGetProductsWithOutstandingPayments();
+  const createOwnership = useCreateOrUpdateOwnership();
+  const convertRawGold = useConvertRawGoldToProducts();
+  const getOwnershipMovements = useGetOwnershipMovements();
+  const updateOwnershipPayment = useUpdateOwnershipAfterPayment();
+  
+  const products = useProducts();
+  const suppliers = useSuppliers();
 
   // Fetch data on component mount
   useEffect(() => {
-    fetchData();
+    if (user?.branch?.id) {
+      ownershipAlerts.execute(user.branch.id);
+      lowOwnershipProducts.execute(0.5);
+      outstandingPayments.execute();
+      products.execute({ pageSize: 1000 });
+      suppliers.execute({ pageSize: 1000 });
+    }
   }, [user?.branch?.id]);
 
-  const fetchData = async () => {
-    if (!user?.branch?.id) return;
-
-    try {
-      setLoading(true);
-      
-      // Fetch products and suppliers for dropdowns
-      const [productsResponse, suppliersResponse] = await Promise.all([
-        productsApi.getProducts({ pageSize: 1000 }),
-        suppliersApi.getSuppliers({ pageSize: 1000 })
-      ]);
-
-      setProducts(productsResponse.items);
-      setSuppliers(suppliersResponse.items);
-
-      // Fetch ownership alerts
-      const alertsData = await productOwnershipApi.getOwnershipAlerts(user.branch.id);
-      setAlerts(alertsData);
-
-      // Fetch low ownership products
-      const lowOwnershipData = await productOwnershipApi.getLowOwnershipProducts(0.5);
-      setLowOwnershipProducts(lowOwnershipData);
-
-      // Fetch outstanding payments
-      const outstandingData = await productOwnershipApi.getProductsWithOutstandingPayments();
-      setOutstandingPayments(outstandingData);
-
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-      toast.error('Failed to load ownership data');
-    } finally {
-      setLoading(false);
+  // Update search when searchQuery changes
+  useEffect(() => {
+    if (user?.branch?.id) {
+      productOwnershipList.updateParams({ searchTerm: searchQuery });
     }
-  };
-
-  const filteredOwnershipData = ownershipData.filter(
-    ownership =>
-      ownership.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ownership.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ownership.supplierName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  }, [searchQuery, user?.branch?.id]);
 
   const handleCreateOwnership = async () => {
     if (!user?.branch?.id) {
@@ -195,7 +183,7 @@ export default function ProductOwnership() {
         amountPaid: parseFloat(newOwnership.amountPaid) || 0,
       };
 
-      await productOwnershipApi.createOrUpdateOwnership(request);
+      await createOwnership.execute(request);
       
       toast.success('Product ownership created successfully');
       setIsNewOwnershipOpen(false);
@@ -210,7 +198,11 @@ export default function ProductOwnership() {
         amountPaid: '',
       });
       
-      fetchData(); // Refresh data
+      // Refresh data
+      productOwnershipList.fetchData();
+      ownershipAlerts.execute(user.branch.id);
+      lowOwnershipProducts.execute(0.5);
+      outstandingPayments.execute();
     } catch (error) {
       console.error('Failed to create ownership:', error);
       toast.error('Failed to create product ownership');
@@ -237,7 +229,7 @@ export default function ProductOwnership() {
         newProducts: rawGoldConversion.newProducts,
       };
 
-      const result = await productOwnershipApi.convertRawGoldToProducts(request);
+      const result = await convertRawGold.execute(request);
       
       if (result.success) {
         toast.success('Raw gold converted successfully');
@@ -249,7 +241,11 @@ export default function ProductOwnership() {
           newProducts: [],
         });
         
-        fetchData(); // Refresh data
+        // Refresh data
+        productOwnershipList.fetchData();
+        ownershipAlerts.execute(user.branch.id);
+        lowOwnershipProducts.execute(0.5);
+        outstandingPayments.execute();
       } else {
         toast.error(result.message || 'Failed to convert raw gold');
       }
@@ -261,7 +257,7 @@ export default function ProductOwnership() {
 
   const handleViewOwnershipDetails = async (ownership: ProductOwnershipDto) => {
     try {
-      const movements = await productOwnershipApi.getOwnershipMovements(ownership.id);
+      const movements = await getOwnershipMovements.execute(ownership.id);
       setOwnershipMovements(movements);
       setSelectedOwnershipForDetails(ownership);
       setOwnershipDetailsOpen(true);
@@ -283,7 +279,7 @@ export default function ProductOwnership() {
     }
 
     try {
-      await productOwnershipApi.updateOwnershipAfterPayment({
+      await updateOwnershipPayment.execute({
         productOwnershipId: selectedOwnership.id,
         paymentAmount: parseFloat(paymentForm.paymentAmount),
         referenceNumber: paymentForm.referenceNumber,
@@ -294,7 +290,11 @@ export default function ProductOwnership() {
       setPaymentForm({ paymentAmount: '', referenceNumber: '' });
       setSelectedOwnership(null);
       
-      fetchData(); // Refresh data
+      // Refresh data
+      productOwnershipList.fetchData();
+      ownershipAlerts.execute(user?.branch?.id || 0);
+      lowOwnershipProducts.execute(0.5);
+      outstandingPayments.execute();
     } catch (error) {
       console.error('Failed to process payment:', error);
       toast.error('Failed to process payment');
@@ -316,7 +316,7 @@ export default function ProductOwnership() {
     }
   };
 
-  if (loading) {
+  if (productOwnershipList.loading || ownershipAlerts.loading || lowOwnershipProducts.loading || outstandingPayments.loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -347,17 +347,17 @@ export default function ProductOwnership() {
       </div>
 
       {/* Alerts Summary */}
-      {alerts.length > 0 && (
+      {ownershipAlerts.data && ownershipAlerts.data.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-orange-800">
               <Bell className="h-5 w-5" />
-              Ownership Alerts ({alerts.length})
+              Ownership Alerts ({ownershipAlerts.data.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {alerts.slice(0, 3).map((alert, index) => (
+              {ownershipAlerts.data.slice(0, 3).map((alert: OwnershipAlertDto, index: number) => (
                 <div key={index} className="flex items-center justify-between p-2 bg-white rounded">
                   <div>
                     <p className="font-medium">{alert.productName}</p>
@@ -368,9 +368,9 @@ export default function ProductOwnership() {
                   </Badge>
                 </div>
               ))}
-              {alerts.length > 3 && (
+              {ownershipAlerts.data.length > 3 && (
                 <p className="text-sm text-orange-700">
-                  +{alerts.length - 3} more alerts...
+                  +{ownershipAlerts.data.length - 3} more alerts...
                 </p>
               )}
             </div>
@@ -418,7 +418,7 @@ export default function ProductOwnership() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOwnershipData.map((ownership) => (
+                  {productOwnershipList.data?.items.map((ownership: ProductOwnershipDto) => (
                     <TableRow key={ownership.id}>
                       <TableCell>
                         <div>
@@ -426,7 +426,7 @@ export default function ProductOwnership() {
                           <p className="text-sm text-gray-500">{ownership.productCode}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{ownership.supplierName || 'N/A'}</TableCell>
+                      <TableCell>{ownership.supplierId || 'N/A'}</TableCell>
                       <TableCell>
                         <Badge className={getOwnershipStatusColor(ownership.ownershipPercentage)}>
                           {ownership.ownershipPercentage.toFixed(1)}%
@@ -489,7 +489,7 @@ export default function ProductOwnership() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lowOwnershipProducts.map((ownership) => (
+                  {lowOwnershipProducts.data?.map((ownership: ProductOwnershipDto) => (
                     <TableRow key={ownership.id}>
                       <TableCell>
                         <div>
@@ -545,7 +545,7 @@ export default function ProductOwnership() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {outstandingPayments.map((ownership) => (
+                  {outstandingPayments.data?.map((ownership: ProductOwnershipDto) => (
                     <TableRow key={ownership.id}>
                       <TableCell>
                         <div>
@@ -553,7 +553,7 @@ export default function ProductOwnership() {
                           <p className="text-sm text-gray-500">{ownership.productCode}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{ownership.supplierName || 'N/A'}</TableCell>
+                      <TableCell>{ownership.supplierId || 'N/A'}</TableCell>
                       <TableCell className="text-red-600 font-medium">
                         {formatCurrency(ownership.outstandingAmount)}
                       </TableCell>
@@ -648,7 +648,7 @@ export default function ProductOwnership() {
                   <SelectValue placeholder="Select product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((product) => (
+                  {products.data?.items.map((product: Product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
                       {product.name} ({product.productCode})
                     </SelectItem>
@@ -664,7 +664,7 @@ export default function ProductOwnership() {
                   <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
                 <SelectContent>
-                  {suppliers.map((supplier) => (
+                  {suppliers.data?.items.map((supplier: SupplierDto) => (
                     <SelectItem key={supplier.id} value={supplier.id.toString()}>
                       {supplier.companyName}
                     </SelectItem>
@@ -821,7 +821,7 @@ export default function ProductOwnership() {
                 </div>
                 <div>
                   <Label>Supplier</Label>
-                  <p className="font-medium">{selectedOwnershipForDetails.supplierName || 'N/A'}</p>
+                  <p className="font-medium">{selectedOwnershipForDetails.supplierId || 'N/A'}</p>
                 </div>
                 <div>
                   <Label>Ownership Percentage</Label>
@@ -888,7 +888,7 @@ export default function ProductOwnership() {
                   <SelectValue placeholder="Select raw gold product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.filter(p => p.categoryType === 1).map((product) => ( // Assuming categoryType 1 is raw gold
+                  {products.data?.items.filter((p: Product) => p.categoryTypeId === 1).map((product: Product) => ( // Assuming categoryType 1 is raw gold
                     <SelectItem key={product.id} value={product.id.toString()}>
                       {product.name} ({product.productCode})
                     </SelectItem>
@@ -936,7 +936,7 @@ export default function ProductOwnership() {
                         <SelectValue placeholder="Select product" />
                       </SelectTrigger>
                       <SelectContent>
-                        {products.filter(p => p.categoryType !== 1).map((p) => (
+                        {products.data?.items.filter((p: Product) => p.categoryTypeId !== 1).map((p: Product) => (
                           <SelectItem key={p.id} value={p.id.toString()}>
                             {p.name} ({p.productCode})
                           </SelectItem>

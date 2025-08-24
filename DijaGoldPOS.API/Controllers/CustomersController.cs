@@ -333,13 +333,13 @@ public class CustomersController : ControllerBase
                 return NotFound(ApiResponse.ErrorResponse("Customer not found"));
             }
 
-            // Check if customer has active transactions
-            var hasActiveTransactions = await _context.Orders
+            // Check if customer has active Orders
+            var hasActiveOrders = await _context.Orders
                 .AnyAsync(o => o.CustomerId == id && o.StatusId != LookupTableConstants.OrderStatusCancelled);
 
-            if (hasActiveTransactions)
+            if (hasActiveOrders)
             {
-                return BadRequest(ApiResponse.ErrorResponse("Cannot delete customer with active transactions"));
+                return BadRequest(ApiResponse.ErrorResponse("Cannot delete customer with active Orders"));
             }
 
             customer.IsActive = false;
@@ -366,17 +366,17 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>
-    /// Get customer transaction history
+    /// Get customer Orders history
     /// </summary>
     /// <param name="id">Customer ID</param>
     /// <param name="fromDate">From date (optional)</param>
     /// <param name="toDate">To date (optional)</param>
-    /// <returns>Customer transaction history</returns>
-    [HttpGet("{id}/transactions")]
+    /// <returns>Customer Orders history</returns>
+    [HttpGet("{id}/Orders")]
     [Authorize(Policy = "CashierOrManager")]
-    [ProducesResponseType(typeof(ApiResponse<CustomerTransactionHistoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<CustomerOrdersHistoryDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetCustomerTransactions(
+    public async Task<IActionResult> GetCustomerOrders(
         int id,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
@@ -404,16 +404,16 @@ public class CustomersController : ControllerBase
                 query = query.Where(o => o.OrderDate <= toDate.Value);
             }
 
-            var transactions = await query
+            var Orders = await query
                 .Include(o => o.OrderItems)
                 .OrderByDescending(o => o.OrderDate)
-                .Take(100) // Limit to last 100 transactions
-                .Select(o => new CustomerTransactionDto
+                .Take(100) // Limit to last 100 Orders
+                .Select(o => new CustomerOrderDto
                 {
-                    TransactionId = o.Id,
-                    TransactionNumber = o.OrderNumber,
-                    TransactionDate = o.OrderDate,
-                    TransactionType = "Sale", // OrderTypeSale
+                    OrderId = o.Id,
+                    OrderNumber = o.OrderNumber,
+                    OrderDate = o.OrderDate,
+                    OrderType = "Sale", // OrderTypeSale
                     TotalAmount = o.OrderItems.Sum(oi => oi.TotalAmount),
                     BranchName = o.Branch != null ? o.Branch.Name : string.Empty,
                     CashierName = o.Cashier != null ? o.Cashier.FullName : string.Empty
@@ -423,23 +423,23 @@ public class CustomersController : ControllerBase
             var totalAmount = await query
                 .Include(o => o.OrderItems)
                 .SumAsync(o => o.OrderItems.Sum(oi => oi.TotalAmount));
-            var totalTransactionCount = await query.CountAsync();
+            var totalOrdersCount = await query.CountAsync();
 
-            var result = new CustomerTransactionHistoryDto
+            var result = new CustomerOrdersHistoryDto
             {
                 CustomerId = customer.Id,
                 CustomerName = customer.FullName,
-                Transactions = transactions,
+                Orders = Orders,
                 TotalAmount = totalAmount,
-                TotalTransactionCount = totalTransactionCount
+                TotalOrderCount = totalOrdersCount
             };
 
-            return Ok(ApiResponse<CustomerTransactionHistoryDto>.SuccessResponse(result));
+            return Ok(ApiResponse<CustomerOrdersHistoryDto>.SuccessResponse(result));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving transaction history for customer {CustomerId}", id);
-            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving transaction history"));
+            _logger.LogError(ex, "Error retrieving Order history for customer {CustomerId}", id);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving Orders history"));
         }
     }
 
@@ -477,7 +477,7 @@ public class CustomersController : ControllerBase
                 DefaultDiscountPercentage = customer.DefaultDiscountPercentage,
                 MakingChargesWaived = customer.MakingChargesWaived,
                 LastPurchaseDate = customer.LastPurchaseDate,
-                TotalTransactions = customer.TotalTransactions
+                TotalOrders = customer.TotalOrders
             };
 
             return Ok(ApiResponse<CustomerLoyaltyDto>.SuccessResponse(loyaltyDto));
@@ -548,7 +548,7 @@ public class CustomersController : ControllerBase
                 DefaultDiscountPercentage = customer.DefaultDiscountPercentage,
                 MakingChargesWaived = customer.MakingChargesWaived,
                 LastPurchaseDate = customer.LastPurchaseDate,
-                TotalTransactions = customer.TotalTransactions
+                TotalOrders = customer.TotalOrders
             };
 
             return Ok(ApiResponse<CustomerLoyaltyDto>.SuccessResponse(loyaltyDto));
@@ -608,7 +608,7 @@ public class CustomersController : ControllerBase
                     MakingChargesWaived = c.MakingChargesWaived,
                     Notes = c.Notes,
                     LastPurchaseDate = c.LastPurchaseDate,
-                    TotalTransactions = c.TotalTransactions,
+                    TotalOrders = c.TotalOrders,
                     CreatedAt = c.CreatedAt,
                     IsActive = c.IsActive
                 })

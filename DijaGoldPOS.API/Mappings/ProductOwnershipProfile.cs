@@ -15,7 +15,7 @@ public class ProductOwnershipProfile : Profile
         CreateMap<ProductOwnership, ProductOwnershipDto>()
             .ForMember(dest => dest.ProductName, opt => opt.MapFrom(src => src.Product.Name))
             .ForMember(dest => dest.ProductCode, opt => opt.MapFrom(src => src.Product.ProductCode))
-            .ForMember(dest => dest.BranchName, opt => opt.MapFrom(src => src.Branch.Name))
+            .ForMember(dest => dest.BranchName, opt => opt.MapFrom(src => src.Branch != null ? src.Branch.Name : string.Empty))
             .ForMember(dest => dest.SupplierName, opt => opt.MapFrom(src => src.Supplier != null ? src.Supplier.CompanyName : null))
             .ForMember(dest => dest.PurchaseOrderNumber, opt => opt.MapFrom(src => src.PurchaseOrder != null ? src.PurchaseOrder.PurchaseOrderNumber : null))
             .ForMember(dest => dest.CustomerPurchaseNumber, opt => opt.MapFrom(src => src.CustomerPurchase != null ? src.CustomerPurchase.PurchaseNumber : null))

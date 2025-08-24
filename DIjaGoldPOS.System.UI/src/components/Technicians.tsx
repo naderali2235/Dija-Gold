@@ -42,18 +42,26 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { techniciansApi, branchesApi, TechnicianDto, CreateTechnicianRequestDto, UpdateTechnicianRequestDto, BranchDto } from '../services/api';
+import { 
+  useSearchTechnicians, 
+  useCreateTechnician, 
+  useUpdateTechnician, 
+  useDeleteTechnician,
+  usePaginatedBranches
+} from '../hooks/useApi';
+import { 
+  TechnicianDto, 
+  CreateTechnicianRequestDto, 
+  UpdateTechnicianRequestDto, 
+  BranchDto 
+} from '../services/api';
 import { toast } from 'sonner';
 
 export default function Technicians() {
   const { user } = useAuth();
-  const [technicians, setTechnicians] = useState<TechnicianDto[]>([]);
-  const [branches, setBranches] = useState<BranchDto[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewTechnicianOpen, setIsNewTechnicianOpen] = useState(false);
   const [editingTechnician, setEditingTechnician] = useState<TechnicianDto | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state for new technician
   const [newTechnician, setNewTechnician] = useState({
@@ -74,44 +82,94 @@ export default function Technicians() {
     branchId: 1,
   });
 
-  // Fetch technicians
-  const fetchTechnicians = async () => {
-    try {
-      setLoading(true);
-      const result = await techniciansApi.searchTechnicians({
-        pageSize: 100,
-        isActive: true,
-      });
-      setTechnicians(result.items);
-    } catch (error) {
-      console.error('Failed to fetch technicians:', error);
+  // API hooks
+  const { 
+    execute: searchTechnicians, 
+    data: techniciansData, 
+    loading: techniciansLoading, 
+    error: techniciansError 
+  } = useSearchTechnicians();
+
+  const { 
+    execute: createTechnician, 
+    loading: createLoading, 
+    error: createError 
+  } = useCreateTechnician();
+
+  const { 
+    execute: updateTechnician, 
+    loading: updateLoading, 
+    error: updateError 
+  } = useUpdateTechnician();
+
+  const { 
+    execute: deleteTechnician, 
+    loading: deleteLoading, 
+    error: deleteError 
+  } = useDeleteTechnician();
+
+  const { 
+    data: branchesData, 
+    loading: branchesLoading, 
+    error: branchesError 
+  } = usePaginatedBranches({ pageSize: 100 });
+
+  // Fetch technicians on component mount
+  useEffect(() => {
+    searchTechnicians({
+      pageSize: 100,
+      isActive: true,
+    });
+  }, [searchTechnicians]);
+
+  // Handle API errors
+  useEffect(() => {
+    if (techniciansError) {
       toast.error('Failed to Load Technicians', {
         description: 'Unable to fetch technicians. Please check your connection and try again.',
         duration: 5000
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [techniciansError]);
 
-  // Fetch branches
-  const fetchBranches = async () => {
-    try {
-      const result = await branchesApi.getBranches({ pageSize: 100 });
-      setBranches(result.items);
-    } catch (error) {
-      console.error('Failed to fetch branches:', error);
+  useEffect(() => {
+    if (branchesError) {
       toast.warning('Branch List Unavailable', {
         description: 'Unable to load branch list. Some features may be limited.',
         duration: 4000
       });
     }
-  };
+  }, [branchesError]);
 
   useEffect(() => {
-    fetchTechnicians();
-    fetchBranches();
-  }, []);
+    if (createError) {
+      toast.error('Failed to Create Technician', {
+        description: createError,
+        duration: 6000
+      });
+    }
+  }, [createError]);
+
+  useEffect(() => {
+    if (updateError) {
+      toast.error('Failed to Update Technician', {
+        description: updateError,
+        duration: 6000
+      });
+    }
+  }, [updateError]);
+
+  useEffect(() => {
+    if (deleteError) {
+      toast.error('Failed to Delete Technician', {
+        description: deleteError,
+        duration: 6000
+      });
+    }
+  }, [deleteError]);
+
+  const technicians = techniciansData?.items || [];
+  const branches = branchesData?.items || [];
 
   const filteredTechnicians = technicians.filter(technician =>
     technician.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -140,8 +198,6 @@ export default function Technicians() {
 
   const handleCreateTechnician = async () => {
     try {
-      setIsSubmitting(true);
-      
       const validationErrors = validateTechnicianForm(newTechnician);
       if (validationErrors.length > 0) {
         toast.error('Validation Failed', {
@@ -159,7 +215,7 @@ export default function Technicians() {
         branchId: newTechnician.branchId,
       };
 
-      await techniciansApi.createTechnician(request);
+      await createTechnician(request);
       
       toast.success('Success!', {
         description: 'Technician created successfully!',
@@ -175,15 +231,14 @@ export default function Technicians() {
         branchId: user?.branch?.id || 1,
       });
       
-      await fetchTechnicians();
-    } catch (error) {
-      console.error('Failed to create technician:', error);
-      toast.error('Failed to Create Technician', {
-        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
-        duration: 6000
+      // Refresh technicians list
+      await searchTechnicians({
+        pageSize: 100,
+        isActive: true,
       });
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      // Error is handled by the useEffect above
+      console.error('Failed to create technician:', error);
     }
   };
 
@@ -191,8 +246,6 @@ export default function Technicians() {
     if (!editingTechnician) return;
     
     try {
-      setIsSubmitting(true);
-      
       const validationErrors = validateTechnicianForm(editTechnician);
       if (validationErrors.length > 0) {
         toast.error('Validation Failed', {
@@ -211,7 +264,7 @@ export default function Technicians() {
         branchId: editTechnician.branchId,
       };
 
-      await techniciansApi.updateTechnician(editingTechnician.id, request);
+      await updateTechnician(editingTechnician.id, request);
       
       toast.success('Success!', {
         description: 'Technician updated successfully!',
@@ -228,15 +281,14 @@ export default function Technicians() {
         branchId: 1,
       });
       
-      await fetchTechnicians();
-    } catch (error) {
-      console.error('Failed to update technician:', error);
-      toast.error('Failed to Update Technician', {
-        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
-        duration: 6000
+      // Refresh technicians list
+      await searchTechnicians({
+        pageSize: 100,
+        isActive: true,
       });
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      // Error is handled by the useEffect above
+      console.error('Failed to update technician:', error);
     }
   };
 
@@ -246,20 +298,21 @@ export default function Technicians() {
     }
 
     try {
-      await techniciansApi.deleteTechnician(technician.id);
+      await deleteTechnician(technician.id);
       
       toast.success('Success!', {
         description: 'Technician deleted successfully!',
         duration: 4000
       });
       
-      await fetchTechnicians();
-    } catch (error) {
-      console.error('Failed to delete technician:', error);
-      toast.error('Failed to Delete Technician', {
-        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
-        duration: 6000
+      // Refresh technicians list
+      await searchTechnicians({
+        pageSize: 100,
+        isActive: true,
       });
+    } catch (error) {
+      // Error is handled by the useEffect above
+      console.error('Failed to delete technician:', error);
     }
   };
 
@@ -274,6 +327,9 @@ export default function Technicians() {
       branchId: technician.branchId,
     });
   };
+
+  const isLoading = techniciansLoading || branchesLoading;
+  const isSubmitting = createLoading || updateLoading || deleteLoading;
 
   return (
     <div className="space-y-6">
@@ -364,7 +420,7 @@ export default function Technicians() {
                 disabled={isSubmitting || !newTechnician.fullName.trim() || !newTechnician.phoneNumber.trim()}
                 className="touch-target"
               >
-                {isSubmitting ? (
+                {createLoading ? (
                   <>
                     <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
                     Creating...
@@ -400,7 +456,7 @@ export default function Technicians() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className="text-center py-8">
               <div className="animate-spin h-8 w-8 border-2 border-[#D4AF37] border-t-transparent rounded-full mx-auto mb-4"></div>
               <p className="text-muted-foreground">Loading technicians...</p>
@@ -469,7 +525,9 @@ export default function Technicians() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Building className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm">{technician.branchName || 'Unknown'}</span>
+                        <span className="text-sm">
+                          {branches.find(b => b.id === technician.branchId)?.name || 'Unknown'}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -484,6 +542,7 @@ export default function Technicians() {
                           size="sm"
                           onClick={() => openEditDialog(technician)}
                           className="touch-target hover:bg-[#F4E9B1] transition-colors"
+                          disabled={isSubmitting}
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
@@ -492,6 +551,7 @@ export default function Technicians() {
                           size="sm"
                           onClick={() => handleDeleteTechnician(technician)}
                           className="touch-target hover:bg-red-50 hover:text-red-600 transition-colors"
+                          disabled={isSubmitting}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -594,7 +654,7 @@ export default function Technicians() {
               disabled={isSubmitting || !editTechnician.fullName.trim() || !editTechnician.phoneNumber.trim()}
               className="touch-target"
             >
-              {isSubmitting ? (
+              {updateLoading ? (
                 <>
                   <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
                   Updating...

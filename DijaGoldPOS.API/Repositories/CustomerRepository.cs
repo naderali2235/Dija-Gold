@@ -139,7 +139,7 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
         {
             customer.TotalPurchaseAmount += transactionAmount;
             customer.LastPurchaseDate = DateTime.UtcNow;
-            customer.TotalTransactions += 1;
+            customer.TotalOrders += 1;
             
             // Update loyalty tier based on total purchases (example logic)
             // 1=Basic, 2=Bronze, 3=Silver, 4=Gold, 5=Platinum

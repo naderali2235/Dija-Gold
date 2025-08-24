@@ -22,6 +22,10 @@ public static class LookupTableSeeder
         await SeedRepairPrioritiesAsync(context);
         await SeedKaratTypesAsync(context);
         await SeedProductCategoryTypesAsync(context);
+        
+        // Save changes to ensure product category types are persisted before seeding sub-categories
+        await context.SaveChangesAsync();
+        
         await SeedTransactionTypesAsync(context);
         await SeedPaymentMethodsAsync(context);
         await SeedTransactionStatusesAsync(context);
@@ -156,10 +160,10 @@ public static class LookupTableSeeder
 
         var karatTypes = new[]
         {
-            new KaratTypeLookup { Name = "18K Gold", Description = "18 Karat Gold", KaratValue = 18, SortOrder = 1 },
-            new KaratTypeLookup { Name = "21K Gold", Description = "21 Karat Gold (Popular in Egypt)", KaratValue = 21, SortOrder = 2 },
-            new KaratTypeLookup { Name = "22K Gold", Description = "22 Karat Gold", KaratValue = 22, SortOrder = 3 },
-            new KaratTypeLookup { Name = "24K Gold", Description = "24 Karat Gold (Pure Gold)", KaratValue = 24, SortOrder = 4 }
+            new KaratTypeLookup { Name = "18K Gold", Description = "18 Karat Gold", SortOrder = 1 },
+            new KaratTypeLookup { Name = "21K Gold", Description = "21 Karat Gold (Popular in Egypt)", SortOrder = 2 },
+            new KaratTypeLookup { Name = "22K Gold", Description = "22 Karat Gold", SortOrder = 3 },
+            new KaratTypeLookup { Name = "24K Gold", Description = "24 Karat Gold (Pure Gold)", SortOrder = 4 }
         };
 
         await context.KaratTypeLookups.AddRangeAsync(karatTypes);
@@ -238,22 +242,32 @@ public static class LookupTableSeeder
     {
         if (await context.SubCategoryLookups.AnyAsync()) return;
 
+        // Get the product category types that were seeded
+        var goldJewelryCategory = await context.ProductCategoryTypeLookups.FirstAsync(c => c.Name == "Gold Jewelry");
+        var bullionCategory = await context.ProductCategoryTypeLookups.FirstAsync(c => c.Name == "Bullion");
+        var goldCoinsCategory = await context.ProductCategoryTypeLookups.FirstAsync(c => c.Name == "Gold Coins");
+
         var subCategories = new[]
         {
-            new SubCategoryLookup { Name = "Rings", Description = "Wedding rings, engagement rings, fashion rings", SortOrder = 1 },
-            new SubCategoryLookup { Name = "Necklaces", Description = "Chains, pendants, chokers", SortOrder = 2 },
-            new SubCategoryLookup { Name = "Bracelets", Description = "Bangles, chain bracelets, charm bracelets", SortOrder = 3 },
-            new SubCategoryLookup { Name = "Earrings", Description = "Studs, hoops, drop earrings, chandelier earrings", SortOrder = 4 },
-            new SubCategoryLookup { Name = "Pendants", Description = "Necklace pendants, lockets", SortOrder = 5 },
-            new SubCategoryLookup { Name = "Chains", Description = "Necklace chains, bracelet chains", SortOrder = 6 },
-            new SubCategoryLookup { Name = "Bangles", Description = "Traditional bangles, modern bangles", SortOrder = 7 },
-            new SubCategoryLookup { Name = "Anklets", Description = "Ankle bracelets, foot chains", SortOrder = 8 },
-            new SubCategoryLookup { Name = "Watches", Description = "Gold watches, luxury timepieces", SortOrder = 9 },
-            new SubCategoryLookup { Name = "Brooches", Description = "Decorative brooches, pins", SortOrder = 10 },
-            new SubCategoryLookup { Name = "Bars", Description = "Gold bars, ingots", SortOrder = 11 },
-            new SubCategoryLookup { Name = "Coins", Description = "Gold coins, commemorative coins", SortOrder = 12 },
-            new SubCategoryLookup { Name = "Sets", Description = "Jewelry sets, matching pieces", SortOrder = 13 },
-            new SubCategoryLookup { Name = "Other", Description = "Other jewelry items", SortOrder = 14 }
+            // Gold Jewelry sub-categories
+            new SubCategoryLookup { Name = "Rings", Description = "Wedding rings, engagement rings, fashion rings", SortOrder = 1, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Necklaces", Description = "Chains, pendants, chokers", SortOrder = 2, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Bracelets", Description = "Bangles, chain bracelets, charm bracelets", SortOrder = 3, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Earrings", Description = "Studs, hoops, drop earrings, chandelier earrings", SortOrder = 4, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Pendants", Description = "Necklace pendants, lockets", SortOrder = 5, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Chains", Description = "Necklace chains, bracelet chains", SortOrder = 6, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Bangles", Description = "Traditional bangles, modern bangles", SortOrder = 7, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Anklets", Description = "Ankle bracelets, foot chains", SortOrder = 8, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Watches", Description = "Gold watches, luxury timepieces", SortOrder = 9, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Brooches", Description = "Decorative brooches, pins", SortOrder = 10, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Sets", Description = "Jewelry sets, matching pieces", SortOrder = 11, CategoryTypeId = goldJewelryCategory.Id },
+            new SubCategoryLookup { Name = "Other", Description = "Other jewelry items", SortOrder = 12, CategoryTypeId = goldJewelryCategory.Id },
+            
+            // Bullion sub-categories
+            new SubCategoryLookup { Name = "Bars", Description = "Gold bars, ingots", SortOrder = 1, CategoryTypeId = bullionCategory.Id },
+            
+            // Gold Coins sub-categories
+            new SubCategoryLookup { Name = "Coins", Description = "Gold coins, commemorative coins", SortOrder = 1, CategoryTypeId = goldCoinsCategory.Id }
         };
 
         await context.SubCategoryLookups.AddRangeAsync(subCategories);

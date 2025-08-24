@@ -3,11 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 import { DollarSign, TrendingUp, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../utils/currency';
 import { useGoldRates, useMakingCharges, useTaxConfigurations, useProductCategoryTypes, useChargeTypes } from '../../hooks/useApi';
 import { GoldRate, MakingCharges, TaxConfigurationDto } from '../../services/api';
-import { EnumMapper, ProductCategoryType, ChargeType } from '../../types/enums';
+import { LookupHelper } from '../../types/lookups';
+import { GoldRatesDisplay, transformGoldRates, GoldRatesMap } from '../shared/GoldRatesDisplay';
 import {
   Dialog,
   DialogContent,
@@ -34,24 +36,7 @@ interface PricingSettingsProps {
   onResetManuallyEdited?: () => number;
 }
 
-// Transform API gold rates to the format expected by the component
-const transformGoldRates = (apiRates: GoldRate[]): Record<string, string> => {
-  const transformed: Record<string, string> = {
-    '24k': '0',
-    '22k': '0', 
-    '21k': '0',
-    '18k': '0'
-  };
 
-  apiRates.forEach(rate => {
-    const karatKey = `${rate.karatType}k`;
-    if (transformed.hasOwnProperty(karatKey)) {
-      transformed[karatKey] = rate.ratePerGram.toString();
-    }
-  });
-
-  return transformed;
-};
 
 export function PricingSettings({
   goldRates,
@@ -65,6 +50,7 @@ export function PricingSettings({
   const { data: taxConfigurationsData, loading: taxConfigurationsLoading, error: taxConfigurationsError, updateTaxConfiguration, fetchTaxConfigurations } = useTaxConfigurations();
   const { data: productCategoryTypesData, loading: categoriesLoading, error: categoriesError, fetchCategories } = useProductCategoryTypes();
   const { data: chargeTypesData, loading: chargeTypesLoading, error: chargeTypesError, fetchChargeTypes } = useChargeTypes();
+
 
   // Track which rates have been manually edited by the user
   const [manuallyEditedRates, setManuallyEditedRates] = React.useState<Set<string>>(new Set());
@@ -123,7 +109,7 @@ export function PricingSettings({
         }
       });
     }
-  }, [goldRatesData, manuallyEditedRates]); // Removed onGoldRateChange from dependencies
+  }, [goldRatesData, manuallyEditedRates]); // Removed karatTypesData dependency since we use fixed headers
 
   // Track the reset trigger value to avoid dependency on function reference
   const resetTriggerValue = onResetManuallyEdited ? onResetManuallyEdited() : 0;
@@ -276,67 +262,32 @@ export function PricingSettings({
     }
   };
 
+  // Convert goldRates to the format expected by GoldRatesDisplay
+  const goldRatesForDisplay: GoldRatesMap = React.useMemo(() => {
+    const rates: GoldRatesMap = {};
+    Object.entries(goldRates).forEach(([karat, rate]) => {
+      rates[karat] = {
+        rate: parseFloat(rate) || 0
+      };
+    });
+    return rates;
+  }, [goldRates]);
+
   return (
     <div className="space-y-6">
       {/* Gold Rates */}
-      <Card className="pos-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[#D4AF37]" />
-            Gold Rates (per gram)
-          </CardTitle>
-          <CardDescription>
-            Current gold rates in Egyptian Pounds per gram
-            {loading && <span className="ml-2 text-blue-600">Loading...</span>}
-            {error && <span className="ml-2 text-red-600">Error: {error}</span>}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(goldRates).map(([karat, rate]) => (
-              <div key={karat} className="space-y-2">
-                <Label htmlFor={`rate-${karat}`} className="flex items-center gap-2">
-                  {karat.toUpperCase()}
-                  {manuallyEditedRates.has(karat) && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                      Edited
-                    </span>
-                  )}
-                </Label>
-                <div className="relative">
-                  <Input
-                    id={`rate-${karat}`}
-                    type="number"
-                    step="0.01"
-                    value={rate}
-                    onChange={(e) => handleGoldRateChange(karat, e.target.value)}
-                    className={`pl-12 ${manuallyEditedRates.has(karat) ? 'border-blue-300 bg-blue-50' : ''}`}
-                    disabled={loading}
-                  />
-                  <div className="absolute left-3 top-3 text-muted-foreground text-sm">
-                    EGP
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Current: {formatCurrency(parseFloat(rate) || 0)}
-                </p>
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-end mt-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="touch-target"
-              disabled={true}
-              title="Update from Market feature is temporarily disabled"
-            >
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Update from Market
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <GoldRatesDisplay
+        goldRates={goldRatesForDisplay}
+        title="Gold Rates (per gram)"
+        description="Current gold rates in Egyptian Pounds per gram"
+        loading={loading}
+        error={error}
+        showInputs={true}
+        showChanges={false}
+        onRateChange={handleGoldRateChange}
+        manuallyEditedRates={manuallyEditedRates}
+        disabled={false}
+      />
 
       {/* Making Charges */}
       <Card className="pos-card">
@@ -406,8 +357,8 @@ export function PricingSettings({
                           <div className="text-red-500 p-2">Error loading categories</div>
                         ) : (
                           productCategoryTypesData?.map((category) => (
-                            <SelectItem key={category.value} value={category.value.toString()}>
-                              {category.displayName}
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              {category.name}
                             </SelectItem>
                           ))
                         )}
@@ -445,8 +396,8 @@ export function PricingSettings({
                           <div className="text-red-500 p-2">Error loading charge types</div>
                         ) : (
                           chargeTypesData?.map((type) => (
-                            <SelectItem key={type.value} value={type.value.toString()}>
-                              {type.displayName}
+                            <SelectItem key={type.id} value={type.id.toString()}>
+                              {type.name}
                             </SelectItem>
                           ))
                         )}
@@ -518,7 +469,7 @@ export function PricingSettings({
                   <div>
                     <h4 className="font-medium">{charge.name}</h4>
                     <p className="text-sm text-muted-foreground">
-                      Category: {productCategoryTypesData?.find(c => c.value === charge.productCategory)?.displayName || charge.productCategory}
+                      Category: {productCategoryTypesData?.find(c => c.id === charge.productCategory)?.name || charge.productCategory}
                       {charge.subCategory && ` - ${charge.subCategory}`}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -531,7 +482,7 @@ export function PricingSettings({
                         {charge.chargeType === 1 ? `${charge.chargeValue}%` : `${formatCurrency(charge.chargeValue)}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {chargeTypesData?.find(t => t.value === charge.chargeType)?.displayName || 'Unknown Type'}
+                        {chargeTypesData?.find(t => t.id === charge.chargeType)?.name || 'Unknown Type'}
                       </p>
                     </div>
                     <Button
@@ -639,8 +590,8 @@ export function PricingSettings({
                         <div className="text-red-500 p-2">Error loading tax types</div>
                       ) : (
                         chargeTypesData?.map((type) => (
-                          <SelectItem key={type.value} value={type.value.toString()}>
-                            {type.displayName}
+                          <SelectItem key={type.id} value={type.id.toString()}>
+                            {type.name}
                           </SelectItem>
                         ))
                       )}
@@ -745,7 +696,7 @@ export function PricingSettings({
                         {taxConfig.taxType === 1 ? `${taxConfig.taxRate}%` : `${formatCurrency(taxConfig.taxRate)}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {chargeTypesData?.find(t => t.value === taxConfig.taxType)?.displayName || 'Unknown Type'}
+                        {chargeTypesData?.find(t => t.id === taxConfig.taxType)?.name || 'Unknown Type'}
                       </p>
                     </div>
                     <Button

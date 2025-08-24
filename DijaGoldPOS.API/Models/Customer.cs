@@ -87,7 +87,7 @@ public class Customer : BaseEntity
     /// <summary>
     /// Total number of transactions for this customer
     /// </summary>
-    public int TotalTransactions { get; set; } = 0;
+    public int TotalOrders { get; set; } = 0;
     
     /// <summary>
     /// Navigation property to customer orders

@@ -14,6 +14,7 @@ public class FinancialTransactionDto
     public string BranchName { get; set; } = string.Empty;
     public int TransactionTypeId { get; set; }
     public string TransactionTypeDescription { get; set; } = string.Empty;
+    public FinancialTransactionTypeLookupDto? TransactionType { get; set; }
     public int? BusinessEntityId { get; set; }
     public string? BusinessEntityType { get; set; }
     public string ProcessedByUserId { get; set; } = string.Empty;
@@ -28,8 +29,10 @@ public class FinancialTransactionDto
     public decimal ChangeGiven { get; set; }
     public int PaymentMethodId { get; set; }
     public string PaymentMethodDescription { get; set; } = string.Empty;
+    public PaymentMethodLookupDto? PaymentMethod { get; set; }
     public int StatusId { get; set; }
     public string StatusDescription { get; set; } = string.Empty;
+    public FinancialTransactionStatusLookupDto? Status { get; set; }
     public int? OriginalTransactionId { get; set; }
     public string? ReversalReason { get; set; }
     public string? Notes { get; set; }

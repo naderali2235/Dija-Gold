@@ -15,9 +15,6 @@ public class KaratTypeLookup : BaseEntity, ILookupEntity
     public string? Description { get; set; }
     
     [Required]
-    public int KaratValue { get; set; }
-    
-    [Required]
     public int SortOrder { get; set; }
     
 

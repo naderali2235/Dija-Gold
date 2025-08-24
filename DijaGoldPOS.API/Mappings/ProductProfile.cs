@@ -11,15 +11,13 @@ public class ProductProfile : Profile
     {
         CreateMap<Product, ProductDto>()
             .ForMember(d => d.CategoryTypeId, o => o.MapFrom(s => s.CategoryTypeId))
-            .ForMember(d => d.CategoryTypeName, o => o.MapFrom(s => s.CategoryType != null ? s.CategoryType.Name : string.Empty))
+            .ForMember(d => d.CategoryType, o => o.MapFrom(s => s.CategoryType))
             .ForMember(d => d.KaratTypeId, o => o.MapFrom(s => s.KaratTypeId))
-            .ForMember(d => d.KaratTypeName, o => o.MapFrom(s => s.KaratType != null ? s.KaratType.Name : string.Empty))
-            .ForMember(d => d.SupplierName, o => o.MapFrom(s => s.Supplier != null ? s.Supplier.CompanyName : null))
-            .ForMember(d => d.SubCategoryName, o => o.MapFrom(s => s.SubCategoryLookup != null ? s.SubCategoryLookup.Name : null));
+            .ForMember(d => d.KaratType, o => o.MapFrom(s => s.KaratType))
+            .ForMember(d => d.SubCategory, o => o.MapFrom(s => s.SubCategoryLookup));
 
         CreateMap<Inventory, ProductInventoryDto>()
             .ForMember(d => d.BranchId, o => o.MapFrom(s => s.BranchId))
-            .ForMember(d => d.BranchName, o => o.MapFrom(s => s.Branch.Name))
             .ForMember(d => d.IsLowStock, o => o.MapFrom(s => s.QuantityOnHand <= s.ReorderPoint));
 
         CreateMap<Product, ProductWithInventoryDto>()

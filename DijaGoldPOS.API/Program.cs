@@ -2,6 +2,7 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Repositories;
+using DijaGoldPOS.API.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -99,45 +100,13 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-// Add Repository Pattern and Unit of Work
-builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
-builder.Services.AddScoped<IInventoryMovementRepository, InventoryMovementRepository>();
-// Legacy TransactionRepository removed - using FinancialTransactionRepository instead
-builder.Services.AddScoped<IGoldRateRepository, GoldRateRepository>();
-builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
-builder.Services.AddScoped<IBranchRepository, BranchRepository>();
-builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
-builder.Services.AddScoped<IPurchaseOrderRepository, PurchaseOrderRepository>();
-builder.Services.AddScoped<ICashDrawerBalanceRepository, CashDrawerBalanceRepository>();
-builder.Services.AddScoped<IProductOwnershipRepository, ProductOwnershipRepository>();
+// Add core infrastructure (repositories and services)
+builder.Services.AddCoreInfrastructure();
 
-// Add new repository registrations for refactored architecture
-builder.Services.AddScoped<IFinancialTransactionRepository, FinancialTransactionRepository>();
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+// Add lookup infrastructure (repositories and services)
+builder.Services.AddLookupInfrastructure();
 
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-// Add business services
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IPricingService, PricingService>();
-builder.Services.AddScoped<IInventoryService, InventoryService>();
-// Legacy TransactionService removed - using FinancialTransactionService and OrderService instead
-builder.Services.AddScoped<IReportService, ReportService>();
-builder.Services.AddScoped<IReceiptService, ReceiptService>();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
-builder.Services.AddScoped<ILabelPrintingService, LabelPrintingService>();
-builder.Services.AddScoped<ICashDrawerService, CashDrawerService>();
-builder.Services.AddScoped<IRepairJobService, RepairJobService>(); // Restored with new FinancialTransaction architecture
-builder.Services.AddScoped<ITechnicianService, TechnicianService>();
-
-// Add new service registrations for refactored architecture
-builder.Services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();
-// Note: OrderService depends on IRepairJobService, so IRepairJobService must be registered first
-builder.Services.AddScoped<IOrderService, OrderService>();
-builder.Services.AddScoped<IProductOwnershipService, ProductOwnershipService>();
 
 // Configure JSON serialization options
 builder.Services.ConfigureHttpJsonOptions(options =>

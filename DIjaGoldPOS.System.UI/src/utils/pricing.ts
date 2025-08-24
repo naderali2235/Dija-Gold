@@ -1,6 +1,6 @@
 import { Product, Customer, ProductPricingDto } from '../services/api';
 import { GoldRate, MakingCharges } from '../services/api';
-import { EnumMapper, ProductCategoryType, KaratType } from '../types/enums';
+
 import api from '../services/api';
 
 export interface PricingCalculation {
@@ -49,7 +49,7 @@ export function calculateProductPricing(
   // Find the current gold rate for the product's karat type
   // Filter by EffectiveTo == null to match backend logic
   const goldRateData = goldRates.find(rate => 
-    rate.karatType === product.karatType && 
+    rate.karatTypeId === product.karatTypeId && 
     rate.effectiveTo == null
   );
   
@@ -100,15 +100,15 @@ export function calculateProductPricing(
       // Use pricing-level making charges
       // First try to find specific subcategory match
       let chargesData = makingCharges.find(charge => 
-        charge.productCategory === product.categoryType && 
-        charge.subCategory === product.subCategory &&
+        charge.productCategory === product.categoryTypeId && 
+        charge.subCategory === product.subCategory?.name &&
         charge.effectiveTo == null
       );
 
       // Fallback to general category match (where SubCategory is null)
       if (!chargesData) {
         chargesData = makingCharges.find(charge => 
-          charge.productCategory === product.categoryType && 
+          charge.productCategory === product.categoryTypeId && 
           !charge.subCategory &&
           charge.effectiveTo == null
         );
@@ -185,9 +185,9 @@ export function calculateProductPricing(
 /**
  * Get current gold rate for a specific karat type
  */
-export function getCurrentGoldRate(goldRates: GoldRate[], karatType: number): number {
+export function getCurrentGoldRate(goldRates: GoldRate[], karatTypeId: number): number {
   const rateData = goldRates.find(rate => 
-    rate.karatType === karatType && 
+    rate.karatTypeId === karatTypeId && 
     rate.effectiveTo == null
   );
   return rateData?.ratePerGram || 0;
@@ -198,12 +198,12 @@ export function getCurrentGoldRate(goldRates: GoldRate[], karatType: number): nu
  */
 export function getCurrentMakingCharges(
   makingCharges: MakingCharges[], 
-  categoryType: number, 
+  categoryTypeId: number, 
   subCategory?: string
 ): MakingCharges | undefined {
   // First try specific subcategory match
   let charges = makingCharges.find(charge => 
-    charge.productCategory === categoryType && 
+    charge.productCategory === categoryTypeId && 
     charge.subCategory === subCategory &&
     charge.isCurrent
   );
@@ -211,7 +211,7 @@ export function getCurrentMakingCharges(
   // Fallback to general category match
   if (!charges) {
     charges = makingCharges.find(charge => 
-      charge.productCategory === categoryType && 
+      charge.productCategory === categoryTypeId && 
       !charge.subCategory &&
       charge.isCurrent
     );

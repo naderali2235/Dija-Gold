@@ -53,10 +53,6 @@ import {
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { 
-  purchaseOrdersApi, 
-  suppliersApi, 
-  productsApi,
-  branchesApi,
   PurchaseOrderDto, 
   PurchaseOrderItemDto,
   CreatePurchaseOrderRequest,
@@ -67,6 +63,14 @@ import {
   Product,
   BranchDto
 } from '../services/api';
+import { 
+  useSearchPurchaseOrders,
+  useCreatePurchaseOrder,
+  useReceivePurchaseOrder,
+  usePaginatedSuppliers,
+  usePaginatedProducts,
+  usePaginatedBranches
+} from '../hooks/useApi';
 import { toast } from 'sonner';
 
 export default function PurchaseOrders() {
@@ -77,11 +81,57 @@ export default function PurchaseOrders() {
   const [isNewPOOpen, setIsNewPOOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrderDto | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderDto[]>([]);
-  const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [branches, setBranches] = useState<BranchDto[]>([]);
+
+  // API hooks
+  const { 
+    data: purchaseOrdersData, 
+    loading: purchaseOrdersLoading, 
+    error: purchaseOrdersError,
+    execute: searchPurchaseOrders 
+  } = useSearchPurchaseOrders();
+
+  const { 
+    loading: createLoading, 
+    error: createError,
+    execute: createPurchaseOrder 
+  } = useCreatePurchaseOrder();
+
+  const { 
+    loading: receiveLoading, 
+    error: receiveError,
+    execute: receivePurchaseOrder 
+  } = useReceivePurchaseOrder();
+
+  // Load suppliers, products, and branches
+  const { 
+    data: suppliersData, 
+    loading: suppliersLoading,
+    fetchData: fetchSuppliers 
+  } = usePaginatedSuppliers({
+    pageNumber: 1,
+    pageSize: 100,
+    isActive: true
+  });
+
+  const { 
+    data: productsData, 
+    loading: productsLoading,
+    fetchData: fetchProducts 
+  } = usePaginatedProducts({
+    pageNumber: 1,
+    pageSize: 100,
+    isActive: true
+  });
+
+  const { 
+    data: branchesData, 
+    loading: branchesLoading,
+    fetchData: fetchBranches 
+  } = usePaginatedBranches({
+    pageNumber: 1,
+    pageSize: 100,
+    isActive: true
+  });
 
   // Form state for new PO
   const [poForm, setPOForm] = useState({
@@ -99,50 +149,35 @@ export default function PurchaseOrders() {
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       // Load purchase orders
-      const poResult = await purchaseOrdersApi.searchPurchaseOrders({
+      await searchPurchaseOrders({
         pageNumber: 1,
         pageSize: 100
       });
-      setPurchaseOrders(poResult.items);
 
-      // Load suppliers
-      const suppliersResult = await suppliersApi.getSuppliers({
-        pageNumber: 1,
-        pageSize: 100,
-        isActive: true
-      });
-      setSuppliers(suppliersResult.items);
-
-      // Load products
-      const productsResult = await productsApi.getProducts({
-        pageNumber: 1,
-        pageSize: 100,
-        isActive: true
-      });
-      setProducts(productsResult.items);
-
-      // Load branches
-      const branchesResult = await branchesApi.getBranches({
-        pageNumber: 1,
-        pageSize: 100,
-        isActive: true
-      });
-      setBranches(branchesResult.items);
+      // Load suppliers, products, and branches
+      await Promise.all([
+        fetchSuppliers(),
+        fetchProducts(),
+        fetchBranches()
+      ]);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
     }
   };
+
+  // Extract data from API responses
+  const purchaseOrders = purchaseOrdersData?.items || [];
+  const suppliers = suppliersData?.items || [];
+  const products = productsData?.items || [];
+  const branches = branchesData?.items || [];
 
   const filteredPOs = purchaseOrders.filter(po => {
     const matchesSearch = 
       po.purchaseOrderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (po.supplierName && po.supplierName.toLowerCase().includes(searchQuery.toLowerCase()));
+      (po.supplierId && po.supplierId.toString().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     const matchesTab = activeTab === 'all' || po.status === activeTab;
@@ -216,7 +251,6 @@ export default function PurchaseOrders() {
       return;
     }
 
-    setLoading(true);
     try {
       const request: CreatePurchaseOrderRequest = {
         supplierId: parseInt(poForm.supplierId),
@@ -233,7 +267,7 @@ export default function PurchaseOrders() {
         }))
       };
 
-      await purchaseOrdersApi.createPurchaseOrder(request);
+      await createPurchaseOrder(request);
       toast.success('Purchase order created successfully');
       setIsNewPOOpen(false);
       resetForm();
@@ -241,8 +275,6 @@ export default function PurchaseOrders() {
     } catch (error) {
       console.error('Error creating purchase order:', error);
       toast.error('Failed to create purchase order');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -252,7 +284,6 @@ export default function PurchaseOrders() {
       return;
     }
 
-    setLoading(true);
     try {
       // Note: The current API only has endpoints for create, get, search, and receive
       // Status updates for 'sent', 'confirmed', etc. would need additional API endpoints
@@ -266,8 +297,6 @@ export default function PurchaseOrders() {
     } catch (error) {
       console.error('Error updating purchase order status:', error);
       toast.error('Failed to update purchase order status');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -277,21 +306,18 @@ export default function PurchaseOrders() {
       return;
     }
 
-    setLoading(true);
     try {
       const request: ReceivePurchaseOrderRequest = {
         purchaseOrderId: poId,
         items: items
       };
 
-      await purchaseOrdersApi.receivePurchaseOrder(request);
+      await receivePurchaseOrder(request);
       toast.success('Purchase order received successfully');
       loadData(); // Reload the data
     } catch (error) {
       console.error('Error receiving purchase order:', error);
       toast.error('Failed to receive purchase order');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -312,6 +338,32 @@ export default function PurchaseOrders() {
     received: purchaseOrders.filter(po => po.status === 'Received').length,
     totalValue: purchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0),
   };
+
+  // Helper function to get supplier name by ID
+  const getSupplierName = (supplierId: number) => {
+    const supplier = suppliers.find(s => s.id === supplierId);
+    return supplier ? supplier.companyName : `Supplier ID: ${supplierId}`;
+  };
+
+  // Helper function to get branch name by ID
+  const getBranchName = (branchId: number) => {
+    const branch = branches.find(b => b.id === branchId);
+    return branch ? branch.name : `Branch ID: ${branchId}`;
+  };
+
+  // Helper function to get product name by ID
+  const getProductName = (productId: number) => {
+    const product = products.find(p => p.id === productId);
+    return product ? product.name : `Product ID: ${productId}`;
+  };
+
+  // Helper function to get product code by ID
+  const getProductCode = (productId: number) => {
+    const product = products.find(p => p.id === productId);
+    return product ? product.productCode : '';
+  };
+
+  const loading = purchaseOrdersLoading || suppliersLoading || productsLoading || branchesLoading || createLoading || receiveLoading;
 
   if (loading && purchaseOrders.length === 0) {
     return (
@@ -492,10 +544,10 @@ export default function PurchaseOrders() {
                 </Button>
                 <Button 
                   onClick={handleCreatePO} 
-                  disabled={loading}
+                  disabled={createLoading}
                   className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
                 >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Purchase Order
                 </Button>
               </div>
@@ -630,13 +682,13 @@ export default function PurchaseOrders() {
                         <TableCell className="font-medium">{po.purchaseOrderNumber}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{po.supplierName}</p>
+                            <p className="font-medium">{getSupplierName(po.supplierId)}</p>
                             <p className="text-sm text-muted-foreground">ID: {po.supplierId}</p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{po.branchName}</p>
+                            <p className="font-medium">{getBranchName(po.branchId)}</p>
                             <p className="text-sm text-muted-foreground">ID: {po.branchId}</p>
                           </div>
                         </TableCell>
@@ -669,12 +721,12 @@ export default function PurchaseOrders() {
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
                                       <Label>Supplier</Label>
-                                      <p className="font-medium">{po.supplierName}</p>
+                                      <p className="font-medium">{getSupplierName(po.supplierId)}</p>
                                       <p className="text-sm text-muted-foreground">ID: {po.supplierId}</p>
                                     </div>
                                     <div>
                                       <Label>Branch</Label>
-                                      <p className="font-medium">{po.branchName}</p>
+                                      <p className="font-medium">{getBranchName(po.branchId)}</p>
                                       <p className="text-sm text-muted-foreground">ID: {po.branchId}</p>
                                     </div>
                                     <div>
@@ -705,8 +757,8 @@ export default function PurchaseOrders() {
                                           <TableRow key={item.id}>
                                             <TableCell>
                                               <div>
-                                                <p className="font-medium">{item.productName}</p>
-                                                <p className="text-sm text-muted-foreground">{item.productCode}</p>
+                                                <p className="font-medium">{getProductName(item.productId)}</p>
+                                                <p className="text-sm text-muted-foreground">{getProductCode(item.productId)}</p>
                                               </div>
                                             </TableCell>
                                             <TableCell>

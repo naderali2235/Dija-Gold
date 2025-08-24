@@ -781,7 +781,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(kt => kt.Name).IsUnique();
             entity.Property(kt => kt.Name).IsRequired().HasMaxLength(50);
             entity.Property(kt => kt.Description).HasMaxLength(200);
-            entity.Property(kt => kt.KaratValue).IsRequired();
         });
 
         builder.Entity<ProductCategoryTypeLookup>(entity =>
@@ -824,6 +823,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(sc => sc.Name).IsUnique();
             entity.Property(sc => sc.Name).IsRequired().HasMaxLength(50);
             entity.Property(sc => sc.Description).HasMaxLength(200);
+            
+            // Relationship to product category type
+            entity.HasOne(sc => sc.CategoryType)
+                  .WithMany()
+                  .HasForeignKey(sc => sc.CategoryTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Configure soft delete filter for BaseEntity

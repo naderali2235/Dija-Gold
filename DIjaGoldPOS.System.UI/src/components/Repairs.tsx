@@ -63,12 +63,6 @@ import {
 import { formatCurrency } from './utils/currency';
 import { useAuth } from './AuthContext';
 import { 
-  transactionsApi, 
-  customersApi, 
-  repairJobsApi, 
-  techniciansApi,
-  lookupsApi,
-  ordersApi,
   CreateRepairJobRequestDto, 
   CreateRepairOrderRequestDto,
   Transaction,
@@ -76,7 +70,20 @@ import {
   TechnicianDto,
   RepairJobStatisticsDto
 } from '../services/api';
-import { EnumLookupDto } from '../types/enums';
+import { 
+  usePaginatedCustomers,
+  useSearchRepairJobs,
+  useRepairJobStatistics,
+  useActiveTechnicians,
+  useRepairStatuses,
+  useRepairPriorities,
+  usePaymentMethods,
+  useCreateRepairOrder,
+  useUpdateRepairJobStatus,
+  useAssignTechnician,
+  useCompleteRepair
+} from '../hooks/useApi';
+import { EnumLookupDto } from '../types/lookups';
 import { toast } from 'sonner';
 
 export default function Repairs() {
@@ -85,9 +92,25 @@ export default function Repairs() {
   const [isNewRepairOpen, setIsNewRepairOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJob, setSelectedJob] = useState<RepairJobDto | null>(null);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [technicians, setTechnicians] = useState<TechnicianDto[]>([]);
-  const [statistics, setStatistics] = useState<RepairJobStatisticsDto | null>(null);
+  // Use hooks for data fetching
+  const { data: customersData, loading: customersLoading } = usePaginatedCustomers({
+    pageNumber: 1,
+    pageSize: 1000,
+    isActive: true
+  });
+  
+  const { execute: searchRepairJobs, data: repairJobsData, loading: repairJobsLoading } = useSearchRepairJobs();
+  const { execute: getRepairJobStatistics, data: statistics, loading: statisticsLoading } = useRepairJobStatistics();
+  const { execute: getActiveTechnicians, data: technicians, loading: techniciansLoading } = useActiveTechnicians();
+  const { execute: getRepairStatuses, data: repairStatuses, loading: statusesLoading } = useRepairStatuses();
+  const { execute: getRepairPriorities, data: repairPriorities, loading: prioritiesLoading } = useRepairPriorities();
+  const { execute: getPaymentMethods, data: paymentMethods, loading: paymentMethodsLoading } = usePaymentMethods();
+  
+  const { execute: createRepairOrder, loading: isCreating } = useCreateRepairOrder();
+  const { execute: updateRepairJobStatus, loading: isUpdatingStatus } = useUpdateRepairJobStatus();
+  const { execute: assignTechnician, loading: isAssigningTechnician } = useAssignTechnician();
+  const { execute: completeRepair, loading: isCompletingRepair } = useCompleteRepair();
+
   const [showStatistics, setShowStatistics] = useState(false);
 
   // Form state for new repair
@@ -128,15 +151,6 @@ export default function Repairs() {
     technicianNotes: '',
   });
 
-  // State for repair jobs
-  const [repairJobs, setRepairJobs] = useState<RepairJobDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [repairStatuses, setRepairStatuses] = useState<EnumLookupDto[]>([]);
-  const [repairPriorities, setRepairPriorities] = useState<EnumLookupDto[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<EnumLookupDto[]>([]);
-
   // Fetch data on component mount
   useEffect(() => {
     fetchData();
@@ -144,31 +158,23 @@ export default function Repairs() {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const [customersData, techniciansData, repairJobsData, statisticsData, statusesData, prioritiesData, paymentMethodsData] = await Promise.all([
-        customersApi.getCustomers({ pageSize: 1000 }),
-        techniciansApi.getActiveTechnicians(),
-        repairJobsApi.searchRepairJobs({ pageSize: 1000 }),
-        repairJobsApi.getRepairJobStatistics(),
-        lookupsApi.getRepairStatuses(),
-        lookupsApi.getRepairPriorities(),
-        lookupsApi.getPaymentMethods()
+      await Promise.all([
+        searchRepairJobs({ pageSize: 1000 }),
+        getRepairJobStatistics(),
+        getActiveTechnicians(),
+        getRepairStatuses(),
+        getRepairPriorities(),
+        getPaymentMethods()
       ]);
-
-      setCustomers(customersData.items || []);
-      setTechnicians(techniciansData);
-      setRepairJobs(repairJobsData.items || []);
-      setStatistics(statisticsData);
-      setRepairStatuses(statusesData);
-      setRepairPriorities(prioritiesData);
-      setPaymentMethods(paymentMethodsData);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load repair jobs data');
-    } finally {
-      setLoading(false);
     }
   };
+
+  // Compute loading state
+  const loading = customersLoading || repairJobsLoading || statisticsLoading || techniciansLoading || 
+                 statusesLoading || prioritiesLoading || paymentMethodsLoading;
 
   const handleCreateRepair = async () => {
     if (!newRepair.itemDescription || !newRepair.repairType) {
@@ -177,8 +183,6 @@ export default function Repairs() {
     }
 
     try {
-      setIsCreating(true);
-      
       // Create repair order using the new architecture
       console.log('User data for repair:', user);
       console.log('User branch:', user?.branch);
@@ -192,8 +196,8 @@ export default function Repairs() {
       console.log('Using branch ID:', branchId);
       
       // Get priority enum value
-      const priorityLookup = repairPriorities.find(p => p.displayName === newRepair.priority);
-      const priorityValue = priorityLookup?.value || 2; // Default to Medium priority
+      const priorityLookup = repairPriorities?.find(p => p.name === newRepair.priority);
+      const priorityValue = priorityLookup?.id || 2; // Default to Medium priority
       
       const repairOrderRequest: CreateRepairOrderRequestDto = {
         branchId: branchId,
@@ -205,13 +209,13 @@ export default function Repairs() {
         estimatedCompletionDate: newRepair.estimatedCompletion ? 
           new Date(Date.now() + parseInt(newRepair.estimatedCompletion) * 24 * 60 * 60 * 1000).toISOString() : 
           new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Default to 7 days
-        priority: priorityValue,
+        priorityId: priorityValue,
         assignedTechnicianId: undefined, // Will be assigned later
         technicianNotes: newRepair.notes
       };
 
       // Create the repair order (this will automatically create the order, financial transaction, and repair job)
-      const result = await ordersApi.createRepairOrder(repairOrderRequest);
+      await createRepairOrder(repairOrderRequest);
       
       toast.success('Repair job created successfully');
       setIsNewRepairOpen(false);
@@ -220,8 +224,6 @@ export default function Repairs() {
     } catch (error) {
       console.error('Error creating repair job:', error);
       toast.error('Failed to create repair job');
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -242,17 +244,15 @@ export default function Repairs() {
 
   const handleStatusUpdate = async (jobId: number, status: string) => {
     try {
-      setIsUpdating(true);
-      
       // Find the current job to validate transition
-      const currentJob = repairJobs.find(job => job.id === jobId);
+      const currentJob = repairJobsData?.items?.find(job => job.id === jobId);
       if (!currentJob) {
         toast.error('Repair job not found');
         return;
       }
 
       // Find the status enum value from the lookup data
-      const statusLookup = repairStatuses.find(s => s.displayName === status);
+      const statusLookup = repairStatuses?.find(s => s.name === status);
       if (!statusLookup) {
         toast.error('Invalid status selected');
         return;
@@ -268,26 +268,26 @@ export default function Repairs() {
         6: []      // Cancelled -> No further transitions
       };
 
-      const currentStatus = currentJob.status;
-      const newStatus = statusLookup.value;
+      const currentStatus = currentJob.statusId;
+      const newStatus = statusLookup.id;
       
       if (!validTransitions[currentStatus]?.includes(newStatus)) {
-        const currentStatusName = repairStatuses.find(s => s.value === currentStatus)?.displayName || 'Unknown';
+        const currentStatusName = repairStatuses?.find(s => s.id === currentStatus)?.name || 'Unknown';
         toast.error(`Cannot transition from ${currentStatusName} to ${status}. Please follow the proper workflow.`);
         return;
       }
 
       // Get payment method enum value
-      const paymentMethodLookup = paymentMethods.find(m => m.name === statusUpdateForm.paymentMethod);
-      const paymentMethodValue = paymentMethodLookup?.value || 1; // Default to Cash
+      const paymentMethodLookup = paymentMethods?.find(m => m.name === statusUpdateForm.paymentMethod);
+      const paymentMethodValue = paymentMethodLookup?.id || 1; // Default to Cash
 
-      await repairJobsApi.updateRepairJobStatus(jobId, {
-        status: statusLookup.value,
+      await updateRepairJobStatus(jobId, {
+        statusId: statusLookup.id,
         technicianNotes: statusUpdateForm.notes,
         materialsUsed: statusUpdateForm.materialsUsed,
         hoursSpent: statusUpdateForm.hoursSpent ? parseFloat(statusUpdateForm.hoursSpent) : undefined,
         additionalPaymentAmount: statusUpdateForm.additionalPaymentAmount ? parseFloat(statusUpdateForm.additionalPaymentAmount) : undefined,
-        paymentMethod: paymentMethodValue,
+        paymentMethodId: paymentMethodValue,
       });
       toast.success('Repair job status updated successfully');
       setStatusUpdateOpen(false);
@@ -297,25 +297,21 @@ export default function Repairs() {
       console.error('Error updating repair job status:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to update repair job status';
       toast.error(errorMessage);
-    } finally {
-      setIsUpdating(false);
     }
   };
 
   const handleCompleteRepair = async (jobId: number) => {
     try {
-      setIsUpdating(true);
-      
       // Find the current job to validate
-      const currentJob = repairJobs.find(job => job.id === jobId);
+      const currentJob = repairJobsData?.items?.find(job => job.id === jobId);
       if (!currentJob) {
         toast.error('Repair job not found');
         return;
       }
 
       // Validate that the job is in the right status to be completed
-      if (currentJob.status !== 2) { // InProgress = 2
-        const currentStatusName = repairStatuses.find(s => s.value === currentJob.status)?.displayName || 'Unknown';
+      if (currentJob.statusId !== 2) { // InProgress = 2
+        const currentStatusName = repairStatuses?.find(s => s.id === currentJob.statusId)?.name || 'Unknown';
         toast.error(`Cannot complete repair from ${currentStatusName} status. Job must be In Progress first.`);
         return;
       }
@@ -326,16 +322,16 @@ export default function Repairs() {
         currentJob.repairAmount || 0;
 
       // Get payment method enum value
-      const paymentMethodLookup = paymentMethods.find(m => m.name === statusUpdateForm.paymentMethod);
-      const paymentMethodValue = paymentMethodLookup?.value || 1; // Default to Cash
+      const paymentMethodLookup = paymentMethods?.find(m => m.name === statusUpdateForm.paymentMethod);
+      const paymentMethodValue = paymentMethodLookup?.id || 1; // Default to Cash
 
-      await repairJobsApi.completeRepair(jobId, {
+      await completeRepair(jobId, {
         actualCost: actualCost,
         technicianNotes: statusUpdateForm.notes,
         materialsUsed: statusUpdateForm.materialsUsed,
         hoursSpent: statusUpdateForm.hoursSpent ? parseFloat(statusUpdateForm.hoursSpent) : undefined,
         additionalPaymentAmount: statusUpdateForm.additionalPaymentAmount ? parseFloat(statusUpdateForm.additionalPaymentAmount) : undefined,
-        paymentMethod: paymentMethodValue,
+        paymentMethodId: paymentMethodValue,
       });
       toast.success('Repair job completed successfully');
       setStatusUpdateOpen(false);
@@ -345,16 +341,14 @@ export default function Repairs() {
       console.error('Error completing repair job:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to complete repair job';
       toast.error(errorMessage);
-    } finally {
-      setIsUpdating(false);
     }
   };
 
   const handleAssignTechnician = async (jobId: number) => {
     try {
-      setIsUpdating(true);
-      await repairJobsApi.assignTechnician(jobId, {
+      await assignTechnician(jobId, {
         technicianId: parseInt(assignTechnicianForm.technicianId),
+        technicianNotes: assignTechnicianForm.technicianNotes,
       });
       toast.success('Technician assigned successfully');
       setAssignTechnicianOpen(false);
@@ -363,8 +357,6 @@ export default function Repairs() {
     } catch (error) {
       console.error('Error assigning technician:', error);
       toast.error('Failed to assign technician');
-    } finally {
-      setIsUpdating(false);
     }
   };
 
@@ -416,10 +408,10 @@ export default function Repairs() {
   };
 
   // Filter repair jobs based on active tab and search query
-  const filteredJobs = repairJobs.filter(job => {
+  const filteredJobs = repairJobsData?.items?.filter(job => {
     // Get status display name for comparison
-    const statusLookup = repairStatuses.find(s => s.value === job.status);
-    const statusDisplayName = statusLookup?.displayName?.toLowerCase() || '';
+    const statusLookup = repairStatuses?.find(s => s.id === job.statusId);
+    const statusDisplayName = statusLookup?.name?.toLowerCase() || '';
     
     const matchesTab = activeTab === 'all' || statusDisplayName === activeTab;
     const matchesSearch = searchQuery === '' || 
@@ -427,11 +419,11 @@ export default function Repairs() {
       job.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.repairDescription.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
-  });
+  }) || [];
 
   const getStatusBadgeVariant = (status: number) => {
-    const statusLookup = repairStatuses.find(s => s.value === status);
-    const statusName = statusLookup?.displayName?.toLowerCase() || '';
+    const statusLookup = repairStatuses?.find(s => s.id === status);
+    const statusName = statusLookup?.name?.toLowerCase() || '';
     
     switch (statusName) {
       case 'pending': return 'secondary';
@@ -445,8 +437,8 @@ export default function Repairs() {
   };
 
   const getStatusBadgeColor = (status: number) => {
-    const statusLookup = repairStatuses.find(s => s.value === status);
-    const statusName = statusLookup?.displayName?.toLowerCase() || '';
+    const statusLookup = repairStatuses?.find(s => s.id === status);
+    const statusName = statusLookup?.name?.toLowerCase() || '';
     
     switch (statusName) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
@@ -509,7 +501,7 @@ export default function Repairs() {
                         customerPhone: ''
                       });
                     } else {
-                      const customer = customers.find(c => c.id.toString() === value);
+                      const customer = customersData?.items?.find(c => c.id.toString() === value);
                       setNewRepair({
                         ...newRepair, 
                         customerId: value,
@@ -523,7 +515,7 @@ export default function Repairs() {
                     </SelectTrigger>
                     <SelectContent className="bg-white border-gray-200 shadow-lg">
                       <SelectItem value="walk-in" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">Walk-in Customer</SelectItem>
-                      {customers.map((customer) => (
+                      {(customersData?.items || []).map((customer) => (
                         <SelectItem 
                           key={customer.id} 
                           value={customer.id.toString()}
@@ -578,13 +570,13 @@ export default function Repairs() {
                        <SelectValue />
                      </SelectTrigger>
                      <SelectContent className="bg-white border-gray-200 shadow-lg">
-                       {repairPriorities.map((priority) => (
+                       {(repairPriorities || []).map((priority) => (
                          <SelectItem 
-                           key={priority.value} 
-                           value={priority.displayName}
+                           key={priority.id} 
+                           value={priority.name}
                            className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                          >
-                           {priority.displayName}
+                           {priority.name}
                          </SelectItem>
                        ))}
                      </SelectContent>
@@ -786,15 +778,15 @@ export default function Repairs() {
                         <TableCell>Repair Service</TableCell>
                                                  <TableCell>
                            <Badge variant="outline" className="capitalize">
-                             {repairPriorities.find(p => p.value === job.priority)?.displayName || 'Unknown'}
+                             {repairPriorities?.find(p => p.id === job.priorityId)?.name || 'Unknown'}
                            </Badge>
                          </TableCell>
                         <TableCell>
                           <Badge 
-                            variant={getStatusBadgeVariant(job.status)}
-                            className={getStatusBadgeColor(job.status)}
+                            variant={getStatusBadgeVariant(job.statusId)}
+                            className={getStatusBadgeColor(job.statusId)}
                           >
-                            {job.statusDisplayName || job.status}
+                            {job.statusDisplayName || job.statusId}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -825,7 +817,7 @@ export default function Repairs() {
                                 <User className="h-4 w-4" />
                               </Button>
                             )}
-                                                         {job.status === 1 && ( // Pending
+                                                         {job.statusId === 1 && ( // Pending
                                <Button
                                  size="sm"
                                  variant="outline"
@@ -835,7 +827,7 @@ export default function Repairs() {
                                  <Wrench className="h-4 w-4" />
                                </Button>
                              )}
-                             {job.status === 2 && ( // InProgress
+                             {job.statusId === 2 && ( // InProgress
                                <Button
                                  size="sm"
                                  variant="outline"
@@ -845,7 +837,7 @@ export default function Repairs() {
                                  <CheckCircle className="h-4 w-4" />
                                </Button>
                              )}
-                             {job.status === 3 && ( // Completed
+                             {job.statusId === 3 && ( // Completed
                                <Button
                                  size="sm"
                                  variant="outline"
@@ -855,7 +847,7 @@ export default function Repairs() {
                                  <Package className="h-4 w-4" />
                                </Button>
                              )}
-                             {job.status === 4 && ( // ReadyForPickup
+                             {job.statusId === 4 && ( // ReadyForPickup
                                <Button
                                  size="sm"
                                  variant="outline"
@@ -906,16 +898,16 @@ export default function Repairs() {
                                  <div>
                    <Label className="text-sm font-medium text-gray-500">Priority</Label>
                    <Badge variant="outline" className="capitalize">
-                     {repairPriorities.find(p => p.value === selectedJobForDetails.priority)?.displayName || 'Unknown'}
+                     {repairPriorities?.find(p => p.id === selectedJobForDetails.priorityId)?.name || 'Unknown'}
                    </Badge>
                  </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Status</Label>
                   <Badge 
-                    variant={getStatusBadgeVariant(selectedJobForDetails.status)}
-                    className={getStatusBadgeColor(selectedJobForDetails.status)}
+                    variant={getStatusBadgeVariant(selectedJobForDetails.statusId)}
+                    className={getStatusBadgeColor(selectedJobForDetails.statusId)}
                   >
-                    {selectedJobForDetails.statusDisplayName || selectedJobForDetails.status}
+                    {selectedJobForDetails.statusDisplayName || selectedJobForDetails.statusId}
                   </Badge>
                 </div>
                 <div>
@@ -991,13 +983,13 @@ export default function Repairs() {
                    <SelectValue placeholder="Select new status" />
                  </SelectTrigger>
                  <SelectContent className="bg-white border-gray-200 shadow-lg">
-                   {repairStatuses.map((status) => (
+                   {(repairStatuses || []).map((status) => (
                      <SelectItem 
-                       key={status.value} 
-                       value={status.displayName}
+                       key={status.id} 
+                       value={status.name}
                        className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                      >
-                       {status.displayName}
+                       {status.name}
                      </SelectItem>
                    ))}
                  </SelectContent>
@@ -1061,13 +1053,13 @@ export default function Repairs() {
                       <SelectValue placeholder="Select payment method" />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-gray-200 shadow-lg">
-                      {paymentMethods.map((method) => (
+                      {(paymentMethods || []).map((method) => (
                         <SelectItem 
-                          key={method.value} 
+                          key={method.id} 
                           value={method.name}
                           className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                         >
-                          {method.displayName}
+                          {method.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1112,7 +1104,7 @@ export default function Repairs() {
                   <SelectValue placeholder="Select a technician" />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-gray-200 shadow-lg">
-                  {technicians.map((technician) => (
+                  {(technicians || []).map((technician) => (
                     <SelectItem 
                       key={technician.id} 
                       value={technician.id.toString()}

@@ -197,7 +197,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("UserId", "Timestamp");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Branch", b =>
@@ -256,7 +256,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Branches", (string)null);
+                    b.ToTable("Branches");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.CashDrawerBalance", b =>
@@ -338,7 +338,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("BranchId", "BalanceDate")
                         .IsUnique();
 
-                    b.ToTable("CashDrawerBalances", (string)null);
+                    b.ToTable("CashDrawerBalances");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Customer", b =>
@@ -410,11 +410,11 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<DateTime>("RegistrationDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("TotalOrders")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("TotalPurchaseAmount")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("TotalTransactions")
-                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -430,7 +430,7 @@ namespace DijaGoldPOS.API.Migrations
                         .IsUnique()
                         .HasFilter("[NationalId] IS NOT NULL");
 
-                    b.ToTable("Customers", (string)null);
+                    b.ToTable("Customers");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchase", b =>
@@ -504,7 +504,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("PurchaseNumber")
                         .IsUnique();
 
-                    b.ToTable("CustomerPurchases", (string)null);
+                    b.ToTable("CustomerPurchases");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.CustomerPurchaseItem", b =>
@@ -561,7 +561,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("CustomerPurchaseItems", (string)null);
+                    b.ToTable("CustomerPurchaseItems");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.FinancialTransaction", b =>
@@ -688,7 +688,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("BranchId", "TransactionNumber")
                         .IsUnique();
 
-                    b.ToTable("FinancialTransactions", (string)null);
+                    b.ToTable("FinancialTransactions");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.GoldRate", b =>
@@ -736,7 +736,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("KaratTypeId", "EffectiveFrom");
 
-                    b.ToTable("GoldRates", (string)null);
+                    b.ToTable("GoldRates");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Inventory", b =>
@@ -796,7 +796,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("ProductId", "BranchId")
                         .IsUnique();
 
-                    b.ToTable("Inventories", (string)null);
+                    b.ToTable("Inventories");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.InventoryMovement", b =>
@@ -863,7 +863,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("InventoryId");
 
-                    b.ToTable("InventoryMovements", (string)null);
+                    b.ToTable("InventoryMovements");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.BusinessEntityTypeLookup", b =>
@@ -909,7 +909,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("BusinessEntityTypeLookups", (string)null);
+                    b.ToTable("BusinessEntityTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.ChargeTypeLookup", b =>
@@ -955,7 +955,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ChargeTypeLookups", (string)null);
+                    b.ToTable("ChargeTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionStatusLookup", b =>
@@ -1001,7 +1001,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("FinancialTransactionStatusLookups", (string)null);
+                    b.ToTable("FinancialTransactionStatusLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.FinancialTransactionTypeLookup", b =>
@@ -1047,7 +1047,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("FinancialTransactionTypeLookups", (string)null);
+                    b.ToTable("FinancialTransactionTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.KaratTypeLookup", b =>
@@ -1073,9 +1073,6 @@ namespace DijaGoldPOS.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<int>("KaratValue")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime2");
 
@@ -1096,7 +1093,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("KaratTypeLookups", (string)null);
+                    b.ToTable("KaratTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.OrderStatusLookup", b =>
@@ -1142,7 +1139,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("OrderStatusLookups", (string)null);
+                    b.ToTable("OrderStatusLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.OrderTypeLookup", b =>
@@ -1188,7 +1185,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("OrderTypeLookups", (string)null);
+                    b.ToTable("OrderTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.PaymentMethodLookup", b =>
@@ -1234,7 +1231,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("PaymentMethodLookups", (string)null);
+                    b.ToTable("PaymentMethodLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.ProductCategoryTypeLookup", b =>
@@ -1280,7 +1277,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ProductCategoryTypeLookups", (string)null);
+                    b.ToTable("ProductCategoryTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.RepairPriorityLookup", b =>
@@ -1326,7 +1323,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("RepairPriorityLookups", (string)null);
+                    b.ToTable("RepairPriorityLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.RepairStatusLookup", b =>
@@ -1372,7 +1369,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("RepairStatusLookups", (string)null);
+                    b.ToTable("RepairStatusLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.SubCategoryLookup", b =>
@@ -1382,6 +1379,9 @@ namespace DijaGoldPOS.API.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryTypeId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -1415,10 +1415,12 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryTypeId");
+
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("SubCategoryLookups", (string)null);
+                    b.ToTable("SubCategoryLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.TransactionStatusLookup", b =>
@@ -1464,7 +1466,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("TransactionStatusLookups", (string)null);
+                    b.ToTable("TransactionStatusLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.TransactionTypeLookup", b =>
@@ -1510,7 +1512,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("TransactionTypeLookups", (string)null);
+                    b.ToTable("TransactionTypeLookups");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.MakingCharges", b =>
@@ -1577,7 +1579,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("ProductCategoryId", "SubCategoryId", "EffectiveFrom");
 
-                    b.ToTable("MakingCharges", (string)null);
+                    b.ToTable("MakingCharges");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Order", b =>
@@ -1693,7 +1695,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("BranchId", "OrderNumber")
                         .IsUnique();
 
-                    b.ToTable("Orders", (string)null);
+                    b.ToTable("Orders");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.OrderItem", b =>
@@ -1775,7 +1777,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("ProductId1");
 
-                    b.ToTable("OrderItems", (string)null);
+                    b.ToTable("OrderItems");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.OwnershipMovement", b =>
@@ -1859,7 +1861,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("ReferenceNumber");
 
-                    b.ToTable("OwnershipMovements", (string)null);
+                    b.ToTable("OwnershipMovements");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Product", b =>
@@ -1971,7 +1973,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("Products", (string)null);
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.ProductOwnership", b =>
@@ -2060,7 +2062,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("ProductId", "BranchId", "SupplierId", "PurchaseOrderId");
 
-                    b.ToTable("ProductOwnerships", (string)null);
+                    b.ToTable("ProductOwnerships");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.PurchaseOrder", b =>
@@ -2145,7 +2147,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("PurchaseOrders", (string)null);
+                    b.ToTable("PurchaseOrders");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.PurchaseOrderItem", b =>
@@ -2213,7 +2215,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("PurchaseOrderId");
 
-                    b.ToTable("PurchaseOrderItems", (string)null);
+                    b.ToTable("PurchaseOrderItems");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.RepairJob", b =>
@@ -2306,7 +2308,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("StatusId");
 
-                    b.ToTable("RepairJobs", (string)null);
+                    b.ToTable("RepairJobs");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Supplier", b =>
@@ -2389,7 +2391,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Suppliers", (string)null);
+                    b.ToTable("Suppliers");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.SupplierTransaction", b =>
@@ -2465,7 +2467,7 @@ namespace DijaGoldPOS.API.Migrations
                     b.HasIndex("TransactionNumber")
                         .IsUnique();
 
-                    b.ToTable("SupplierTransactions", (string)null);
+                    b.ToTable("SupplierTransactions");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.TaxConfiguration", b =>
@@ -2532,7 +2534,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.HasIndex("TaxTypeId");
 
-                    b.ToTable("TaxConfigurations", (string)null);
+                    b.ToTable("TaxConfigurations");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.Technician", b =>
@@ -2594,7 +2596,7 @@ namespace DijaGoldPOS.API.Migrations
                         .IsUnique()
                         .HasFilter("[PhoneNumber] IS NOT NULL");
 
-                    b.ToTable("Technicians", (string)null);
+                    b.ToTable("Technicians");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -2942,6 +2944,17 @@ namespace DijaGoldPOS.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Inventory");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.LookupTables.SubCategoryLookup", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.LookupTables.ProductCategoryTypeLookup", "CategoryType")
+                        .WithMany()
+                        .HasForeignKey("CategoryTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CategoryType");
                 });
 
             modelBuilder.Entity("DijaGoldPOS.API.Models.MakingCharges", b =>

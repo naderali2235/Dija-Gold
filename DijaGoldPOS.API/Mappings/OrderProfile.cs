@@ -14,6 +14,7 @@ public class OrderProfile : Profile
             .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product != null ? s.Product.Name : string.Empty))
             .ForMember(d => d.ProductCode, o => o.MapFrom(s => s.Product != null ? s.Product.ProductCode : string.Empty))
             .ForMember(d => d.KaratType, o => o.MapFrom(s => s.Product != null ? s.Product.KaratType != null ? s.Product.KaratType.Name : string.Empty : string.Empty))
+            .ForMember(d => d.KaratTypeLookup, o => o.MapFrom(s => s.Product != null ? s.Product.KaratType : null))
             .ForMember(d => d.Weight, o => o.MapFrom(s => s.Product != null ? s.Product.Weight : 0));
 
         // Map Order to OrderDto
@@ -28,8 +29,11 @@ public class OrderProfile : Profile
             .ForMember(d => d.Items, o => o.MapFrom(s => s.OrderItems))
             .ForMember(d => d.OrderTypeId, o => o.MapFrom(s => s.OrderTypeId))
             .ForMember(d => d.OrderTypeDescription, o => o.MapFrom(s => s.OrderType != null ? s.OrderType.Name : string.Empty))
+            .ForMember(d => d.OrderType, o => o.MapFrom(s => s.OrderType))
             .ForMember(d => d.StatusId, o => o.MapFrom(s => s.StatusId))
-            .ForMember(d => d.StatusDescription, o => o.MapFrom(s => s.Status != null ? s.Status.Name : string.Empty));
+            .ForMember(d => d.StatusDescription, o => o.MapFrom(s => s.Status != null ? s.Status.Name : string.Empty))
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status))
+            .ForMember(d => d.UpdatedAt, o => o.MapFrom(s => s.ModifiedAt));
 
         // Map CreateOrderRequest to Order
         CreateMap<CreateOrderRequest, Order>()

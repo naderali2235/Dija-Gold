@@ -56,6 +56,9 @@ public class ProductsController : ControllerBase
         {
             var query = _context.Products
                 .Include(p => p.Supplier)
+                .Include(p => p.CategoryType)
+                .Include(p => p.KaratType)
+                .Include(p => p.SubCategoryLookup)
                 .AsQueryable();
 
             // Apply filters
@@ -128,6 +131,10 @@ public class ProductsController : ControllerBase
         try
         {
             var productDto = await _context.Products
+                .Include(p => p.Supplier)
+                .Include(p => p.CategoryType)
+                .Include(p => p.KaratType)
+                .Include(p => p.SubCategoryLookup)
                 .Where(p => p.Id == id)
                 .ProjectTo<ProductDto>(_mapper.ConfigurationProvider)
                 .FirstOrDefaultAsync();
@@ -160,6 +167,12 @@ public class ProductsController : ControllerBase
         try
         {
             var productDto = await _context.Products
+                .Include(p => p.Supplier)
+                .Include(p => p.CategoryType)
+                .Include(p => p.KaratType)
+                .Include(p => p.SubCategoryLookup)
+                .Include(p => p.InventoryRecords)
+                    .ThenInclude(i => i.Branch)
                 .Where(p => p.Id == id)
                 .ProjectTo<ProductWithInventoryDto>(_mapper.ConfigurationProvider)
                 .FirstOrDefaultAsync();

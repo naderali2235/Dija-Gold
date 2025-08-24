@@ -5,7 +5,7 @@ namespace DijaGoldPOS.API.Models.LookupTables;
 /// <summary>
 /// Lookup table for financial transaction types
 /// </summary>
-public class FinancialTransactionTypeLookup : BaseEntity , ILookupEntity
+public class FinancialTransactionTypeLookup : BaseEntity, ILookupEntity
 {
     [Required]
     [MaxLength(50)]

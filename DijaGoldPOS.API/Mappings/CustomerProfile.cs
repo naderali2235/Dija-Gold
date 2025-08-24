@@ -21,7 +21,7 @@ public class CustomerProfile : Profile
             .ForMember(d => d.LoyaltyPoints, o => o.MapFrom(_ => 0))
             .ForMember(d => d.TotalPurchaseAmount, o => o.MapFrom(_ => 0m))
             .ForMember(d => d.LastPurchaseDate, o => o.Ignore())
-            .ForMember(d => d.TotalTransactions, o => o.MapFrom(_ => 0));
+            .ForMember(d => d.TotalOrders, o => o.MapFrom(_ => 0));
 
         CreateMap<UpdateCustomerRequestDto, Customer>()
             .IncludeBase<CreateCustomerRequestDto, Customer>()

@@ -21,7 +21,7 @@ public class CustomerDto
     public bool MakingChargesWaived { get; set; }
     public string? Notes { get; set; }
     public DateTime? LastPurchaseDate { get; set; }
-    public int TotalTransactions { get; set; }
+    public int TotalOrders { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
 }
@@ -85,26 +85,26 @@ public class CustomerSearchRequestDto
 }
 
 /// <summary>
-/// Customer transaction history DTO
+/// Customer Order history DTO
 /// </summary>
-public class CustomerTransactionHistoryDto
+public class CustomerOrdersHistoryDto
 {
     public int CustomerId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
-    public List<CustomerTransactionDto> Transactions { get; set; } = new();
+    public List<CustomerOrderDto> Orders { get; set; } = new();
     public decimal TotalAmount { get; set; }
-    public int TotalTransactionCount { get; set; }
+    public int TotalOrderCount { get; set; }
 }
 
 /// <summary>
-/// Individual customer transaction DTO
+/// Individual customer Order DTO
 /// </summary>
-public class CustomerTransactionDto
+public class CustomerOrderDto
 {
-    public int TransactionId { get; set; }
-    public string TransactionNumber { get; set; } = string.Empty;
-    public DateTime TransactionDate { get; set; }
-    public string TransactionType { get; set; } = string.Empty;
+    public int OrderId { get; set; }
+    public string OrderNumber { get; set; } = string.Empty;
+    public DateTime OrderDate { get; set; }
+    public string OrderType { get; set; } = string.Empty;
     public decimal TotalAmount { get; set; }
     public string BranchName { get; set; } = string.Empty;
     public string CashierName { get; set; } = string.Empty;
@@ -124,7 +124,7 @@ public class CustomerLoyaltyDto
     public decimal DefaultDiscountPercentage { get; set; }
     public bool MakingChargesWaived { get; set; }
     public DateTime? LastPurchaseDate { get; set; }
-    public int TotalTransactions { get; set; }
+    public int TotalOrders { get; set; }
 }
 
 /// <summary>

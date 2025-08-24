@@ -20,7 +20,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
             .Include(ft => ft.Branch)
             .Include(ft => ft.ProcessedByUser)
             .Include(ft => ft.ApprovedByUser)
-
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .FirstOrDefaultAsync(ft => ft.TransactionNumber == transactionNumber && ft.BranchId == branchId);
     }
 
@@ -29,6 +32,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
         return await _context.FinancialTransactions
             .Include(ft => ft.Branch)
             .Include(ft => ft.ProcessedByUser)
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .Where(ft => ft.BusinessEntityId == businessEntityId && ft.BusinessEntityTypeId == businessEntityTypeId)
             .OrderByDescending(ft => ft.TransactionDate)
             .ToListAsync();
@@ -51,6 +58,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
             .Include(ft => ft.Branch)
             .Include(ft => ft.ProcessedByUser)
             .Include(ft => ft.ApprovedByUser)
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .AsQueryable();
 
         // Apply filters
@@ -171,6 +182,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
         return await _context.FinancialTransactions
             .Include(ft => ft.Branch)
             .Include(ft => ft.ProcessedByUser)
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .Where(ft => ft.OriginalTransactionId == originalTransactionId)
             .OrderByDescending(ft => ft.TransactionDate)
             .ToListAsync();
@@ -182,6 +197,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
             .Include(ft => ft.Branch)
             .Include(ft => ft.ProcessedByUser)
             .Include(ft => ft.ApprovedByUser)
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .Where(ft => ft.BranchId == branchId && ft.TransactionDate >= fromDate && ft.TransactionDate <= toDate)
             .OrderByDescending(ft => ft.TransactionDate)
             .ToListAsync();
@@ -191,6 +210,10 @@ public class FinancialTransactionRepository : Repository<FinancialTransaction>, 
     {
         var query = _context.FinancialTransactions
             .Include(ft => ft.Branch)
+            .Include(ft => ft.TransactionType)
+            .Include(ft => ft.PaymentMethod)
+            .Include(ft => ft.Status)
+            .Include(ft => ft.BusinessEntityType)
             .Where(ft => ft.ProcessedByUserId == userId);
 
         if (fromDate.HasValue)

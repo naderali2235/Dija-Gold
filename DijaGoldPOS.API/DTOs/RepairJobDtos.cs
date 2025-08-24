@@ -12,8 +12,10 @@ public class RepairJobDto
     public string? FinancialTransactionNumber { get; set; } = string.Empty;
     public int StatusId { get; set; }
     public string StatusDisplayName { get; set; } = string.Empty;
+    public RepairStatusLookupDto? Status { get; set; }
     public int PriorityId { get; set; }
     public string PriorityDisplayName { get; set; } = string.Empty;
+    public RepairPriorityLookupDto? Priority { get; set; }
     public int? AssignedTechnicianId { get; set; }
     public string? AssignedTechnicianName { get; set; }
     public DateTime? StartedDate { get; set; }

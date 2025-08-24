@@ -29,4 +29,15 @@ public class SubCategoryLookup : BaseEntity
     /// Whether this sub-category is active
     /// </summary>
     public new bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Product category type this sub-category belongs to
+    /// </summary>
+    [Required]
+    public int CategoryTypeId { get; set; }
+
+    /// <summary>
+    /// Navigation property to product category type
+    /// </summary>
+    public virtual ProductCategoryTypeLookup CategoryType { get; set; } = null!;
 }

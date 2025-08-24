@@ -16,8 +16,9 @@ import {
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { useGoldRates, useDailySalesSummary, useTransactionLogReport, useTransactionTypes, useLowStockItems } from '../hooks/useApi';
-import { EnumLookupDto } from '../types/enums';
+import { EnumLookupDto } from '../types/lookups';
 import { productOwnershipApi, OwnershipAlertDto, ProductOwnershipDto } from '../services/api';
+import { GoldRatesDisplay, GOLD_RATES_KEYS } from './shared/GoldRatesDisplay';
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
@@ -59,7 +60,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [outstandingPayments, setOutstandingPayments] = React.useState<ProductOwnershipDto[]>([]);
   const [ownershipLoading, setOwnershipLoading] = React.useState(false);
 
-  // Transform API gold rates to dashboard format
+
+
+  // Transform API gold rates to dashboard format using standardized keys
   const goldRates: GoldRatesMap = React.useMemo(() => {
     if (!goldRatesData || goldRatesData.length === 0) {
       // Return empty rates if API data not available
@@ -67,25 +70,28 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
 
     const rates: GoldRatesMap = {};
+    
     goldRatesData.forEach((rate: any) => {
-      // Skip if karatType is undefined or null
-      if (!rate.karatType) {
-        console.warn('Skipping gold rate with undefined karatType:', rate);
+      // Skip if karatTypeId is undefined or null
+      if (!rate.karatTypeId) {
+        console.warn('Skipping gold rate with undefined karatTypeId:', rate);
         return;
       }
       
-      // Convert karatType number to string format (e.g., 18 -> "18k")
-      const karatString = `${rate.karatType}k`;
-      
-      // For now, use a small fixed change percentage (in real app, this would come from historical data)
-      const changePercent = 0.1; // 0.1% change
-      const change = rate.ratePerGram * (changePercent / 100);
-      
-      rates[karatString] = {
-        rate: rate.ratePerGram,
-        change: change,
-        changePercent: changePercent,
-      };
+      // Use the karat type name from the API response
+      if (rate.karatType && rate.karatType.name) {
+        const karatDisplayName = rate.karatType.name.toUpperCase();
+        
+        // For now, use a small fixed change percentage (in real app, this would come from historical data)
+        const changePercent = 0.1; // 0.1% change
+        const change = rate.ratePerGram * (changePercent / 100);
+        
+        rates[karatDisplayName] = {
+          rate: rate.ratePerGram,
+          change: change,
+          changePercent: changePercent,
+        };
+      }
     });
     
     return rates;
@@ -98,8 +104,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       // Check if it's a numeric string (enum value)
       const numericValue = parseInt(type);
       if (!isNaN(numericValue)) {
-        const transactionType = transactionTypesData?.find(t => t.value === numericValue);
-        const displayName = transactionType ? transactionType.displayName.toLowerCase() : type.toLowerCase();
+        const transactionType = transactionTypesData?.find(t => t.id === numericValue);
+        const displayName = transactionType ? transactionType.name.toLowerCase() : type.toLowerCase();
         return (displayName === 'sale' || displayName === 'repair') 
           ? displayName as 'sale' | 'repair' 
           : 'sale';
@@ -113,8 +119,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     
     // If it's a number, find the display name
     if (typeof type === 'number') {
-      const transactionType = transactionTypesData?.find(t => t.value === type);
-      const displayName = transactionType ? transactionType.displayName.toLowerCase() : 'sale';
+      const transactionType = transactionTypesData?.find(t => t.id === type);
+      const displayName = transactionType ? transactionType.name.toLowerCase() : 'sale';
       return (displayName === 'sale' || displayName === 'repair') 
         ? displayName as 'sale' | 'repair' 
         : 'sale';
@@ -279,56 +285,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Gold Rates */}
-      <Card className="pos-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[#D4AF37]" />
-            Today's Gold Rates
-            {goldRatesLoading && (
-              <div className="animate-pulse h-4 w-4 bg-[#D4AF37] rounded-full"></div>
-            )}
-          </CardTitle>
-          <CardDescription>
-            {goldRatesError ? (
-              <span className="text-red-600">Failed to load rates - showing cached data</span>
-            ) : (
-              "Current market rates per gram in Egyptian Pounds"
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {goldRatesLoading && !goldRatesData ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="p-4 bg-gradient-to-br from-[#D4AF37]/10 to-[#D4AF37]/5 rounded-lg border border-[#D4AF37]/20">
-                  <div className="animate-pulse">
-                    <div className="h-4 bg-gray-300 rounded mb-2"></div>
-                    <div className="h-8 bg-gray-300 rounded mb-2"></div>
-                    <div className="h-3 bg-gray-300 rounded w-3/4"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.entries(goldRates).map(([karat, data]) => (
-                <div key={karat} className="p-4 bg-gradient-to-br from-[#D4AF37]/10 to-[#D4AF37]/5 rounded-lg border border-[#D4AF37]/20">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-[#0D1B2A]">{karat.toUpperCase()}</h3>
-                    <Badge variant={data.change >= 0 ? "default" : "destructive"} className="text-xs">
-                      {data.change >= 0 ? '+' : ''}{data.changePercent.toFixed(2)}%
-                    </Badge>
-                  </div>
-                  <p className="text-2xl text-[#0D1B2A]">{formatCurrency(data.rate)}</p>
-                  <p className={`text-sm ${data.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {data.change >= 0 ? '+' : ''}{formatCurrency(Math.abs(data.change))}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <GoldRatesDisplay
+        goldRates={goldRates}
+        title="Today's Gold Rates"
+        description={goldRatesError ? "Failed to load rates - showing cached data" : "Current market rates per gram in Egyptian Pounds"}
+        loading={goldRatesLoading}
+        error={goldRatesError}
+        showInputs={false}
+        showChanges={true}
+        disabled={false}
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

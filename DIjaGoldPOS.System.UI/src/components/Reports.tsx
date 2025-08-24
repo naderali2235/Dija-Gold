@@ -67,14 +67,17 @@ import {
   useProfitAnalysisReport,
   useCustomerAnalysisReport,
   useSupplierBalanceReport,
-
   useTaxReport,
   useTransactionLogReport,
   useReportTypes,
   useExportToExcel,
   useExportToPdf,
   useBranches,
-  useTransactionTypes
+  useTransactionTypes,
+  useGetCashDrawerBalances,
+  useGetOwnershipAlerts,
+  useGetLowOwnershipProducts,
+  useGetProductsWithOutstandingPayments
 } from '../hooks/useApi';
 import {
   DailySalesSummaryReport,
@@ -83,19 +86,18 @@ import {
   ProfitAnalysisReport,
   CustomerAnalysisReport,
   SupplierBalanceReport,
-
   TaxReport,
   TransactionLogReport,
   ReportTypeDto,
   BranchDto,
   ExportReportRequest,
   CashDrawerBalance,
-  productOwnershipApi,
   ProductOwnershipDto,
-  OwnershipAlertDto
+  OwnershipAlertDto,
+  FinancialTransactionTypeLookupDto
 } from '../services/api';
-import { EnumLookupDto } from '../types/enums';
-import { EnumMapper } from '../types/enums';
+import { EnumLookupDto } from '../types/lookups';
+import { LookupHelper } from '../types/lookups';
 
 const COLORS = ['#D4AF37', '#B8941F', '#0D1B2A', '#17A2B8', '#28A745', '#DC3545', '#6C757D'];
 
@@ -165,6 +167,10 @@ export default function Reports() {
   const { execute: exportToPdf, loading: pdfExportLoading } = useExportToPdf();
   const { execute: fetchBranches } = useBranches();
   const { execute: fetchTransactionTypes, loading: transactionTypesLoading } = useTransactionTypes();
+  const { execute: fetchCashDrawerBalances, loading: cashDrawerBalancesLoading } = useGetCashDrawerBalances();
+  const { execute: fetchOwnershipAlerts } = useGetOwnershipAlerts();
+  const { execute: fetchLowOwnershipProducts } = useGetLowOwnershipProducts();
+  const { execute: fetchOutstandingPayments } = useGetProductsWithOutstandingPayments();
 
   // Local state for report data
   const [dailySalesReport, setDailySalesReport] = useState<DailySalesSummaryReport | null>(null);
@@ -177,10 +183,9 @@ export default function Reports() {
   const [taxReport, setTaxReport] = useState<TaxReport | null>(null);
   const [transactionLogReport, setTransactionLogReport] = useState<TransactionLogReport | null>(null);
   const [cashDrawerBalances, setCashDrawerBalances] = useState<CashDrawerBalance[]>([]);
-  const [cashDrawerBalancesLoading, setCashDrawerBalancesLoading] = useState<boolean>(false);
   const [reportTypes, setReportTypes] = useState<ReportTypeDto[]>([]);
   const [branches, setBranches] = useState<BranchDto[]>([]);
-  const [transactionTypes, setTransactionTypes] = useState<EnumLookupDto[]>([]);
+  const [transactionTypes, setTransactionTypes] = useState<FinancialTransactionTypeLookupDto[]>([]);
   
   // Ownership state
   const [ownershipData, setOwnershipData] = useState<ProductOwnershipDto[]>([]);
@@ -217,9 +222,9 @@ export default function Reports() {
       try {
         setOwnershipLoading(true);
         const [alerts, lowOwnership, outstanding] = await Promise.all([
-          productOwnershipApi.getOwnershipAlerts(selectedBranchId),
-          productOwnershipApi.getLowOwnershipProducts(0.5),
-          productOwnershipApi.getProductsWithOutstandingPayments()
+          fetchOwnershipAlerts(selectedBranchId),
+          fetchLowOwnershipProducts(0.5),
+          fetchOutstandingPayments()
         ]);
         
         setOwnershipAlerts(alerts);
@@ -289,15 +294,12 @@ export default function Reports() {
             setCashReconciliationReport(cashRec);
             break;
           case 'cashdrawer':
-            setCashDrawerBalancesLoading(true);
             try {
-              const balances = await cashDrawerApi.getBalances(selectedBranchId, dateRange.fromDate, dateRange.toDate);
+              const balances = await fetchCashDrawerBalances(selectedBranchId, dateRange.fromDate, dateRange.toDate);
               setCashDrawerBalances(balances);
             } catch (error) {
               console.error('Failed to load cash drawer balances:', error);
               toast.error('Failed to load cash drawer balances');
-            } finally {
-              setCashDrawerBalancesLoading(false);
             }
             break;
           case 'inventory':
@@ -446,8 +448,8 @@ export default function Reports() {
       // Check if it's a numeric string (enum value)
       const numericValue = parseInt(type);
       if (!isNaN(numericValue)) {
-        const transactionType = transactionTypes.find(t => t.value === numericValue);
-        return transactionType ? transactionType.displayName : type;
+        const transactionType = transactionTypes.find(t => t.id === numericValue);
+        return transactionType ? transactionType.name : type;
       }
       // If it's already a display name, return as is
       return type;
@@ -455,8 +457,8 @@ export default function Reports() {
     
     // If it's a number, find the display name
     if (typeof type === 'number') {
-      const transactionType = transactionTypes.find(t => t.value === type);
-      return transactionType ? transactionType.displayName : String(type);
+      const transactionType = transactionTypes.find(t => t.id === type);
+      return transactionType ? transactionType.name : String(type);
     }
     
     return String(type);
@@ -736,7 +738,7 @@ export default function Reports() {
               <CardHeader>
                 <CardTitle>Cash Flow Summary</CardTitle>
                 <CardDescription>
-                  {cashReconciliationReport.branchName} - {formatDate(cashReconciliationReport.reportDate)}
+                  {branches.find(b => b.id === cashReconciliationReport.branchId)?.name || 'Unknown Branch'} - {formatDate(cashReconciliationReport.reportDate)}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1179,7 +1181,7 @@ export default function Reports() {
             <Card className="pos-card">
               <CardHeader>
                 <CardTitle>
-                  {transactionLogReport.branchName} - {formatDate(transactionLogReport.reportDate)}
+                  {branches.find(b => b.id === transactionLogReport.branchId)?.name || 'Unknown Branch'} - {formatDate(transactionLogReport.reportDate)}
                 </CardTitle>
                 <CardDescription>
                   All transactions for the selected date
@@ -1278,7 +1280,7 @@ export default function Reports() {
               <Card className="pos-card">
                 <CardHeader>
                   <CardTitle>
-                    {inventoryMovementReport.branchName} - Inventory Movement
+                    {branches.find(b => b.id === inventoryMovementReport.branchId)?.name || 'Unknown Branch'} - Inventory Movement
                   </CardTitle>
                   <CardDescription>
                     From {new Date(inventoryMovementReport.fromDate).toLocaleDateString()} to {new Date(inventoryMovementReport.toDate).toLocaleDateString()}
@@ -1527,7 +1529,7 @@ export default function Reports() {
               <Card className="pos-card">
                 <CardHeader>
                   <CardTitle>
-                    {profitAnalysisReport.branchName || 'All Branches'} - Profit Analysis
+                    {profitAnalysisReport.branchId ? branches.find(b => b.id === profitAnalysisReport.branchId)?.name || 'Unknown Branch' : 'All Branches'} - Profit Analysis
                   </CardTitle>
                   <CardDescription>
                     From {formatDate(profitAnalysisReport.fromDate)} to {formatDate(profitAnalysisReport.toDate)}
@@ -1774,7 +1776,7 @@ export default function Reports() {
                         <TableRow key={supplier?.supplierId || Math.random()}>
                           <TableCell className="font-medium">
                             <div>
-                              <div>{supplier?.supplierName || 'Unknown Supplier'}</div>
+                              <div>{supplier?.companyName || 'Unknown Supplier'}</div>
                               <div className="text-sm text-muted-foreground">ID: {supplier?.supplierId || 'N/A'}</div>
                             </div>
                           </TableCell>
@@ -1825,7 +1827,7 @@ export default function Reports() {
                         <BarChart data={supplierBalanceReport.supplierBalances
                           .filter((supplier: any) => (supplier?.currentBalance || 0) > 0)
                           .map((supplier: any, index: number) => ({
-                            name: supplier?.supplierName || 'Unknown',
+                            name: supplier?.companyName || 'Unknown',
                             outstanding: supplier?.currentBalance || 0,
                             fill: COLORS[index % COLORS.length]
                           }))}>
@@ -2297,7 +2299,7 @@ export default function Reports() {
                                 <div className="text-sm text-muted-foreground">{product.productCode}</div>
                               </div>
                             </TableCell>
-                            <TableCell>{product.supplierName || 'N/A'}</TableCell>
+                            <TableCell>{product.supplierId || 'N/A'}</TableCell>
                             <TableCell className="text-red-600 font-medium">
                               {formatCurrency(product.outstandingAmount)}
                             </TableCell>
