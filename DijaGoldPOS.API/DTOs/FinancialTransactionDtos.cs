@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -47,32 +47,32 @@ public class FinancialTransactionDto
 /// </summary>
 public class CreateFinancialTransactionRequestDto
 {
-    [Required]
+
     public int BranchId { get; set; }
     
-    [Required]
+
     public int TransactionTypeId { get; set; }
     
     public int? BusinessEntityId { get; set; }
     
     public int BusinessEntityTypeId { get; set; }
     
-    [Required]
+
     public decimal Subtotal { get; set; }
     
     public decimal TotalTaxAmount { get; set; }
     
     public decimal TotalDiscountAmount { get; set; }
     
-    [Required]
+
     public decimal TotalAmount { get; set; }
     
-    [Required]
+
     public decimal AmountPaid { get; set; }
     
     public decimal ChangeGiven { get; set; }
     
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
     public string? Notes { get; set; }

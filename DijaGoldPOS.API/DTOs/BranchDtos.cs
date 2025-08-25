@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -23,21 +23,21 @@ public class BranchDto
 /// </summary>
 public class CreateBranchRequestDto
 {
-    [Required(ErrorMessage = "Branch name is required")]
-    [StringLength(100, ErrorMessage = "Branch name cannot exceed 100 characters")]
+
+
     public string Name { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Branch code is required")]
-    [StringLength(20, ErrorMessage = "Branch code cannot exceed 20 characters")]
+
+
     public string Code { get; set; } = string.Empty;
 
-    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
+
     public string? Address { get; set; }
 
-    [StringLength(20, ErrorMessage = "Phone number cannot exceed 20 characters")]
+
     public string? Phone { get; set; }
 
-    [StringLength(100, ErrorMessage = "Manager name cannot exceed 100 characters")]
+
     public string? ManagerName { get; set; }
 
     public bool IsHeadquarters { get; set; } = false;
@@ -48,7 +48,7 @@ public class CreateBranchRequestDto
 /// </summary>
 public class UpdateBranchRequestDto : CreateBranchRequestDto
 {
-    [Required(ErrorMessage = "Branch ID is required")]
+
     public int Id { get; set; }
 }
 

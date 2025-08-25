@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -28,27 +28,25 @@ public class UserDto
 /// </summary>
 public class CreateUserRequestDto
 {
-    [Required(ErrorMessage = "Username is required")]
-    [StringLength(50, ErrorMessage = "Username cannot exceed 50 characters")]
+
+
     public string UserName { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Full name is required")]
-    [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]
+
+
     public string FullName { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Email is required")]
-    [EmailAddress(ErrorMessage = "Invalid email address")]
-    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
+
     public string Email { get; set; } = string.Empty;
 
-    [StringLength(20, ErrorMessage = "Employee code cannot exceed 20 characters")]
+
     public string? EmployeeCode { get; set; }
 
-    [Required(ErrorMessage = "Password is required")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be between 6 and 100 characters")]
+
+
     public string Password { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "At least one role is required")]
+
     public List<string> Roles { get; set; } = new();
 
     public int? BranchId { get; set; }
@@ -61,19 +59,17 @@ public class CreateUserRequestDto
 /// </summary>
 public class UpdateUserRequestDto
 {
-    [Required(ErrorMessage = "User ID is required")]
+
     public string Id { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Full name is required")]
-    [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]
+
+
     public string FullName { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Email is required")]
-    [EmailAddress(ErrorMessage = "Invalid email address")]
-    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
+
     public string Email { get; set; } = string.Empty;
 
-    [StringLength(20, ErrorMessage = "Employee code cannot exceed 20 characters")]
+
     public string? EmployeeCode { get; set; }
 
     public int? BranchId { get; set; }
@@ -84,10 +80,10 @@ public class UpdateUserRequestDto
 /// </summary>
 public class UpdateUserRoleRequestDto
 {
-    [Required(ErrorMessage = "User ID is required")]
+
     public string UserId { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "At least one role is required")]
+
     public List<string> Roles { get; set; } = new();
 }
 
@@ -96,7 +92,7 @@ public class UpdateUserRoleRequestDto
 /// </summary>
 public class UpdateUserStatusRequestDto
 {
-    [Required(ErrorMessage = "User ID is required")]
+
     public string UserId { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
@@ -150,11 +146,11 @@ public class UserActivityLogDto
 /// </summary>
 public class ResetPasswordRequestDto
 {
-    [Required(ErrorMessage = "User ID is required")]
+
     public string UserId { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "New password is required")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be between 6 and 100 characters")]
+
+
     public string NewPassword { get; set; } = string.Empty;
 
     public bool ForcePasswordChange { get; set; } = true;
@@ -178,7 +174,7 @@ public class UserPermissionsDto
 /// </summary>
 public class UpdateUserPermissionsRequestDto
 {
-    [Required(ErrorMessage = "User ID is required")]
+
     public string UserId { get; set; } = string.Empty;
 
     public List<string> Permissions { get; set; } = new();

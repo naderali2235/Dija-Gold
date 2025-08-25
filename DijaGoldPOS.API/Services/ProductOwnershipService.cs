@@ -1,5 +1,6 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Repositories;
 using Microsoft.Extensions.Logging;
@@ -14,6 +15,7 @@ public class ProductOwnershipService : IProductOwnershipService
     private readonly IProductOwnershipRepository _productOwnershipRepository;
     private readonly IProductRepository _productRepository;
     private readonly IInventoryRepository _inventoryRepository;
+    private readonly ISupplierRepository _supplierRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
     private readonly ILogger<ProductOwnershipService> _logger;
@@ -22,6 +24,7 @@ public class ProductOwnershipService : IProductOwnershipService
         IProductOwnershipRepository productOwnershipRepository,
         IProductRepository productRepository,
         IInventoryRepository inventoryRepository,
+        ISupplierRepository supplierRepository,
         IUnitOfWork unitOfWork,
         IMapper mapper,
         ILogger<ProductOwnershipService> logger)
@@ -29,6 +32,7 @@ public class ProductOwnershipService : IProductOwnershipService
         _productOwnershipRepository = productOwnershipRepository;
         _productRepository = productRepository;
         _inventoryRepository = inventoryRepository;
+        _supplierRepository = supplierRepository;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
         _logger = logger;
@@ -448,13 +452,83 @@ public class ProductOwnershipService : IProductOwnershipService
                 });
             }
 
-            _logger.LogInformation("Retrieved {AlertCount} ownership alerts", alerts.Count);
+            // Get supplier credit alerts
+            await AddSupplierCreditAlertsAsync(alerts, branchId);
+
+            _logger.LogInformation("Retrieved {AlertCount} total alerts (ownership + supplier credit)", alerts.Count);
             return alerts.OrderByDescending(a => a.CreatedAt).ToList();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting ownership alerts");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Add supplier credit alerts to the ownership alerts list
+    /// </summary>
+    private async Task AddSupplierCreditAlertsAsync(List<OwnershipAlertDto> alerts, int? branchId = null)
+    {
+        try
+        {
+            // Get suppliers near credit limit (80% threshold)
+            var nearLimitSuppliers = await _supplierRepository.GetSuppliersNearCreditLimitAsync(0.8m);
+            foreach (var supplier in nearLimitSuppliers)
+            {
+                if (!supplier.IsActive) continue;
+
+                var utilizationPercentage = supplier.CreditLimit > 0
+                    ? (supplier.CurrentBalance / supplier.CreditLimit) * 100
+                    : 0;
+
+                var availableCredit = supplier.CreditLimit - supplier.CurrentBalance;
+
+                alerts.Add(new OwnershipAlertDto
+                {
+                    Type = "SupplierNearCreditLimit",
+                    Message = $"Supplier near credit limit: {utilizationPercentage:F1}% utilized, Available: {availableCredit:C}",
+                    Severity = utilizationPercentage >= 95 ? "High" : "Medium",
+                    ProductId = 0, // Not product-specific
+                    ProductName = string.Empty,
+                    SupplierId = supplier.Id,
+                    SupplierName = supplier.CompanyName,
+                    OwnershipPercentage = 0.0m,
+                    OutstandingAmount = supplier.CurrentBalance,
+                    CreatedAt = supplier.LastTransactionDate ?? supplier.CreatedAt
+                });
+            }
+
+            // Get suppliers over credit limit
+            var overLimitSuppliers = await _supplierRepository.GetSuppliersOverCreditLimitAsync();
+            foreach (var supplier in overLimitSuppliers)
+            {
+                if (!supplier.IsActive) continue;
+
+                var overLimitAmount = supplier.CurrentBalance - supplier.CreditLimit;
+
+                alerts.Add(new OwnershipAlertDto
+                {
+                    Type = "SupplierOverCreditLimit",
+                    Message = $"Supplier over credit limit by {overLimitAmount:C}. Current balance: {supplier.CurrentBalance:C}",
+                    Severity = "Critical",
+                    ProductId = 0, // Not product-specific
+                    ProductName = string.Empty,
+                    SupplierId = supplier.Id,
+                    SupplierName = supplier.CompanyName,
+                    OwnershipPercentage = 0.0m,
+                    OutstandingAmount = supplier.CurrentBalance,
+                    CreatedAt = supplier.LastTransactionDate ?? supplier.CreatedAt
+                });
+            }
+
+            _logger.LogInformation("Added supplier credit alerts. Near limit: {NearLimitCount}, Over limit: {OverLimitCount}",
+                nearLimitSuppliers.Count, overLimitSuppliers.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding supplier credit alerts");
+            // Don't throw here as it shouldn't break the main ownership alerts
         }
     }
 
@@ -558,6 +632,39 @@ public class ProductOwnershipService : IProductOwnershipService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting products with outstanding payments");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Get product ownership list with pagination and filtering
+    /// </summary>
+    public async Task<(List<ProductOwnershipDto> Items, int TotalCount, int PageNumber, int PageSize, int TotalPages)> GetProductOwnershipListAsync(
+        int branchId,
+        string? searchTerm = null,
+        int? supplierId = null,
+        int pageNumber = 1,
+        int pageSize = 10)
+    {
+        try
+        {
+            _logger.LogInformation("Getting product ownership list. BranchId: {BranchId}, Page: {PageNumber}, Size: {PageSize}", 
+                branchId, pageNumber, pageSize);
+
+            var (items, totalCount) = await _productOwnershipRepository.GetWithPaginationAsync(
+                branchId, searchTerm, supplierId, pageNumber, pageSize);
+
+            var mappedItems = _mapper.Map<List<ProductOwnershipDto>>(items);
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            _logger.LogInformation("Retrieved {Count} ownership records out of {TotalCount} for BranchId: {BranchId}", 
+                mappedItems.Count, totalCount, branchId);
+
+            return (mappedItems, totalCount, pageNumber, pageSize, totalPages);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting product ownership list. BranchId: {BranchId}", branchId);
             throw;
         }
     }

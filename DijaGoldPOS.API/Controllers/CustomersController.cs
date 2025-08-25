@@ -164,11 +164,6 @@ public class CustomersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // Check for duplicate National ID
             if (!string.IsNullOrWhiteSpace(request.NationalId))
             {
@@ -244,11 +239,6 @@ public class CustomersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var customer = await _context.Customers.FindAsync(id);
             if (customer == null)
             {
@@ -504,11 +494,6 @@ public class CustomersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var customer = await _context.Customers.FindAsync(id);
             if (customer == null)
             {

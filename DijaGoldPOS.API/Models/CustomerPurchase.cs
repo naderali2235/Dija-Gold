@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using DijaGoldPOS.API.Models.LookupTables;
@@ -13,26 +13,26 @@ public class CustomerPurchase : BaseEntity
     /// <summary>
     /// Unique purchase number
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string PurchaseNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Customer selling the products
     /// </summary>
-    [Required]
+
     public int CustomerId { get; set; }
     
     /// <summary>
     /// Branch where purchase occurred
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
     /// Purchase date
     /// </summary>
-    [Required]
+
     public DateTime PurchaseDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
@@ -50,20 +50,20 @@ public class CustomerPurchase : BaseEntity
     /// <summary>
     /// Payment method used
     /// </summary>
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
     /// <summary>
     /// Notes about the purchase
     /// </summary>
-    [MaxLength(1000)]
+
     public string? Notes { get; set; }
     
     /// <summary>
     /// User who created this purchase
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+
+
     public string CreatedByUserId { get; set; } = string.Empty;
     
     /// <summary>

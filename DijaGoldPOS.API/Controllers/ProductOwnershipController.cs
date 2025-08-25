@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Validators;
+using DijaGoldPOS.API.Shared;
 using FluentValidation;
 
 namespace DijaGoldPOS.API.Controllers;
@@ -290,6 +291,45 @@ public class ProductOwnershipController : ControllerBase
         {
             _logger.LogError(ex, "Error getting products with outstanding payments");
             return StatusCode(500, "An error occurred while retrieving products with outstanding payments");
+        }
+    }
+
+    /// <summary>
+    /// Get product ownership list with pagination and filtering
+    /// </summary>
+    [HttpGet("list")]
+    public async Task<ActionResult<ApiResponse<PaginatedResponse<ProductOwnershipDto>>>> GetProductOwnershipList(
+        [FromQuery] int branchId,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] int? supplierId = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        try
+        {
+            var (items, totalCount, currentPage, currentPageSize, totalPages) = 
+                await _productOwnershipService.GetProductOwnershipListAsync(
+                    branchId, searchTerm, supplierId, pageNumber, pageSize);
+
+            var response = new PaginatedResponse<ProductOwnershipDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = currentPage,
+                PageSize = currentPageSize,
+                TotalPages = totalPages
+            };
+
+            return Ok(new ApiResponse<PaginatedResponse<ProductOwnershipDto>>
+            {
+                Data = response,
+                Success = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting product ownership list");
+            return StatusCode(500, "An error occurred while retrieving product ownership list");
         }
     }
 }

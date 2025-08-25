@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models;
@@ -11,27 +11,27 @@ public class SupplierTransaction : BaseEntity
     /// <summary>
     /// Unique transaction number
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string TransactionNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Supplier ID
     /// </summary>
-    [Required]
+
     public int SupplierId { get; set; }
     
     /// <summary>
     /// Transaction date and time
     /// </summary>
-    [Required]
+
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Type of transaction (payment, credit, adjustment, purchase_order)
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string TransactionType { get; set; } = string.Empty;
     
     /// <summary>
@@ -49,26 +49,26 @@ public class SupplierTransaction : BaseEntity
     /// <summary>
     /// Reference to related entity (e.g., PurchaseOrder ID, Payment reference)
     /// </summary>
-    [MaxLength(100)]
+
     public string? ReferenceNumber { get; set; }
     
     /// <summary>
     /// Additional notes about the transaction
     /// </summary>
-    [MaxLength(1000)]
+
     public string? Notes { get; set; }
     
     /// <summary>
     /// User who created this transaction
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+
+
     public string CreatedByUserId { get; set; } = string.Empty;
     
     /// <summary>
     /// Branch where transaction occurred
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>

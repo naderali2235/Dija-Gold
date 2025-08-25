@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models;
@@ -11,13 +11,13 @@ public class Inventory : BaseEntity
     /// <summary>
     /// Product being tracked
     /// </summary>
-    [Required]
+
     public int ProductId { get; set; }
     
     /// <summary>
     /// Branch where inventory is held
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
@@ -49,7 +49,12 @@ public class Inventory : BaseEntity
     /// </summary>
     [Column(TypeName = "decimal(10,3)")]
     public decimal ReorderPoint { get; set; } = 0;
-    
+
+    /// <summary>
+    /// Additional notes about inventory
+    /// </summary>
+    public string? Notes { get; set; }
+
     /// <summary>
     /// Last updated date for inventory count
     /// </summary>

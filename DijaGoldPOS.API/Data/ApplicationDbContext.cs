@@ -3,6 +3,7 @@ using DijaGoldPOS.API.Models.LookupTables;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using DijaGoldPOS.API.Services;
+using System.Linq.Expressions;
 
 namespace DijaGoldPOS.API.Data;
 
@@ -23,52 +24,47 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Product> Products { get; set; }
     public DbSet<Customer> Customers { get; set; }
     public DbSet<Supplier> Suppliers { get; set; }
-    
+    public DbSet<Technician> Technicians { get; set; }
+
     // Pricing and configuration
     public DbSet<GoldRate> GoldRates { get; set; }
     public DbSet<MakingCharges> MakingCharges { get; set; }
     public DbSet<TaxConfiguration> TaxConfigurations { get; set; }
-    
-    // Transactions (Legacy - migrated to Orders and FinancialTransactions)
-    // Obsolete DbSets removed - use Orders and FinancialTransactions instead
-    
-    // New Financial Transactions
-    public DbSet<FinancialTransaction> FinancialTransactions { get; set; }
-    
-    // New Orders
+
+    // Orders and transactions
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
-    
-    // Inventory
+    public DbSet<FinancialTransaction> FinancialTransactions { get; set; }
+
+    // Inventory management
     public DbSet<Inventory> Inventories { get; set; }
     public DbSet<InventoryMovement> InventoryMovements { get; set; }
-    
-    // Purchasing
+
+    // Purchasing system
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
-    
-    // Supplier Transactions
     public DbSet<SupplierTransaction> SupplierTransactions { get; set; }
-    
-    // Product Ownership
+
+    // Product ownership tracking
     public DbSet<ProductOwnership> ProductOwnerships { get; set; }
     public DbSet<OwnershipMovement> OwnershipMovements { get; set; }
-    
-    // Customer Purchases
+
+    // Customer purchases
     public DbSet<CustomerPurchase> CustomerPurchases { get; set; }
     public DbSet<CustomerPurchaseItem> CustomerPurchaseItems { get; set; }
-    
-    // Audit
-    public DbSet<AuditLog> AuditLogs { get; set; }
-    
-    // Cash Management
-    public DbSet<CashDrawerBalance> CashDrawerBalances { get; set; }
-    
-    // Repair Jobs
+
+    // Repair management
     public DbSet<RepairJob> RepairJobs { get; set; }
-    
-    // Technicians
-    public DbSet<Technician> Technicians { get; set; }
+
+    // Cash management
+    public DbSet<CashDrawerBalance> CashDrawerBalances { get; set; }
+
+    // Manufacturing
+    public DbSet<ProductManufacture> ProductManufactures { get; set; }
+    public DbSet<ManufacturingWorkflowHistory> ManufacturingWorkflowHistories { get; set; }
+
+    // Audit trail
+    public DbSet<AuditLog> AuditLogs { get; set; }
     
     // Lookup Tables
     public DbSet<OrderTypeLookup> OrderTypeLookups { get; set; }
@@ -90,7 +86,38 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
         base.OnModelCreating(builder);
 
-        // Configure ApplicationUser relationships
+        // Configure Identity and User relationships
+        ConfigureUserRelationships(builder);
+
+        // Configure core business entities
+        ConfigureCoreBusinessEntities(builder);
+
+        // Configure pricing and configuration entities
+        ConfigurePricingAndConfiguration(builder);
+
+        // Configure orders and transactions
+        ConfigureOrdersAndTransactions(builder);
+
+        // Configure inventory management
+        ConfigureInventoryManagement(builder);
+
+        // Configure purchasing system
+        ConfigurePurchasingSystem(builder);
+
+
+
+        // Configure lookup tables
+        ConfigureLookupTables(builder);
+
+        // Configure audit and soft delete filters
+        ConfigureAuditAndSoftDelete(builder);
+    }
+
+    /// <summary>
+    /// Configure user and identity relationships
+    /// </summary>
+    private static void ConfigureUserRelationships(ModelBuilder builder)
+    {
         builder.Entity<ApplicationUser>(entity =>
         {
             entity.HasOne(u => u.Branch)
@@ -98,24 +125,56 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(u => u.BranchId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
+    }
 
+    /// <summary>
+    /// Configure core business entities (Branch, Product, Customer, Supplier, Technician)
+    /// </summary>
+    private static void ConfigureCoreBusinessEntities(ModelBuilder builder)
+    {
         // Configure Branch
         builder.Entity<Branch>(entity =>
         {
             entity.HasIndex(b => b.Code).IsUnique();
             entity.Property(b => b.Code).IsRequired().HasMaxLength(20);
             entity.Property(b => b.Name).IsRequired().HasMaxLength(100);
-            
-            // Navigation properties
+            entity.Property(b => b.Address).HasMaxLength(500);
+            entity.Property(b => b.Phone).HasMaxLength(20);
+            entity.Property(b => b.ManagerName).HasMaxLength(100);
+
+            // Explicitly configure navigation properties to avoid shadow properties
+
+            // Primary users relationship
+            entity.HasMany(b => b.Users)
+                  .WithOne(u => u.Branch)
+                  .HasForeignKey(u => u.BranchId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Financial transactions relationship
             entity.HasMany(b => b.FinancialTransactions)
-                  .WithOne()
+                  .WithOne(ft => ft.Branch)
                   .HasForeignKey(ft => ft.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
+            // Orders relationship
             entity.HasMany(b => b.Orders)
-                  .WithOne()
+                  .WithOne(o => o.Branch)
                   .HasForeignKey(o => o.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Cash drawer balances relationship
+            entity.HasMany(b => b.CashDrawerBalances)
+                  .WithOne(cdb => cdb.Branch)
+                  .HasForeignKey(cdb => cdb.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Product ownerships relationship
+            entity.HasMany(b => b.ProductOwnerships)
+                  .WithOne(po => po.Branch)
+                  .HasForeignKey(po => po.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+
         });
 
         // Configure Product
@@ -125,29 +184,39 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(p => p.ProductCode).IsRequired().HasMaxLength(50);
             entity.Property(p => p.Name).IsRequired().HasMaxLength(200);
             entity.Property(p => p.Weight).HasColumnType("decimal(10,3)");
-            
+
             entity.HasOne(p => p.Supplier)
                   .WithMany(s => s.Products)
                   .HasForeignKey(p => p.SupplierId)
                   .OnDelete(DeleteBehavior.SetNull);
-                  
-            // Navigation properties
+
+            // Explicitly configure navigation properties to avoid shadow properties
             entity.HasMany(p => p.OrderItems)
-                  .WithOne()
+                  .WithOne(oi => oi.Product)
                   .HasForeignKey(oi => oi.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
+            entity.HasMany(p => p.InventoryRecords)
+                  .WithOne(i => i.Product)
+                  .HasForeignKey(i => i.ProductId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(p => p.ManufacturingRecords)
+                  .WithOne(pm => pm.Product)
+                  .HasForeignKey(pm => pm.ProductId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
             // Lookup table relationships
             entity.HasOne(p => p.CategoryType)
                   .WithMany()
                   .HasForeignKey(p => p.CategoryTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(p => p.KaratType)
                   .WithMany()
                   .HasForeignKey(p => p.KaratTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(p => p.SubCategoryLookup)
                   .WithMany()
                   .HasForeignKey(p => p.SubCategoryId)
@@ -160,14 +229,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(c => c.NationalId).IsUnique().HasFilter("[NationalId] IS NOT NULL");
             entity.HasIndex(c => c.MobileNumber).IsUnique().HasFilter("[MobileNumber] IS NOT NULL");
             entity.HasIndex(c => c.Email).IsUnique().HasFilter("[Email] IS NOT NULL");
-            
+
             entity.Property(c => c.FullName).IsRequired().HasMaxLength(100);
             entity.Property(c => c.TotalPurchaseAmount).HasColumnType("decimal(18,2)");
             entity.Property(c => c.DefaultDiscountPercentage).HasColumnType("decimal(5,2)");
-            
-            // Navigation properties
+
+            // Explicitly configure navigation properties to avoid shadow properties
             entity.HasMany(c => c.Orders)
-                  .WithOne()
+                  .WithOne(o => o.Customer)
                   .HasForeignKey(o => o.CustomerId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
@@ -178,44 +247,50 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(s => s.CompanyName).IsRequired().HasMaxLength(200);
             entity.Property(s => s.CreditLimit).HasColumnType("decimal(18,2)");
             entity.Property(s => s.CurrentBalance).HasColumnType("decimal(18,2)");
+
+            // Explicitly configure navigation properties to avoid shadow properties
+            entity.HasMany(s => s.Products)
+                  .WithOne(p => p.Supplier)
+                  .HasForeignKey(p => p.SupplierId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // Configure SupplierTransaction
-        builder.Entity<SupplierTransaction>(entity =>
+        // Configure Technician
+        builder.Entity<Technician>(entity =>
         {
-            entity.HasIndex(st => st.TransactionNumber).IsUnique();
-            entity.Property(st => st.TransactionNumber).IsRequired().HasMaxLength(50);
-            entity.Property(st => st.TransactionType).IsRequired().HasMaxLength(50);
-            entity.Property(st => st.Amount).HasColumnType("decimal(18,2)");
-            entity.Property(st => st.BalanceAfterTransaction).HasColumnType("decimal(18,2)");
-            entity.Property(st => st.ReferenceNumber).HasMaxLength(100);
-            entity.Property(st => st.Notes).HasMaxLength(1000);
-            entity.Property(st => st.CreatedByUserId).IsRequired().HasMaxLength(450);
+            entity.HasIndex(t => t.PhoneNumber).IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
+            entity.HasIndex(t => t.Email).IsUnique().HasFilter("[Email] IS NOT NULL");
 
-            // Relationships
-            entity.HasOne(st => st.Supplier)
-                  .WithMany()
-                  .HasForeignKey(st => st.SupplierId)
-                  .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(t => t.FullName).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.PhoneNumber).IsRequired().HasMaxLength(20);
+            entity.Property(t => t.Email).HasMaxLength(100);
+            entity.Property(t => t.Specialization).HasMaxLength(500);
 
-            entity.HasOne(st => st.Branch)
+            entity.HasOne(t => t.Branch)
                   .WithMany()
-                  .HasForeignKey(st => st.BranchId)
-                  .OnDelete(DeleteBehavior.Restrict);
+                  .HasForeignKey(t => t.BranchId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
+    }
+
+    /// <summary>
+    /// Configure pricing and configuration entities
+    /// </summary>
+    private static void ConfigurePricingAndConfiguration(ModelBuilder builder)
+    {
 
         // Configure GoldRate
         builder.Entity<GoldRate>(entity =>
         {
             entity.HasIndex(gr => new { gr.KaratTypeId, gr.EffectiveFrom });
             entity.Property(gr => gr.RatePerGram).HasColumnType("decimal(18,2)");
-            
+
             // Navigation properties
             entity.HasMany(gr => gr.Orders)
                   .WithOne()
                   .HasForeignKey(o => o.GoldRateId)
                   .OnDelete(DeleteBehavior.SetNull);
-                  
+
             // Lookup table relationships
             entity.HasOne(gr => gr.KaratType)
                   .WithMany()
@@ -228,18 +303,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.HasIndex(mc => new { mc.ProductCategoryId, mc.SubCategoryId, mc.EffectiveFrom });
             entity.Property(mc => mc.ChargeValue).HasColumnType("decimal(10,4)");
-            
+
             // Lookup table relationships
             entity.HasOne(mc => mc.ProductCategory)
                   .WithMany()
                   .HasForeignKey(mc => mc.ProductCategoryId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(mc => mc.ChargeType)
                   .WithMany()
                   .HasForeignKey(mc => mc.ChargeTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(mc => mc.SubCategoryLookup)
                   .WithMany()
                   .HasForeignKey(mc => mc.SubCategoryId)
@@ -252,34 +327,47 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(tc => tc.TaxCode).IsUnique();
             entity.Property(tc => tc.TaxCode).IsRequired().HasMaxLength(20);
             entity.Property(tc => tc.TaxRate).HasColumnType("decimal(10,4)");
-            
+
             // Lookup table relationships
             entity.HasOne(tc => tc.TaxType)
                   .WithMany()
                   .HasForeignKey(tc => tc.TaxTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
+    }
 
-        // Transaction configuration removed - obsolete model
+    /// <summary>
+    /// Configure orders and transactions
+    /// </summary>
+    private static void ConfigureOrdersAndTransactions(ModelBuilder builder)
+    {
 
-        // TransactionItem and TransactionTax configurations removed - obsolete models
+    }
 
+    /// <summary>
+    /// Configure inventory management
+    /// </summary>
+    private static void ConfigureInventoryManagement(ModelBuilder builder)
+    {
         // Configure Inventory
         builder.Entity<Inventory>(entity =>
         {
             entity.HasIndex(i => new { i.ProductId, i.BranchId }).IsUnique();
-            
+
             entity.Property(i => i.QuantityOnHand).HasColumnType("decimal(10,3)");
             entity.Property(i => i.WeightOnHand).HasColumnType("decimal(10,3)");
             entity.Property(i => i.MinimumStockLevel).HasColumnType("decimal(10,3)");
             entity.Property(i => i.MaximumStockLevel).HasColumnType("decimal(10,3)");
             entity.Property(i => i.ReorderPoint).HasColumnType("decimal(10,3)");
+            entity.Property(i => i.Notes).HasMaxLength(1000);
 
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(i => i.Product)
                   .WithMany(p => p.InventoryRecords)
                   .HasForeignKey(i => i.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
 
+            // Use the primary InventoryItems relationship from Branch
             entity.HasOne(i => i.Branch)
                   .WithMany(b => b.InventoryItems)
                   .HasForeignKey(i => i.BranchId)
@@ -300,6 +388,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(im => im.InventoryId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
+    }
+
+    /// <summary>
+    /// Configure purchasing system
+    /// </summary>
+    private static void ConfigurePurchasingSystem(ModelBuilder builder)
+    {
 
         // Configure PurchaseOrder
         builder.Entity<PurchaseOrder>(entity =>
@@ -343,37 +438,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Configure AuditLog
-        builder.Entity<AuditLog>(entity =>
-        {
-            entity.HasIndex(al => al.Timestamp);
-            entity.HasIndex(al => new { al.UserId, al.Timestamp });
-            entity.HasIndex(al => new { al.EntityType, al.EntityId });
 
-            entity.Property(al => al.UserId).IsRequired().HasMaxLength(450);
-            entity.Property(al => al.UserName).IsRequired().HasMaxLength(100);
-            entity.Property(al => al.Action).IsRequired().HasMaxLength(50);
-
-            entity.HasOne(al => al.User)
-                  .WithMany()
-                  .HasForeignKey(al => al.UserId)
-                  .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(al => al.Branch)
-                  .WithMany()
-                  .HasForeignKey(al => al.BranchId)
-                  .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(al => al.FinancialTransaction)
-                  .WithMany()
-                  .HasForeignKey(al => al.FinancialTransactionId)
-                  .OnDelete(DeleteBehavior.SetNull);
-                  
-            entity.HasOne(al => al.Order)
-                  .WithMany()
-                  .HasForeignKey(al => al.OrderId)
-                  .OnDelete(DeleteBehavior.SetNull);
-        });
 
         // Configure CashDrawerBalance
         builder.Entity<CashDrawerBalance>(entity =>
@@ -385,9 +450,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(cdb => cdb.OpeningBalance).HasColumnType("decimal(18,2)");
             entity.Property(cdb => cdb.ExpectedClosingBalance).HasColumnType("decimal(18,2)");
             entity.Property(cdb => cdb.ActualClosingBalance).HasColumnType("decimal(18,2)");
+            entity.Property(cdb => cdb.CarriedForwardAmount).HasColumnType("decimal(18,2)");
+            entity.Property(cdb => cdb.SettledAmount).HasColumnType("decimal(18,2)");
+            entity.Property(cdb => cdb.Notes).HasMaxLength(1000);
+            entity.Property(cdb => cdb.SettlementNotes).HasMaxLength(500);
 
             entity.HasOne(cdb => cdb.Branch)
-                  .WithMany()
+                  .WithMany(b => b.CashDrawerBalances)
                   .HasForeignKey(cdb => cdb.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
@@ -395,37 +464,43 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // Configure RepairJob
         builder.Entity<RepairJob>(entity =>
         {
-            entity.HasIndex(rj => rj.FinancialTransactionId).IsUnique();
+            entity.HasIndex(rj => rj.FinancialTransactionId).IsUnique().HasFilter("[FinancialTransactionId] IS NOT NULL");
             entity.HasIndex(rj => rj.StatusId);
             entity.HasIndex(rj => rj.PriorityId);
             entity.HasIndex(rj => rj.AssignedTechnicianId);
+            entity.HasIndex(rj => rj.QualityCheckedBy);
 
             entity.Property(rj => rj.TechnicianNotes).HasMaxLength(2000);
             entity.Property(rj => rj.MaterialsUsed).HasMaxLength(1000);
             entity.Property(rj => rj.ActualCost).HasColumnType("decimal(18,2)");
+            entity.Property(rj => rj.EstimatedCost).HasColumnType("decimal(18,2)");
             entity.Property(rj => rj.HoursSpent).HasColumnType("decimal(5,2)");
+            entity.Property(rj => rj.Notes).HasMaxLength(2000);
 
+            // Financial transaction relationship (one-to-one)
             entity.HasOne(rj => rj.FinancialTransaction)
                   .WithOne()
                   .HasForeignKey<RepairJob>(rj => rj.FinancialTransactionId)
-                  .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(rj => rj.AssignedTechnician)
-                  .WithMany()
-                  .HasForeignKey(rj => rj.AssignedTechnicianId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            // Explicitly configure the AssignedTechnician relationship
+            entity.HasOne(rj => rj.AssignedTechnician)
+                  .WithMany(t => t.RepairJobs)
+                  .HasForeignKey(rj => rj.AssignedTechnicianId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            // Explicitly configure the QualityChecker relationship
             entity.HasOne(rj => rj.QualityChecker)
-                  .WithMany()
+                  .WithMany(t => t.QualityCheckedRepairJobs)
                   .HasForeignKey(rj => rj.QualityCheckedBy)
                   .OnDelete(DeleteBehavior.NoAction);
-                  
+
             // Lookup table relationships
             entity.HasOne(rj => rj.Status)
                   .WithMany()
                   .HasForeignKey(rj => rj.StatusId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(rj => rj.Priority)
                   .WithMany()
                   .HasForeignKey(rj => rj.PriorityId)
@@ -455,19 +530,19 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(ft => ft.AmountPaid).HasColumnType("decimal(18,2)");
             entity.Property(ft => ft.ChangeGiven).HasColumnType("decimal(18,2)");
 
-            // Relationships
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(ft => ft.Branch)
-                  .WithMany()
+                  .WithMany(b => b.FinancialTransactions)
                   .HasForeignKey(ft => ft.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(ft => ft.ProcessedByUser)
-                  .WithMany()
+                  .WithMany(u => u.FinancialTransactions)
                   .HasForeignKey(ft => ft.ProcessedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(ft => ft.ApprovedByUser)
-                  .WithMany()
+                  .WithMany(u => u.ApprovedFinancialTransactions)
                   .HasForeignKey(ft => ft.ApprovedByUserId)
                   .OnDelete(DeleteBehavior.SetNull);
 
@@ -507,6 +582,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(o => o.StatusId);
             entity.HasIndex(o => o.CustomerId);
             entity.HasIndex(o => o.CashierId);
+            entity.HasIndex(o => o.ApprovedByUserId);
 
             entity.Property(o => o.OrderNumber).IsRequired().HasMaxLength(50);
             entity.Property(o => o.CashierId).IsRequired().HasMaxLength(450);
@@ -516,46 +592,48 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             // Relationships
             entity.HasOne(o => o.Branch)
-                  .WithMany()
+                  .WithMany(b => b.Orders)
                   .HasForeignKey(o => o.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(o => o.Customer)
-                  .WithMany()
+                  .WithMany(c => c.Orders)
                   .HasForeignKey(o => o.CustomerId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            // Explicitly configure the Cashier relationship
             entity.HasOne(o => o.Cashier)
-                  .WithMany()
+                  .WithMany(u => u.Orders)
                   .HasForeignKey(o => o.CashierId)
                   .OnDelete(DeleteBehavior.Restrict);
 
+            // Explicitly configure the ApprovedByUser relationship
             entity.HasOne(o => o.ApprovedByUser)
-                  .WithMany()
+                  .WithMany(u => u.ApprovedOrders)
                   .HasForeignKey(o => o.ApprovedByUserId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(o => o.GoldRate)
-                  .WithMany()
+                  .WithMany(gr => gr.Orders)
                   .HasForeignKey(o => o.GoldRateId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(o => o.FinancialTransaction)
-                  .WithMany()
-                  .HasForeignKey(o => o.FinancialTransactionId)
+                  .WithOne()
+                  .HasForeignKey<Order>(o => o.FinancialTransactionId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(o => o.OriginalOrder)
                   .WithMany(o => o.RelatedOrders)
                   .HasForeignKey(o => o.OriginalOrderId)
                   .OnDelete(DeleteBehavior.NoAction);
-                  
+
             // Lookup table relationships
             entity.HasOne(o => o.OrderType)
                   .WithMany()
                   .HasForeignKey(o => o.OrderTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
-                  
+
             entity.HasOne(o => o.Status)
                   .WithMany()
                   .HasForeignKey(o => o.StatusId)
@@ -576,14 +654,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(oi => oi.TotalAmount).HasColumnType("decimal(18,2)");
             entity.Property(oi => oi.Notes).HasMaxLength(500);
 
-            // Relationships
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(oi => oi.Order)
                   .WithMany(o => o.OrderItems)
                   .HasForeignKey(oi => oi.OrderId)
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(oi => oi.Product)
-                  .WithMany()
+                  .WithMany(p => p.OrderItems)
                   .HasForeignKey(oi => oi.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
@@ -593,16 +671,29 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.HasIndex(t => t.PhoneNumber).IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
             entity.HasIndex(t => t.Email).IsUnique().HasFilter("[Email] IS NOT NULL");
-            
+
             entity.Property(t => t.FullName).IsRequired().HasMaxLength(100);
             entity.Property(t => t.PhoneNumber).IsRequired().HasMaxLength(20);
             entity.Property(t => t.Email).HasMaxLength(100);
             entity.Property(t => t.Specialization).HasMaxLength(500);
 
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(t => t.Branch)
                   .WithMany()
                   .HasForeignKey(t => t.BranchId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            // Configure assigned repair jobs relationship
+            entity.HasMany(t => t.RepairJobs)
+                  .WithOne(rj => rj.AssignedTechnician)
+                  .HasForeignKey(rj => rj.AssignedTechnicianId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            // Configure quality checked repair jobs relationship
+            entity.HasMany(t => t.QualityCheckedRepairJobs)
+                  .WithOne(rj => rj.QualityChecker)
+                  .HasForeignKey(rj => rj.QualityCheckedBy)
+                  .OnDelete(DeleteBehavior.NoAction);
         });
 
         // Configure ProductOwnership
@@ -611,7 +702,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(po => new { po.ProductId, po.BranchId, po.SupplierId, po.PurchaseOrderId });
             entity.HasIndex(po => po.OwnershipPercentage);
             entity.HasIndex(po => po.OutstandingAmount);
-            
+
             entity.Property(po => po.TotalQuantity).HasColumnType("decimal(10,3)");
             entity.Property(po => po.TotalWeight).HasColumnType("decimal(10,3)");
             entity.Property(po => po.OwnedQuantity).HasColumnType("decimal(10,3)");
@@ -620,30 +711,32 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(po => po.TotalCost).HasColumnType("decimal(18,2)");
             entity.Property(po => po.AmountPaid).HasColumnType("decimal(18,2)");
             entity.Property(po => po.OutstandingAmount).HasColumnType("decimal(18,2)");
+            entity.Property(po => po.Notes).HasMaxLength(1000);
 
-            // Relationships
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(po => po.Product)
-                  .WithMany()
+                  .WithMany(p => p.ProductOwnerships)
                   .HasForeignKey(po => po.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
 
+            // Use the ProductOwnerships relationship from Branch
             entity.HasOne(po => po.Branch)
-                  .WithMany()
+                  .WithMany(b => b.ProductOwnerships)
                   .HasForeignKey(po => po.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(po => po.Supplier)
-                  .WithMany()
+                  .WithMany(s => s.ProductOwnerships)
                   .HasForeignKey(po => po.SupplierId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(po => po.PurchaseOrder)
-                  .WithMany()
+                  .WithMany(po => po.ProductOwnerships)
                   .HasForeignKey(po => po.PurchaseOrderId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(po => po.CustomerPurchase)
-                  .WithMany()
+                  .WithMany(cp => cp.ProductOwnerships)
                   .HasForeignKey(po => po.CustomerPurchaseId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
@@ -681,21 +774,22 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(cp => cp.CustomerId);
             entity.HasIndex(cp => cp.BranchId);
             entity.HasIndex(cp => cp.PurchaseDate);
-            
+            entity.HasIndex(cp => cp.CreatedByUserId);
+
             entity.Property(cp => cp.PurchaseNumber).IsRequired().HasMaxLength(50);
             entity.Property(cp => cp.TotalAmount).HasColumnType("decimal(18,2)");
             entity.Property(cp => cp.AmountPaid).HasColumnType("decimal(18,2)");
             entity.Property(cp => cp.Notes).HasMaxLength(1000);
             entity.Property(cp => cp.CreatedByUserId).IsRequired().HasMaxLength(450);
 
-            // Relationships
+            // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(cp => cp.Customer)
-                  .WithMany()
+                  .WithMany(c => c.CustomerPurchases)
                   .HasForeignKey(cp => cp.CustomerId)
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(cp => cp.Branch)
-                  .WithMany()
+                  .WithMany(b => b.CustomerPurchases)
                   .HasForeignKey(cp => cp.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
 
@@ -703,6 +797,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany()
                   .HasForeignKey(cp => cp.PaymentMethodId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Product ownerships relationship
+            entity.HasMany(cp => cp.ProductOwnerships)
+                  .WithOne(po => po.CustomerPurchase)
+                  .HasForeignKey(po => po.CustomerPurchaseId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Configure CustomerPurchaseItem
@@ -831,6 +931,77 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // Configure ProductManufacture entity
+        builder.Entity<ProductManufacture>(entity =>
+        {
+            // Explicitly configure relationships to avoid shadow properties
+            entity.HasOne(pm => pm.Product)
+                  .WithMany(p => p.ManufacturingRecords)
+                  .HasForeignKey(pm => pm.ProductId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(pm => pm.SourcePurchaseOrderItem)
+                  .WithMany(poi => poi.SourceManufacturingRecords)
+                  .HasForeignKey(pm => pm.SourcePurchaseOrderItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(pm => pm.PurchaseOrderItem)
+                  .WithMany(poi => poi.AdditionalManufacturingRecords)
+                  .HasForeignKey(pm => pm.PurchaseOrderItemId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(pm => pm.Branch)
+                  .WithMany()
+                  .HasForeignKey(pm => pm.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(pm => pm.Technician)
+                  .WithMany()
+                  .HasForeignKey(pm => pm.TechnicianId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Indexes
+            entity.HasIndex(pm => pm.ProductId);
+            entity.HasIndex(pm => pm.SourcePurchaseOrderItemId);
+            entity.HasIndex(pm => pm.PurchaseOrderItemId);
+            entity.HasIndex(pm => pm.BatchNumber);
+            entity.HasIndex(pm => pm.ManufactureDate);
+            entity.HasIndex(pm => pm.BranchId);
+            entity.HasIndex(pm => pm.TechnicianId);
+
+            // Properties
+            entity.Property(pm => pm.ConsumedWeight).HasColumnType("decimal(10,3)");
+            entity.Property(pm => pm.WastageWeight).HasColumnType("decimal(10,3)");
+            entity.Property(pm => pm.ManufacturingCostPerGram).HasColumnType("decimal(18,2)");
+            entity.Property(pm => pm.TotalManufacturingCost).HasColumnType("decimal(18,2)");
+            entity.Property(pm => pm.BatchNumber).HasMaxLength(50);
+            entity.Property(pm => pm.ManufacturingNotes).HasMaxLength(1000);
+            entity.Property(pm => pm.Status).HasMaxLength(20);
+        });
+
+        // Configure ManufacturingWorkflowHistory entity
+        builder.Entity<ManufacturingWorkflowHistory>(entity =>
+        {
+            // Relationships
+            entity.HasOne(mwh => mwh.ProductManufacture)
+                  .WithMany(pm => pm.WorkflowHistory)
+                  .HasForeignKey(mwh => mwh.ProductManufactureId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexes
+            entity.HasIndex(mwh => mwh.ProductManufactureId);
+            entity.HasIndex(mwh => mwh.ActionByUserId);
+            entity.HasIndex(mwh => new { mwh.ProductManufactureId, mwh.CreatedAt });
+
+            // Properties
+            entity.Property(mwh => mwh.FromStatus).HasMaxLength(30);
+            entity.Property(mwh => mwh.ToStatus).HasMaxLength(30);
+            entity.Property(mwh => mwh.Action).HasMaxLength(50);
+            entity.Property(mwh => mwh.ActionByUserId).HasMaxLength(450);
+            entity.Property(mwh => mwh.ActionByUserName).HasMaxLength(100);
+            entity.Property(mwh => mwh.Notes).HasMaxLength(1000);
+        });
+
         // Configure soft delete filter for BaseEntity
         builder.Entity<Branch>().HasQueryFilter(e => e.IsActive);
         builder.Entity<Product>().HasQueryFilter(e => e.IsActive);
@@ -854,6 +1025,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<OwnershipMovement>().HasQueryFilter(e => e.IsActive);
         builder.Entity<CustomerPurchase>().HasQueryFilter(e => e.IsActive);
         builder.Entity<CustomerPurchaseItem>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<ProductManufacture>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<ManufacturingWorkflowHistory>().HasQueryFilter(e => e.IsActive);
         
         // Configure soft delete filter for Lookup Tables
         builder.Entity<OrderTypeLookup>().HasQueryFilter(e => e.IsActive);
@@ -888,6 +1061,152 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
         UpdateAuditFields();
         return await base.SaveChangesAsync(cancellationToken);
+    }
+
+
+
+
+
+    /// <summary>
+    /// Configure lookup tables
+    /// </summary>
+    private static void ConfigureLookupTables(ModelBuilder builder)
+    {
+        // Configure all lookup entities with common properties
+        var lookupEntities = new[]
+        {
+            typeof(BusinessEntityTypeLookup),
+            typeof(ChargeTypeLookup),
+            typeof(FinancialTransactionStatusLookup),
+            typeof(FinancialTransactionTypeLookup),
+            typeof(KaratTypeLookup),
+            typeof(OrderStatusLookup),
+            typeof(OrderTypeLookup),
+            typeof(PaymentMethodLookup),
+            typeof(ProductCategoryTypeLookup),
+            typeof(RepairPriorityLookup),
+            typeof(RepairStatusLookup),
+            typeof(SubCategoryLookup),
+            typeof(TransactionStatusLookup),
+            typeof(TransactionTypeLookup)
+        };
+
+        foreach (var entityType in lookupEntities)
+        {
+            builder.Entity(entityType, entity =>
+            {
+                entity.Property("Name")
+                      .IsRequired()
+                      .HasMaxLength(100);
+
+                entity.Property("Description")
+                      .HasMaxLength(500);
+
+                entity.Property("IsActive")
+                      .HasDefaultValue(true);
+
+                entity.HasIndex("Name")
+                      .IsUnique()
+                      .HasFilter("[IsActive] = 1");
+            });
+        }
+    }
+
+    /// <summary>
+    /// Configure audit and soft delete filters
+    /// </summary>
+    private static void ConfigureAuditAndSoftDelete(ModelBuilder builder)
+    {
+        // Configure AuditLog entity
+        builder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(al => al.Id);
+
+            entity.Property(al => al.Timestamp)
+                  .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.Property(al => al.UserId)
+                  .HasMaxLength(450); // ASP.NET Identity User Id length
+
+            entity.Property(al => al.UserName)
+                  .HasMaxLength(256)
+                  .IsRequired(false);
+
+            entity.Property(al => al.Action)
+                  .IsRequired()
+                  .HasMaxLength(50);
+
+            entity.Property(al => al.EntityType)
+                  .HasMaxLength(100);
+
+            entity.Property(al => al.EntityId)
+                  .HasMaxLength(100);
+
+            entity.Property(al => al.Description)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(al => al.OldValues)
+                  .HasColumnType("nvarchar(max)");
+
+            entity.Property(al => al.NewValues)
+                  .HasColumnType("nvarchar(max)");
+
+            entity.Property(al => al.IpAddress)
+                  .HasMaxLength(50);
+
+            entity.Property(al => al.UserAgent)
+                  .HasMaxLength(500);
+
+            entity.Property(al => al.SessionId)
+                  .HasMaxLength(100);
+
+            entity.Property(al => al.ErrorMessage)
+                  .HasMaxLength(500);
+
+            entity.Property(al => al.Details)
+                  .HasMaxLength(1000);
+
+            entity.Property(al => al.BranchName)
+                  .HasMaxLength(100);
+
+            // Configure navigation properties
+            entity.HasOne(al => al.User)
+                  .WithMany()
+                  .HasForeignKey(al => al.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(al => al.Branch)
+                  .WithMany()
+                  .HasForeignKey(al => al.BranchId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(al => al.FinancialTransaction)
+                  .WithMany()
+                  .HasForeignKey(al => al.FinancialTransactionId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(al => al.Order)
+                  .WithMany()
+                  .HasForeignKey(al => al.OrderId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(al => al.Timestamp);
+            entity.HasIndex(al => new { al.EntityType, al.EntityId });
+            entity.HasIndex(al => al.UserId);
+        });
+
+        // Configure global soft delete filter
+        foreach (var entityType in builder.Model.GetEntityTypes())
+        {
+            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                var parameter = Expression.Parameter(entityType.ClrType, "e");
+                var property = Expression.Property(parameter, "IsActive");
+                var filter = Expression.Lambda(Expression.Equal(property, Expression.Constant(true)), parameter);
+                entityType.SetQueryFilter(filter);
+            }
+        }
     }
 
     /// <summary>

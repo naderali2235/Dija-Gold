@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.Models;
 
@@ -10,27 +10,27 @@ public class Technician : BaseEntity
     /// <summary>
     /// Full name of the technician
     /// </summary>
-    [Required]
-    [MaxLength(100)]
+
+
     public string FullName { get; set; } = string.Empty;
     
     /// <summary>
     /// Phone number for contacting the technician
     /// </summary>
-    [Required]
-    [MaxLength(20)]
+
+
     public string PhoneNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Email address (optional)
     /// </summary>
-    [MaxLength(100)]
+
     public string? Email { get; set; }
     
     /// <summary>
     /// Specialization or skills (optional)
     /// </summary>
-    [MaxLength(500)]
+
     public string? Specialization { get; set; }
     
 
@@ -44,4 +44,14 @@ public class Technician : BaseEntity
     /// Navigation property to the branch
     /// </summary>
     public virtual Branch? Branch { get; set; }
+
+    /// <summary>
+    /// Navigation property to repair jobs assigned to this technician
+    /// </summary>
+    public virtual ICollection<RepairJob> RepairJobs { get; set; } = new List<RepairJob>();
+
+    /// <summary>
+    /// Navigation property to repair jobs quality checked by this technician
+    /// </summary>
+    public virtual ICollection<RepairJob> QualityCheckedRepairJobs { get; set; } = new List<RepairJob>();
 }

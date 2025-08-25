@@ -1,5 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -208,11 +209,6 @@ public class InventoryController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var success = await _inventoryService.AddInventoryAsync(
@@ -257,11 +253,6 @@ public class InventoryController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var success = await _inventoryService.AdjustInventoryAsync(
@@ -303,11 +294,6 @@ public class InventoryController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var success = await _inventoryService.TransferInventoryAsync(

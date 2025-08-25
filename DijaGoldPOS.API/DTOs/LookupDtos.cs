@@ -1,116 +1,111 @@
 namespace DijaGoldPOS.API.DTOs;
 
 /// <summary>
-/// Base DTO for lookup entities
+/// Transaction status lookup DTO
 /// </summary>
-public abstract class BaseLookupDto
-{
-    /// <summary>
-    /// Lookup ID
-    /// </summary>
-    public int Id { get; set; }
-
-    /// <summary>
-    /// Lookup name
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Lookup description
-    /// </summary>
-    public string? Description { get; set; }
-
-    /// <summary>
-    /// Sort order for display
-    /// </summary>
-    public int SortOrder { get; set; }
-
-    /// <summary>
-    /// Whether the lookup is active
-    /// </summary>
-    public bool IsActive { get; set; }
-}
-
-/// <summary>
-/// DTO for karat type lookup data
-/// </summary>
-public class KaratTypeLookupDto : BaseLookupDto
+public class TransactionStatusLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for financial transaction type lookup data
+/// Transaction type lookup DTO
+/// </summary>
+public class TransactionTypeLookupDto : BaseLookupDto
+{
+}
+
+/// <summary>
+/// Financial transaction type lookup DTO
 /// </summary>
 public class FinancialTransactionTypeLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for payment method lookup data
+/// Payment method lookup DTO
 /// </summary>
 public class PaymentMethodLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for financial transaction status lookup data
+/// Financial transaction status lookup DTO
 /// </summary>
 public class FinancialTransactionStatusLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for charge type lookup data
+/// Karat type lookup DTO
+/// </summary>
+public class KaratTypeLookupDto : BaseLookupDto
+{
+}
+
+/// <summary>
+/// Charge type lookup DTO
 /// </summary>
 public class ChargeTypeLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for product category type lookup data
+/// Product category type lookup DTO
 /// </summary>
 public class ProductCategoryTypeLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for repair status lookup data
+/// Repair status lookup DTO
 /// </summary>
 public class RepairStatusLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for repair priority lookup data
+/// Repair priority lookup DTO
 /// </summary>
 public class RepairPriorityLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for order type lookup data
+/// Order type lookup DTO
 /// </summary>
 public class OrderTypeLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for order status lookup data
+/// Order status lookup DTO
 /// </summary>
 public class OrderStatusLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for business entity type lookup data
+/// Business entity type lookup DTO
 /// </summary>
 public class BusinessEntityTypeLookupDto : BaseLookupDto
 {
 }
 
 /// <summary>
-/// DTO for sub-category lookup data
+/// Sub-category lookup DTO
 /// </summary>
 public class SubCategoryLookupDto : BaseLookupDto
 {
+}
+
+/// <summary>
+/// Base lookup DTO for common lookup operations
+/// </summary>
+public class BaseLookupDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsActive { get; set; }
+    public int SortOrder { get; set; }
 }

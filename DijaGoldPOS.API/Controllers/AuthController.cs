@@ -1,11 +1,10 @@
-using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace DijaGoldPOS.API.Controllers;
@@ -21,24 +20,23 @@ public class AuthController : ControllerBase
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ITokenService _tokenService;
     private readonly IAuditService _auditService;
+    private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<AuthController> _logger;
-
-    private readonly ApplicationDbContext _context;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         ITokenService tokenService,
         IAuditService auditService,
-        ILogger<AuthController> logger,
-        ApplicationDbContext context)
+        ICurrentUserService currentUserService,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
         _auditService = auditService;
+        _currentUserService = currentUserService;
         _logger = logger;
-        _context = context;
     }
 
     /// <summary>
@@ -54,14 +52,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
-            var user = await _context.Users
-                .Include(u => u.Branch)
-                .FirstOrDefaultAsync(u => u.UserName == request.Username || u.Email == request.Username);
+            var user = await _userManager.FindByNameAsync(request.Username) ??
+                      await _userManager.FindByEmailAsync(request.Username);
 
             if (user == null || !user.IsActive)
             {
@@ -98,10 +90,8 @@ public class AuthController : ControllerBase
                 return Unauthorized(ApiResponse.ErrorResponse("Invalid credentials"));
             }
 
-            // Get user roles
-            var roles = await _userManager.GetRolesAsync(user);
-
             // Generate JWT token
+            var roles = await _userManager.GetRolesAsync(user);
             var token = await _tokenService.GenerateTokenAsync(user, roles);
 
             // Update last login date
@@ -117,27 +107,12 @@ public class AuthController : ControllerBase
                 true
             );
 
+            var userInfo = await BuildUserInfoDtoAsync(user);
             var response = new LoginResponseDto
             {
                 Token = token,
                 ExpiresAt = DateTime.UtcNow.AddHours(8), // Should match JWT configuration
-                User = new UserInfoDto
-                {
-                    Id = user.Id,
-                    Username = user.UserName ?? "",
-                    FullName = user.FullName,
-                    Email = user.Email ?? "",
-                    EmployeeCode = user.EmployeeCode,
-                    Roles = roles.ToList(),
-                    Branch = user.Branch != null ? new BranchInfoDto
-                    {
-                        Id = user.Branch.Id,
-                        Name = user.Branch.Name,
-                        Code = user.Branch.Code,
-                        IsHeadquarters = user.Branch.IsHeadquarters
-                    } : null,
-                    LastLoginAt = user.LastLoginAt
-                }
+                User = userInfo
             };
 
             _logger.LogInformation("User {UserId} logged in successfully", user.Id);
@@ -203,11 +178,6 @@ public class AuthController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
             {
@@ -266,34 +236,13 @@ public class AuthController : ControllerBase
                 return Unauthorized(ApiResponse.ErrorResponse("User not authenticated"));
             }
 
-            var user = await _context.Users
-                .Include(u => u.Branch)
-                .FirstOrDefaultAsync(u => u.Id == userId);
-                
+            var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
             {
                 return Unauthorized(ApiResponse.ErrorResponse("User not found"));
             }
 
-            var roles = await _userManager.GetRolesAsync(user);
-
-            var userInfo = new UserInfoDto
-            {
-                Id = user.Id,
-                Username = user.UserName ?? "",
-                FullName = user.FullName,
-                Email = user.Email ?? "",
-                EmployeeCode = user.EmployeeCode,
-                Roles = roles.ToList(),
-                Branch = user.Branch != null ? new BranchInfoDto
-                {
-                    Id = user.Branch.Id,
-                    Name = user.Branch.Name,
-                    Code = user.Branch.Code,
-                    IsHeadquarters = user.Branch.IsHeadquarters
-                } : null,
-                LastLoginAt = user.LastLoginAt
-            };
+            var userInfo = await BuildUserInfoDtoAsync(user);
 
             return Ok(ApiResponse<UserInfoDto>.SuccessResponse(userInfo));
         }
@@ -322,10 +271,7 @@ public class AuthController : ControllerBase
                 return Unauthorized(ApiResponse.ErrorResponse("User not authenticated"));
             }
 
-            var user = await _context.Users
-                .Include(u => u.Branch)
-                .FirstOrDefaultAsync(u => u.Id == userId);
-                
+            var user = await _userManager.FindByIdAsync(userId);
             if (user == null || !user.IsActive)
             {
                 return Unauthorized(ApiResponse.ErrorResponse("User not found or inactive"));
@@ -333,28 +279,13 @@ public class AuthController : ControllerBase
 
             var roles = await _userManager.GetRolesAsync(user);
             var token = await _tokenService.GenerateTokenAsync(user, roles);
+            var userInfo = await BuildUserInfoDtoAsync(user);
 
             var response = new LoginResponseDto
             {
                 Token = token,
                 ExpiresAt = DateTime.UtcNow.AddHours(8),
-                User = new UserInfoDto
-                {
-                    Id = user.Id,
-                    Username = user.UserName ?? "",
-                    FullName = user.FullName,
-                    Email = user.Email ?? "",
-                    EmployeeCode = user.EmployeeCode,
-                    Roles = roles.ToList(),
-                    Branch = user.Branch != null ? new BranchInfoDto
-                    {
-                        Id = user.Branch.Id,
-                        Name = user.Branch.Name,
-                        Code = user.Branch.Code,
-                        IsHeadquarters = user.Branch.IsHeadquarters
-                    } : null,
-                    LastLoginAt = user.LastLoginAt
-                }
+                User = userInfo
             };
 
             _logger.LogInformation("Token refreshed for user {UserId}", userId);
@@ -369,6 +300,32 @@ public class AuthController : ControllerBase
     }
 
     #region Private Helper Methods
+
+    /// <summary>
+    /// Build UserInfoDto from ApplicationUser
+    /// </summary>
+    private async Task<UserInfoDto> BuildUserInfoDtoAsync(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+
+        return new UserInfoDto
+        {
+            Id = user.Id,
+            UserName = user.UserName ?? "",
+            FullName = user.FullName,
+            Email = user.Email ?? "",
+            EmployeeCode = user.EmployeeCode,
+            Roles = roles.ToList(),
+            Branch = user.Branch != null ? new BranchInfoDto
+            {
+                Id = user.Branch.Id,
+                Name = user.Branch.Name,
+                Code = user.Branch.Code,
+                IsHeadquarters = user.Branch.IsHeadquarters
+            } : null,
+            LastLoginAt = user.LastLoginAt
+        };
+    }
 
     /// <summary>
     /// Get client IP address
@@ -397,8 +354,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var users = await _context.Users
-                .Include(u => u.Branch)
+            var users = _userManager.Users
                 .Select(u => new
                 {
                     u.Id,
@@ -409,7 +365,7 @@ public class AuthController : ControllerBase
                     BranchName = u.Branch != null ? u.Branch.Name : "No Branch",
                     BranchCode = u.Branch != null ? u.Branch.Code : "N/A"
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(ApiResponse.SuccessResponse(users, "User branch assignments"));
         }

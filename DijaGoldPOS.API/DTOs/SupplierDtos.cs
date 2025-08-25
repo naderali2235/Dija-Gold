@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -31,41 +31,37 @@ public class SupplierDto
 /// </summary>
 public class CreateSupplierRequestDto
 {
-    [Required(ErrorMessage = "Company name is required")]
-    [StringLength(200, ErrorMessage = "Company name cannot exceed 200 characters")]
+
+
     public string CompanyName { get; set; } = string.Empty;
 
-    [StringLength(100, ErrorMessage = "Contact person name cannot exceed 100 characters")]
+
     public string? ContactPersonName { get; set; }
 
-    [StringLength(20, ErrorMessage = "Phone number cannot exceed 20 characters")]
+
     public string? Phone { get; set; }
 
-    [EmailAddress(ErrorMessage = "Invalid email address")]
-    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
     public string? Email { get; set; }
 
-    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
+
     public string? Address { get; set; }
 
-    [StringLength(50, ErrorMessage = "Tax registration number cannot exceed 50 characters")]
+
     public string? TaxRegistrationNumber { get; set; }
 
-    [StringLength(50, ErrorMessage = "Commercial registration number cannot exceed 50 characters")]
+
     public string? CommercialRegistrationNumber { get; set; }
 
-    [Range(0, double.MaxValue, ErrorMessage = "Credit limit cannot be negative")]
     public decimal CreditLimit { get; set; } = 0;
 
-    [Range(0, 365, ErrorMessage = "Payment terms must be between 0 and 365 days")]
     public int PaymentTermsDays { get; set; } = 30;
 
     public bool CreditLimitEnforced { get; set; } = true;
 
-    [StringLength(1000, ErrorMessage = "Payment terms cannot exceed 1000 characters")]
+
     public string? PaymentTerms { get; set; }
 
-    [StringLength(1000, ErrorMessage = "Notes cannot exceed 1000 characters")]
+
     public string? Notes { get; set; }
 }
 
@@ -74,7 +70,7 @@ public class CreateSupplierRequestDto
 /// </summary>
 public class UpdateSupplierRequestDto : CreateSupplierRequestDto
 {
-    [Required(ErrorMessage = "Supplier ID is required")]
+
     public int Id { get; set; }
 }
 
@@ -127,19 +123,19 @@ public class SupplierTransactionDto
 /// </summary>
 public class UpdateSupplierBalanceRequestDto
 {
-    [Required(ErrorMessage = "Supplier ID is required")]
+
     public int SupplierId { get; set; }
 
-    [Required(ErrorMessage = "Amount is required")]
+
     public decimal Amount { get; set; }
 
-    [Required(ErrorMessage = "Transaction type is required")]
+
     public string TransactionType { get; set; } = string.Empty; // "payment", "adjustment", "credit"
 
-    [StringLength(100, ErrorMessage = "Reference number cannot exceed 100 characters")]
+
     public string? ReferenceNumber { get; set; }
 
-    [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters")]
+
     public string? Notes { get; set; }
 }
 
@@ -166,4 +162,41 @@ public class SupplierProductDto
     public decimal Weight { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
+}
+
+/// <summary>
+/// Supplier credit alert DTO
+/// </summary>
+public class SupplierCreditAlertDto
+{
+    public int SupplierId { get; set; }
+    public string SupplierName { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
+    public decimal CreditLimit { get; set; }
+    public decimal CurrentBalance { get; set; }
+    public decimal AvailableCredit { get; set; }
+    public decimal CreditUtilizationPercentage { get; set; }
+    public string AlertType { get; set; } = string.Empty; // "near_limit", "over_limit", "warning"
+    public string Severity { get; set; } = string.Empty; // "low", "medium", "high", "critical"
+    public string Message { get; set; } = string.Empty;
+    public string? ContactPersonName { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public DateTime? LastTransactionDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Supplier credit validation result
+/// </summary>
+public class SupplierCreditValidationResult
+{
+    public bool CanPurchase { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public decimal AvailableCredit { get; set; }
+    public decimal RequestedAmount { get; set; }
+    public decimal CurrentBalance { get; set; }
+    public decimal CreditLimit { get; set; }
+    public bool CreditLimitEnforced { get; set; }
+    public List<string> Warnings { get; set; } = new();
 }

@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -31,32 +31,32 @@ public class CustomerDto
 /// </summary>
 public class CreateCustomerRequestDto
 {
-    [Required(ErrorMessage = "Full name is required")]
-    [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]
+
+
     public string FullName { get; set; } = string.Empty;
 
-    [StringLength(20, ErrorMessage = "National ID cannot exceed 20 characters")]
+
     public string? NationalId { get; set; }
 
-    [StringLength(15, ErrorMessage = "Mobile number cannot exceed 15 characters")]
+
     public string? MobileNumber { get; set; }
 
     //[EmailAddress(ErrorMessage = "Invalid email address")]
-    [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters",MinimumLength = 0)]
+
     public string? Email { get; set; }
 
-    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
+
     public string? Address { get; set; }
 
-    [Range(1, 5, ErrorMessage = "Loyalty tier must be between 1 and 5")]
+
     public int LoyaltyTier { get; set; } = 1;
 
-    [Range(0, 100, ErrorMessage = "Default discount percentage must be between 0 and 100")]
+
     public decimal DefaultDiscountPercentage { get; set; } = 0;
 
     public bool MakingChargesWaived { get; set; } = false;
 
-    [StringLength(1000, ErrorMessage = "Notes cannot exceed 1000 characters")]
+
     public string? Notes { get; set; }
 }
 
@@ -65,7 +65,7 @@ public class CreateCustomerRequestDto
 /// </summary>
 public class UpdateCustomerRequestDto : CreateCustomerRequestDto
 {
-    [Required(ErrorMessage = "Customer ID is required")]
+
     public int Id { get; set; }
 }
 
@@ -132,16 +132,16 @@ public class CustomerLoyaltyDto
 /// </summary>
 public class UpdateCustomerLoyaltyRequestDto
 {
-    [Required(ErrorMessage = "Customer ID is required")]
+
     public int CustomerId { get; set; }
 
-    [Range(1, 5, ErrorMessage = "Loyalty tier must be between 1 and 5")]
+
     public int LoyaltyTier { get; set; }
 
-    [Range(0, int.MaxValue, ErrorMessage = "Loyalty points cannot be negative")]
+
     public int LoyaltyPoints { get; set; }
 
-    [Range(0, 100, ErrorMessage = "Default discount percentage must be between 0 and 100")]
+
     public decimal DefaultDiscountPercentage { get; set; }
 
     public bool MakingChargesWaived { get; set; }

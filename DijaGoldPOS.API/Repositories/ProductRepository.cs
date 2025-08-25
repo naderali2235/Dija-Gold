@@ -1,4 +1,5 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 
 using Microsoft.EntityFrameworkCore;

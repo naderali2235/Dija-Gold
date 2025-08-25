@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.Models.LookupTables;
 
@@ -10,14 +10,14 @@ public class SubCategoryLookup : BaseEntity
     /// <summary>
     /// Name of the sub-category
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Description of the sub-category
     /// </summary>
-    [MaxLength(200)]
+
     public string? Description { get; set; }
 
     /// <summary>
@@ -33,7 +33,7 @@ public class SubCategoryLookup : BaseEntity
     /// <summary>
     /// Product category type this sub-category belongs to
     /// </summary>
-    [Required]
+
     public int CategoryTypeId { get; set; }
 
     /// <summary>

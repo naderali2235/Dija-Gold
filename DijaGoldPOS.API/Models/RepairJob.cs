@@ -1,5 +1,4 @@
 using DijaGoldPOS.API.Models.LookupTables;
-using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -18,18 +17,19 @@ public class RepairJob : BaseEntity
     /// <summary>
     /// Current status of the repair job
     /// </summary>
-    [Required]
+
     public int StatusId { get; set; }
     
     /// <summary>
     /// Priority level of the repair
     /// </summary>
-    [Required]
+
     public int PriorityId { get; set; }
     
     /// <summary>
     /// ID of the technician assigned to this repair
     /// </summary>
+    [ForeignKey("AssignedTechnician")]
     public int? AssignedTechnicianId { get; set; }
     
     /// <summary>
@@ -55,7 +55,7 @@ public class RepairJob : BaseEntity
     /// <summary>
     /// Notes from the technician about the repair work
     /// </summary>
-    [MaxLength(2000)]
+
     public string? TechnicianNotes { get; set; }
     
     /// <summary>
@@ -67,7 +67,7 @@ public class RepairJob : BaseEntity
     /// <summary>
     /// Additional materials or parts used in the repair
     /// </summary>
-    [MaxLength(1000)]
+
     public string? MaterialsUsed { get; set; }
     
     /// <summary>
@@ -79,6 +79,7 @@ public class RepairJob : BaseEntity
     /// <summary>
     /// Quality check performed by
     /// </summary>
+    [ForeignKey("QualityChecker")]
     public int? QualityCheckedBy { get; set; }
     
     /// <summary>
@@ -95,6 +96,22 @@ public class RepairJob : BaseEntity
     /// Date when customer was notified
     /// </summary>
     public DateTime? CustomerNotificationDate { get; set; }
+
+    /// <summary>
+    /// General notes about the repair job
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Estimated cost of the repair
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? EstimatedCost { get; set; }
+
+    /// <summary>
+    /// Estimated completion date
+    /// </summary>
+    public DateTime? EstimatedCompletionDate { get; set; }
     
     /// <summary>
     /// Navigation property to the financial transaction

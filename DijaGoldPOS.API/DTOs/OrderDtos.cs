@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -70,10 +70,10 @@ public class OrderItemDto
 /// </summary>
 public class CreateOrderRequestDto
 {
-    [Required]
+
     public int BranchId { get; set; }
     
-    [Required]
+
     public int OrderTypeId { get; set; }
     
     public int? CustomerId { get; set; }
@@ -84,7 +84,7 @@ public class CreateOrderRequestDto
     
     public DateTime? EstimatedCompletionDate { get; set; }
     
-    [Required]
+
     public List<CreateOrderItemRequestDto> Items { get; set; } = new();
 }
 
@@ -93,11 +93,11 @@ public class CreateOrderRequestDto
 /// </summary>
 public class CreateOrderItemRequestDto
 {
-    [Required]
+
     public int ProductId { get; set; }
     
-    [Required]
-    [Range(0.01, double.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+
+
     public decimal Quantity { get; set; }
     
     public decimal? CustomDiscountPercentage { get; set; }
@@ -149,13 +149,13 @@ public class OrderSummaryDto
 /// </summary>
 public class ProcessOrderPaymentRequestDto
 {
-    [Required]
+
     public int OrderId { get; set; }
     
-    [Required]
+
     public decimal AmountPaid { get; set; }
     
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
     public string? Notes { get; set; }
@@ -166,24 +166,24 @@ public class ProcessOrderPaymentRequestDto
 /// </summary>
 public class CreateRepairOrderRequestDto
 {
-    [Required]
+
     public int BranchId { get; set; }
     
     public int? CustomerId { get; set; }
     
-    [Required]
-    [StringLength(1000, ErrorMessage = "Repair description cannot exceed 1000 characters")]
+
+
     public string RepairDescription { get; set; } = string.Empty;
     
-    [Required]
-    [Range(0.01, double.MaxValue, ErrorMessage = "Repair amount must be greater than 0")]
+
+
     public decimal RepairAmount { get; set; }
     
-    [Required]
-    [Range(0, double.MaxValue, ErrorMessage = "Amount paid cannot be negative")]
+
+
     public decimal AmountPaid { get; set; }
     
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
     public DateTime? EstimatedCompletionDate { get; set; }
@@ -192,7 +192,7 @@ public class CreateRepairOrderRequestDto
     
     public int? AssignedTechnicianId { get; set; }
     
-    [StringLength(2000, ErrorMessage = "Technician notes cannot exceed 2000 characters")]
+
     public string? TechnicianNotes { get; set; }
 }
 

@@ -1,4 +1,4 @@
-﻿namespace DijaGoldPOS.API.Models.LookupTables
+namespace DijaGoldPOS.API.Models.LookupTables
 {
     public interface ILookupEntity
     {

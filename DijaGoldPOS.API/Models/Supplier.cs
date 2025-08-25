@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,44 +12,44 @@ public class Supplier : BaseEntity
     /// <summary>
     /// Company name
     /// </summary>
-    [Required]
-    [MaxLength(200)]
+
+
     public string CompanyName { get; set; } = string.Empty;
     
     /// <summary>
     /// Contact person name
     /// </summary>
-    [MaxLength(100)]
+
     public string? ContactPersonName { get; set; }
     
     /// <summary>
     /// Primary phone number
     /// </summary>
-    [MaxLength(20)]
+
     public string? Phone { get; set; }
     
     /// <summary>
     /// Email address
     /// </summary>
-    [MaxLength(100)]
+
     public string? Email { get; set; }
     
     /// <summary>
     /// Company address
     /// </summary>
-    [MaxLength(500)]
+
     public string? Address { get; set; }
     
     /// <summary>
     /// Tax registration number
     /// </summary>
-    [MaxLength(50)]
+
     public string? TaxRegistrationNumber { get; set; }
     
     /// <summary>
     /// Commercial registration number
     /// </summary>
-    [MaxLength(50)]
+
     public string? CommercialRegistrationNumber { get; set; }
     
     /// <summary>
@@ -77,13 +77,13 @@ public class Supplier : BaseEntity
     /// <summary>
     /// Special terms and conditions
     /// </summary>
-    [MaxLength(1000)]
+
     public string? PaymentTerms { get; set; }
     
     /// <summary>
     /// Notes about the supplier
     /// </summary>
-    [MaxLength(1000)]
+
     public string? Notes { get; set; }
     
     /// <summary>
@@ -112,4 +112,16 @@ public class Supplier : BaseEntity
     /// </summary>
     [JsonIgnore]
     public virtual ICollection<PurchaseOrder> PurchaseOrders { get; set; } = new List<PurchaseOrder>();
+
+    /// <summary>
+    /// Navigation property to supplier transactions
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<SupplierTransaction> SupplierTransactions { get; set; } = new List<SupplierTransaction>();
+
+    /// <summary>
+    /// Navigation property to product ownerships for this supplier
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<ProductOwnership> ProductOwnerships { get; set; } = new List<ProductOwnership>();
 }

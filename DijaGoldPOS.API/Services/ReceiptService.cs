@@ -92,27 +92,7 @@ public class ReceiptService : IReceiptService
 
 
 
-    /// <summary>
-    /// Generate receipt PDF
-    /// </summary>
-    public async Task<byte[]> GenerateReceiptPdfAsync(FinancialTransaction transaction)
-    {
-        try
-        {
-            var receiptContent = await GenerateReceiptContentAsync(transaction);
-            
-            // Simple PDF generation - in production, use a proper PDF library like iTextSharp or QuestPDF
-            var pdfBytes = Encoding.UTF8.GetBytes($"PDF Receipt Content:\n\n{receiptContent}");
-            
-            _logger.LogInformation("PDF receipt generated for transaction {TransactionId}", transaction.Id);
-            return pdfBytes;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating PDF receipt for transaction {TransactionId}", transaction.Id);
-            throw;
-        }
-    }
+
 
     /// <summary>
     /// Get receipt template by transaction type
@@ -584,7 +564,7 @@ public class ReceiptService : IReceiptService
             TotalAmount = transaction.TotalAmount,
             AmountPaid = transaction.AmountPaid,
             ChangeGiven = transaction.ChangeGiven,
-            PaymentMethod = transaction.PaymentMethod.ToString(),
+            PaymentMethod = transaction.PaymentMethod?.ToString() ?? "Unknown",
 
             // Additional Information for specific transaction types
             ReturnPolicy = "Returns accepted within 7 days with receipt",

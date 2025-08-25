@@ -22,9 +22,6 @@ public class PurchaseOrdersController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<PurchaseOrderDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromBody] CreatePurchaseOrderRequestDto request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
         var result = await _service.CreateAsync(request, userId);
         return Ok(ApiResponse<PurchaseOrderDto>.SuccessResponse(result));
@@ -42,6 +39,58 @@ public class PurchaseOrdersController : ControllerBase
         return Ok(ApiResponse<PurchaseOrderDto>.SuccessResponse(result));
     }
 
+    [HttpPut("{id:int}")]
+    [ProducesResponseType(typeof(ApiResponse<PurchaseOrderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdatePurchaseOrderRequestDto request)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
+            var result = await _service.UpdateAsync(id, request, userId);
+            return Ok(ApiResponse<PurchaseOrderDto>.SuccessResponse(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ex.Message));
+        }
+    }
+
+    [HttpPut("{id:int}/status")]
+    [ProducesResponseType(typeof(ApiResponse<PurchaseOrderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdatePurchaseOrderStatusRequestDto request)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
+            var result = await _service.UpdateStatusAsync(id, request, userId);
+            return Ok(ApiResponse<PurchaseOrderDto>.SuccessResponse(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ex.Message));
+        }
+    }
+
+    [HttpGet("{id:int}/status-transitions")]
+    [ProducesResponseType(typeof(ApiResponse<PurchaseOrderStatusTransitionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetStatusTransitions(int id)
+    {
+        try
+        {
+            var result = await _service.GetAvailableStatusTransitionsAsync(id);
+            return Ok(ApiResponse<PurchaseOrderStatusTransitionDto>.SuccessResponse(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(ApiResponse.ErrorResponse(ex.Message));
+        }
+    }
+
     [HttpPost("search")]
     [ProducesResponseType(typeof(ApiResponse<List<PurchaseOrderDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Search([FromBody] PurchaseOrderSearchRequestDto request)
@@ -56,9 +105,6 @@ public class PurchaseOrdersController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Receive([FromBody] ReceivePurchaseOrderRequestDto request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
         var ok = await _service.ReceiveAsync(request, userId);
         return ok

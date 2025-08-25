@@ -9,6 +9,10 @@ namespace DijaGoldPOS.API.Data;
 /// </summary>
 public static class DbInitializer
 {
+    // Static flag to prevent multiple runs in the same application instance
+    private static bool _isInitialized = false;
+    private static readonly object _lockObject = new object();
+
     /// <summary>
     /// Initialize database with seed data
     /// </summary>
@@ -17,60 +21,107 @@ public static class DbInitializer
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager)
     {
-        //// Check if database was just created
-        //var wasDatabaseCreated = await context.Database.EnsureCreatedAsync();
-        
-        //// Run any pending migrations
-        //if (context.Database.GetPendingMigrations().Any())
-        //{
-        //    await context.Database.MigrateAsync();
-        //}
+        // Prevent multiple runs in the same application instance
+        if (_isInitialized)
+        {
+            return;
+        }
 
-        // Only seed data if database was just created (fresh database)
-            // Seed lookup tables first
+        lock (_lockObject)
+        {
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            _isInitialized = true;
+        }
+
+        // Check if initialization has already been completed
+        if (await IsInitializationCompletedAsync(context))
+        {
+            return;
+        }
+
+        try
+        {
+            // Seed all data in proper order
             await LookupTableSeeder.SeedLookupTablesAsync(context);
 
-            // Seed roles
             await SeedRolesAsync(roleManager);
-
-            // Seed branches
             await SeedBranchesAsync(context);
-
-            // Seed users
             await SeedUsersAsync(userManager, context);
-
-            // Seed tax configurations
             await SeedTaxConfigurationsAsync(context);
-
-            // Seed gold rates
             await SeedGoldRatesAsync(context);
-
-            // Seed making charges
             await SeedMakingChargesAsync(context);
-
-            // Seed sample products
             await SeedProductsAsync(context);
-
-            // Seed customers
             await SeedCustomersAsync(context);
-
-            // Seed suppliers
             await SeedSuppliersAsync(context);
-
-            // Seed technicians
             await SeedTechniciansAsync(context);
-
-            // Seed purchase orders
             await SeedPurchaseOrdersAsync(context);
-
-            // Seed orders and financial transactions
             await SeedOrdersAndTransactionsAsync(context);
-
-            // Seed repair jobs
             await SeedRepairJobsAsync(context);
+
+            // Mark initialization as completed
+            await MarkInitializationCompletedAsync(context);
 
             await context.SaveChangesAsync();
         }
+        catch (Exception)
+        {
+            // Reset the flag if initialization fails
+            _isInitialized = false;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Check if database initialization has already been completed
+    /// </summary>
+    private static async Task<bool> IsInitializationCompletedAsync(ApplicationDbContext context)
+    {
+        // Check for the presence of seeded data that indicates initialization is complete
+        // We check for the main branch which is always created during initialization
+        return await context.Branches.AnyAsync(b => b.Code == "MAIN");
+    }
+
+    /// <summary>
+    /// Mark database initialization as completed
+    /// </summary>
+    private static async Task MarkInitializationCompletedAsync(ApplicationDbContext context)
+    {
+        // The presence of the main branch serves as our initialization marker
+        // Additional logic can be added here if needed for more complex scenarios
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Reset the initialization flag (useful for testing or forced re-initialization)
+    /// </summary>
+    public static void ResetInitializationFlag()
+    {
+        lock (_lockObject)
+        {
+            _isInitialized = false;
+        }
+    }
+
+    /// <summary>
+    /// Force re-initialization by removing the database flag and resetting the static flag
+    /// </summary>
+    public static async Task ForceReInitializationAsync(ApplicationDbContext context)
+    {
+        // Reset the static flag
+        ResetInitializationFlag();
+
+        // Remove the main branch to reset the database flag
+        var mainBranch = await context.Branches.FirstOrDefaultAsync(b => b.Code == "MAIN");
+        if (mainBranch != null)
+        {
+            context.Branches.Remove(mainBranch);
+            await context.SaveChangesAsync();
+        }
+    }
 
     /// <summary>
     /// Seed application roles
@@ -93,37 +144,33 @@ public static class DbInitializer
     /// </summary>
     private static async Task SeedBranchesAsync(ApplicationDbContext context)
     {
-        if (!await context.Branches.AnyAsync())
+        var branchesToCreate = new[]
         {
-            var branches = new List<Branch>
-            {
-                new Branch
-                {
-                    Name = "Main Branch",
-                    Code = "MAIN",
-                    Address = "123 Gold Street, Cairo, Egypt",
-                    Phone = "+20 2 1234567",
-                    ManagerName = "Ahmed Hassan",
-                    IsHeadquarters = true,
-                    CreatedBy = "system",
-                    CreatedAt = DateTime.UtcNow
-                },
-                new Branch
-                {
-                    Name = "Alexandria Branch",
-                    Code = "ALEX",
-                    Address = "456 Mediterranean Ave, Alexandria, Egypt",
-                    Phone = "+20 3 7654321",
-                    ManagerName = "Fatima Ali",
-                    IsHeadquarters = false,
-                    CreatedBy = "system",
-                    CreatedAt = DateTime.UtcNow
-                }
-            };
+            new { Name = "Main Branch", Code = "MAIN", Address = "123 Gold Street, Cairo, Egypt", Phone = "+20 2 1234567", ManagerName = "Ahmed Hassan", IsHeadquarters = true },
+            new { Name = "Alexandria Branch", Code = "ALEX", Address = "456 Mediterranean Ave, Alexandria, Egypt", Phone = "+20 3 7654321", ManagerName = "Fatima Ali", IsHeadquarters = false }
+        };
 
-            await context.Branches.AddRangeAsync(branches);
-            await context.SaveChangesAsync();
+        foreach (var branchData in branchesToCreate)
+        {
+            if (!await context.Branches.AnyAsync(b => b.Code == branchData.Code))
+            {
+                var branch = new Branch
+                {
+                    Name = branchData.Name,
+                    Code = branchData.Code,
+                    Address = branchData.Address,
+                    Phone = branchData.Phone,
+                    ManagerName = branchData.ManagerName,
+                    IsHeadquarters = branchData.IsHeadquarters,
+                    CreatedBy = "system",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await context.Branches.AddAsync(branch);
+            }
         }
+
+        await context.SaveChangesAsync();
     }
 
     /// <summary>
@@ -134,69 +181,33 @@ public static class DbInitializer
         var mainBranch = await context.Branches.FirstAsync(b => b.Code == "MAIN");
         var alexBranch = await context.Branches.FirstAsync(b => b.Code == "ALEX");
 
-        // Seed Manager
-        var managerEmail = "manager@dijagold.com";
-        if (await userManager.FindByEmailAsync(managerEmail) == null)
+        var usersToCreate = new[]
         {
-            var manager = new ApplicationUser
-            {
-                UserName = managerEmail,
-                Email = managerEmail,
-                FullName = "System Manager",
-                EmployeeCode = "MGR001",
-                BranchId = mainBranch.Id,
-                IsActive = true,
-                EmailConfirmed = true
-            };
+            new { Email = "manager@dijagold.com", FullName = "System Manager", EmployeeCode = "MGR001", BranchId = mainBranch.Id, Password = "Manager123!", Role = "Manager" },
+            new { Email = "cashier@dijagold.com", FullName = "System Cashier", EmployeeCode = "CSH001", BranchId = mainBranch.Id, Password = "Cashier123!", Role = "Cashier" },
+            new { Email = "alex.cashier@dijagold.com", FullName = "Alexandria Cashier", EmployeeCode = "CSH002", BranchId = alexBranch.Id, Password = "Cashier123!", Role = "Cashier" }
+        };
 
-            var result = await userManager.CreateAsync(manager, "Manager123!");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(manager, "Manager");
-            }
-        }
-
-        // Seed Cashier
-        var cashierEmail = "cashier@dijagold.com";
-        if (await userManager.FindByEmailAsync(cashierEmail) == null)
+        foreach (var userData in usersToCreate)
         {
-            var cashier = new ApplicationUser
+            if (await userManager.FindByEmailAsync(userData.Email) == null)
             {
-                UserName = cashierEmail,
-                Email = cashierEmail,
-                FullName = "System Cashier",
-                EmployeeCode = "CSH001",
-                BranchId = mainBranch.Id,
-                IsActive = true,
-                EmailConfirmed = true
-            };
+                var user = new ApplicationUser
+                {
+                    UserName = userData.Email,
+                    Email = userData.Email,
+                    FullName = userData.FullName,
+                    EmployeeCode = userData.EmployeeCode,
+                    BranchId = userData.BranchId,
+                    IsActive = true,
+                    EmailConfirmed = true
+                };
 
-            var result = await userManager.CreateAsync(cashier, "Cashier123!");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(cashier, "Cashier");
-            }
-        }
-
-        // Seed Alexandria Branch Cashier
-        var alexCashierEmail = "alex.cashier@dijagold.com";
-        if (await userManager.FindByEmailAsync(alexCashierEmail) == null)
-        {
-            var alexCashier = new ApplicationUser
-            {
-                UserName = alexCashierEmail,
-                Email = alexCashierEmail,
-                FullName = "Alexandria Cashier",
-                EmployeeCode = "CSH002",
-                BranchId = alexBranch.Id,
-                IsActive = true,
-                EmailConfirmed = true
-            };
-
-            var result = await userManager.CreateAsync(alexCashier, "Cashier123!");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(alexCashier, "Cashier");
+                var result = await userManager.CreateAsync(user, userData.Password);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, userData.Role);
+                }
             }
         }
     }

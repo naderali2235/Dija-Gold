@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -10,15 +10,15 @@ public class LoginRequestDto
     /// <summary>
     /// Username or email
     /// </summary>
-    [Required(ErrorMessage = "Username is required")]
-    [StringLength(100, ErrorMessage = "Username cannot exceed 100 characters")]
+
+
     public string Username { get; set; } = string.Empty;
 
     /// <summary>
     /// Password
     /// </summary>
-    [Required(ErrorMessage = "Password is required")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be between 6 and 100 characters")]
+
+
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
@@ -61,7 +61,7 @@ public class UserInfoDto
     /// <summary>
     /// Username
     /// </summary>
-    public string Username { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
 
     /// <summary>
     /// Full name
@@ -128,21 +128,21 @@ public class ChangePasswordRequestDto
     /// <summary>
     /// Current password
     /// </summary>
-    [Required(ErrorMessage = "Current password is required")]
+
     public string CurrentPassword { get; set; } = string.Empty;
 
     /// <summary>
     /// New password
     /// </summary>
-    [Required(ErrorMessage = "New password is required")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be between 6 and 100 characters")]
+
+
     public string NewPassword { get; set; } = string.Empty;
 
     /// <summary>
     /// Confirm new password
     /// </summary>
-    [Required(ErrorMessage = "Password confirmation is required")]
-    [Compare("NewPassword", ErrorMessage = "Passwords do not match")]
+
+
     public string ConfirmPassword { get; set; } = string.Empty;
 }
 

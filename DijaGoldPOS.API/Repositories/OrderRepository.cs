@@ -1,7 +1,7 @@
 using DijaGoldPOS.API.Models;
-
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Shared;
+using DijaGoldPOS.API.IRepositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;
@@ -17,7 +17,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
 
     public async Task<Order?> GetByOrderNumberAsync(string orderNumber, int branchId)
     {
-        return await _context.Orders
+        return await _dbSet
             .Include(o => o.Branch)
             .Include(o => o.Customer)
             .Include(o => o.Cashier)
@@ -34,7 +34,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
 
     public async Task<List<Order>> GetByCustomerAsync(int customerId, DateTime? fromDate = null, DateTime? toDate = null)
     {
-        var query = _context.Orders
+        var query = _dbSet
             .Include(o => o.Branch)
             .Include(o => o.Cashier)
             .Include(o => o.FinancialTransaction)
@@ -58,7 +58,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
 
     public async Task<List<Order>> GetByCashierAsync(string cashierId, DateTime? fromDate = null, DateTime? toDate = null)
     {
-        var query = _context.Orders
+        var query = _dbSet
             .Include(o => o.Branch)
             .Include(o => o.Customer)
             .Include(o => o.FinancialTransaction)
@@ -92,7 +92,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
         int page = 1,
         int pageSize = 20)
     {
-        var query = _context.Orders
+        var query = _dbSet
             .Include(o => o.Branch)
             .Include(o => o.Customer)
             .Include(o => o.Cashier)

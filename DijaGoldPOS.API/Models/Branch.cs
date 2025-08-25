@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace DijaGoldPOS.API.Models;
 
 /// <summary>
@@ -10,33 +8,26 @@ public class Branch : BaseEntity
     /// <summary>
     /// Branch name
     /// </summary>
-    [Required]
-    [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Branch code for identification
     /// </summary>
-    [Required]
-    [MaxLength(20)]
     public string Code { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Branch address
     /// </summary>
-    [MaxLength(500)]
     public string? Address { get; set; }
-    
+
     /// <summary>
     /// Branch phone number
     /// </summary>
-    [MaxLength(20)]
     public string? Phone { get; set; }
-    
+
     /// <summary>
     /// Manager name
     /// </summary>
-    [MaxLength(100)]
     public string? ManagerName { get; set; }
     
     /// <summary>
@@ -63,4 +54,21 @@ public class Branch : BaseEntity
     /// Navigation property to orders at this branch
     /// </summary>
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
+
+
+
+    /// <summary>
+    /// Navigation property to cash drawer balances for this branch
+    /// </summary>
+    public virtual ICollection<CashDrawerBalance> CashDrawerBalances { get; set; } = new List<CashDrawerBalance>();
+
+    /// <summary>
+    /// Navigation property to product ownerships at this branch
+    /// </summary>
+    public virtual ICollection<ProductOwnership> ProductOwnerships { get; set; } = new List<ProductOwnership>();
+
+    /// <summary>
+    /// Navigation property to customer purchases at this branch
+    /// </summary>
+    public virtual ICollection<CustomerPurchase> CustomerPurchases { get; set; } = new List<CustomerPurchase>();
 }

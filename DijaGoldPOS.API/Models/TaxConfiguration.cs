@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models.LookupTables;
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models;
@@ -12,27 +12,27 @@ public class TaxConfiguration : BaseEntity
     /// <summary>
     /// Tax name (e.g., "VAT", "Sales Tax")
     /// </summary>
-    [Required]
-    [MaxLength(100)]
+
+
     public string TaxName { get; set; } = string.Empty;
     
     /// <summary>
     /// Tax code for reference
     /// </summary>
-    [Required]
-    [MaxLength(20)]
+
+
     public string TaxCode { get; set; } = string.Empty;
     
     /// <summary>
     /// Type of tax (percentage or fixed amount)
     /// </summary>
-    [Required]
+
     public int TaxTypeId { get; set; }
     
     /// <summary>
     /// Tax rate (percentage) or fixed amount in EGP
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(10,4)")]
     public decimal TaxRate { get; set; }
     
@@ -44,7 +44,7 @@ public class TaxConfiguration : BaseEntity
     /// <summary>
     /// Effective start date for this tax configuration
     /// </summary>
-    [Required]
+
     public DateTime EffectiveFrom { get; set; }
     
     /// <summary>

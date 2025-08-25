@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.Models;
 
@@ -10,13 +10,13 @@ public abstract class BaseEntity
     /// <summary>
     /// Primary key identifier
     /// </summary>
-    [Key]
+
     public int Id { get; set; }
     
     /// <summary>
     /// Date and time when the record was created
     /// </summary>
-    [Required]
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
     /// <summary>
@@ -27,14 +27,14 @@ public abstract class BaseEntity
     /// <summary>
     /// User ID who created the record
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+
+
     public string CreatedBy { get; set; } = string.Empty;
     
     /// <summary>
     /// User ID who last modified the record
     /// </summary>
-    [MaxLength(450)]
+
     public string? ModifiedBy { get; set; }
     
     /// <summary>

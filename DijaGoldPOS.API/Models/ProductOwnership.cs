@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,13 +12,13 @@ public class ProductOwnership : BaseEntity
     /// <summary>
     /// Product being tracked
     /// </summary>
-    [Required]
+
     public int ProductId { get; set; }
     
     /// <summary>
     /// Branch where inventory is held
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
@@ -83,7 +83,12 @@ public class ProductOwnership : BaseEntity
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal OutstandingAmount { get; set; }
-    
+
+    /// <summary>
+    /// Additional notes about this ownership record
+    /// </summary>
+    public string? Notes { get; set; }
+
     /// <summary>
     /// Whether this ownership record is active
     /// </summary>

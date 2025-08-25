@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,33 +12,33 @@ public class OrderItem : BaseEntity
     /// <summary>
     /// Order ID this item belongs to
     /// </summary>
-    [Required]
+
     public int OrderId { get; set; }
     
     /// <summary>
     /// Product ID
     /// </summary>
-    [Required]
+
     public int ProductId { get; set; }
     
     /// <summary>
     /// Quantity ordered
     /// </summary>
-    [Required]
-    [Range(0.01, double.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+
+
     public decimal Quantity { get; set; }
     
     /// <summary>
     /// Unit price at time of order
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal UnitPrice { get; set; }
     
     /// <summary>
     /// Total price for this item (UnitPrice * Quantity)
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalPrice { get; set; }
     
@@ -57,7 +57,7 @@ public class OrderItem : BaseEntity
     /// <summary>
     /// Final price after discount
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalPrice { get; set; }
     
@@ -76,14 +76,14 @@ public class OrderItem : BaseEntity
     /// <summary>
     /// Total amount for this item (FinalPrice + MakingCharges + TaxAmount)
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalAmount { get; set; }
     
     /// <summary>
     /// Additional notes for this item
     /// </summary>
-    [MaxLength(500)]
+
     public string? Notes { get; set; }
     
     /// <summary>

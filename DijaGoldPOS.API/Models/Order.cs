@@ -1,5 +1,4 @@
 using DijaGoldPOS.API.Models.LookupTables;
-using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -13,26 +12,26 @@ public class Order : BaseEntity
     /// <summary>
     /// Order number (sequential, unique per branch)
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string OrderNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Type of order
     /// </summary>
-    [Required]
+
     public int OrderTypeId { get; set; }
     
     /// <summary>
     /// Order date and time
     /// </summary>
-    [Required]
+
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Branch where order was created
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
@@ -43,20 +42,19 @@ public class Order : BaseEntity
     /// <summary>
     /// Cashier who created the order
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+    [ForeignKey("Cashier")]
     public string CashierId { get; set; } = string.Empty;
     
     /// <summary>
     /// Manager who approved (for returns/exchanges)
     /// </summary>
-    [MaxLength(450)]
+    [ForeignKey("ApprovedByUser")]
     public string? ApprovedByUserId { get; set; }
     
     /// <summary>
     /// Order status
     /// </summary>
-    [Required]
+
     public int StatusId { get; set; }
     
     /// <summary>
@@ -67,13 +65,13 @@ public class Order : BaseEntity
     /// <summary>
     /// Return/exchange reason
     /// </summary>
-    [MaxLength(500)]
+
     public string? ReturnReason { get; set; }
     
     /// <summary>
     /// Additional notes for the order
     /// </summary>
-    [MaxLength(2000)]
+
     public string? Notes { get; set; }
     
     /// <summary>

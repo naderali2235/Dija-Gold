@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models;
@@ -11,47 +11,43 @@ public class AuditLog
     /// <summary>
     /// Unique identifier for the audit log entry
     /// </summary>
-    [Key]
+
     public long Id { get; set; }
     
     /// <summary>
     /// User who performed the action
     /// </summary>
-    [Required]
-    [MaxLength(450)]
-    public string UserId { get; set; } = string.Empty;
+    public string? UserId { get; set; }
     
     /// <summary>
     /// Username of the user who performed the action
     /// </summary>
-    [Required]
-    [MaxLength(100)]
-    public string UserName { get; set; } = string.Empty;
+    public string? UserName { get; set; }
     
     /// <summary>
     /// Action performed (Create, Update, Delete, Login, Logout, etc.)
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string Action { get; set; } = string.Empty;
     
     /// <summary>
     /// Entity type affected (Transaction, Product, User, etc.)
     /// </summary>
-    [MaxLength(100)]
+
     public string? EntityType { get; set; }
     
     /// <summary>
     /// Primary key of the affected entity
     /// </summary>
-    [MaxLength(50)]
+
     public string? EntityId { get; set; }
     
     /// <summary>
     /// Description of the action performed
     /// </summary>
-    [Required]
-    [MaxLength(1000)]
+
+
     public string Description { get; set; } = string.Empty;
     
     /// <summary>
@@ -69,13 +65,13 @@ public class AuditLog
     /// <summary>
     /// IP address of the user
     /// </summary>
-    [MaxLength(45)]
+
     public string? IpAddress { get; set; }
     
     /// <summary>
     /// User agent/browser information
     /// </summary>
-    [MaxLength(500)]
+
     public string? UserAgent { get; set; }
     
     /// <summary>
@@ -96,13 +92,13 @@ public class AuditLog
     /// <summary>
     /// Timestamp when the action occurred
     /// </summary>
-    [Required]
+
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Session ID
     /// </summary>
-    [MaxLength(100)]
+
     public string? SessionId { get; set; }
     
     /// <summary>
@@ -113,13 +109,22 @@ public class AuditLog
     /// <summary>
     /// Error message if action failed
     /// </summary>
-    [MaxLength(1000)]
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Additional details about the action
+    /// </summary>
+    public string? Details { get; set; }
+
+    /// <summary>
+    /// Branch name where the action occurred (for display purposes)
+    /// </summary>
+    public string? BranchName { get; set; }
     
     /// <summary>
     /// Navigation property to user
     /// </summary>
-    public virtual ApplicationUser User { get; set; } = null!;
+    public virtual ApplicationUser? User { get; set; }
     
     /// <summary>
     /// Navigation property to branch

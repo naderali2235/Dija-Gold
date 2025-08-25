@@ -3,6 +3,8 @@ using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,17 +24,20 @@ public class BranchesController : ControllerBase
     private readonly IAuditService _auditService;
     private readonly IPricingService _pricingService;
     private readonly ILogger<BranchesController> _logger;
+    private readonly IMapper _mapper;
 
     public BranchesController(
         ApplicationDbContext context,
         IAuditService auditService,
         IPricingService pricingService,
-        ILogger<BranchesController> logger)
+        ILogger<BranchesController> logger,
+        IMapper mapper)
     {
         _context = context;
         _auditService = auditService;
         _pricingService = pricingService;
         _logger = logger;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -82,22 +87,11 @@ public class BranchesController : ControllerBase
             // Get total count
             var totalCount = await query.CountAsync();
 
-            // Apply pagination
+            // Apply pagination and mapping
             var branches = await query
                 .Skip((searchRequest.PageNumber - 1) * searchRequest.PageSize)
                 .Take(searchRequest.PageSize)
-                .Select(b => new BranchDto
-                {
-                    Id = b.Id,
-                    Name = b.Name,
-                    Code = b.Code,
-                    Address = b.Address,
-                    Phone = b.Phone,
-                    ManagerName = b.ManagerName,
-                    IsHeadquarters = b.IsHeadquarters,
-                    CreatedAt = b.CreatedAt,
-                    IsActive = b.IsActive
-                })
+                .ProjectTo<BranchDto>(_mapper.ConfigurationProvider)
                 .ToListAsync();
 
             var result = new PagedResult<BranchDto>
@@ -131,26 +125,15 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            var branch = await _context.Branches
-                .FirstOrDefaultAsync(b => b.Id == id);
+            var branchDto = await _context.Branches
+                .Where(b => b.Id == id)
+                .ProjectTo<BranchDto>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-            if (branch == null)
+            if (branchDto == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Branch not found"));
             }
-
-            var branchDto = new BranchDto
-            {
-                Id = branch.Id,
-                Name = branch.Name,
-                Code = branch.Code,
-                Address = branch.Address,
-                Phone = branch.Phone,
-                ManagerName = branch.ManagerName,
-                IsHeadquarters = branch.IsHeadquarters,
-                CreatedAt = branch.CreatedAt,
-                IsActive = branch.IsActive
-            };
 
             return Ok(ApiResponse<BranchDto>.SuccessResponse(branchDto));
         }
@@ -174,11 +157,6 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // Check for duplicate branch code
             var existingBranch = await _context.Branches
                 .FirstOrDefaultAsync(b => b.Code == request.Code);
@@ -258,11 +236,6 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var branch = await _context.Branches.FindAsync(id);
             if (branch == null)
             {

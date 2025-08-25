@@ -38,3 +38,10 @@ coverage/
 # Environment-specific
 DijaGoldPOS.API/appsettings.Development.json
 DijaGoldPOS.API/Properties/launchSettings.json
+
+# SSL Certificates (for HTTPS development)
+*.pem
+*.key
+*.crt
+*.csr
+ssl-certs/

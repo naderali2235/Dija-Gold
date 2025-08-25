@@ -18,13 +18,13 @@ public class RepairJobProfile : Profile
             .ForMember(d => d.QualityCheckerName, o => o.MapFrom(s => s.QualityChecker != null ? s.QualityChecker.FullName : null))
             .ForMember(d => d.CreatedByName, o => o.MapFrom(s => s.CreatedBy))
             .ForMember(d => d.FinancialTransactionNumber, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.TransactionNumber : null))
-            .ForMember(d => d.RepairDescription, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.Notes : string.Empty))
-            .ForMember(d => d.RepairAmount, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.TotalAmount : 0))
+            .ForMember(d => d.RepairDescription, o => o.MapFrom(s => s.Notes))
+            .ForMember(d => d.RepairAmount, o => o.MapFrom(s => s.EstimatedCost))
             .ForMember(d => d.AmountPaid, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.AmountPaid : 0))
-            .ForMember(d => d.EstimatedCompletionDate, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.Notes : null))
+            .ForMember(d => d.EstimatedCompletionDate, o => o.MapFrom(s => s.EstimatedCompletionDate))
             .ForMember(d => d.CustomerId, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.BusinessEntityId : null))
-            .ForMember(d => d.CustomerName, o => o.MapFrom(s => s.FinancialTransaction != null && s.FinancialTransaction.BusinessEntityType != null ? s.FinancialTransaction.BusinessEntityType.Name : null))
-            .ForMember(d => d.CustomerPhone, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.Notes : null))
+            .ForMember(d => d.CustomerName, o => o.Ignore()) // Customer info should be accessed through BusinessEntityId
+            .ForMember(d => d.CustomerPhone, o => o.Ignore()) // Customer info should be accessed through BusinessEntityId
             .ForMember(d => d.BranchId, o => o.MapFrom(s => s.FinancialTransaction != null ? s.FinancialTransaction.BranchId : 0))
             .ForMember(d => d.BranchName, o => o.MapFrom(s => s.FinancialTransaction != null && s.FinancialTransaction.Branch != null ? s.FinancialTransaction.Branch.Name : string.Empty));
 

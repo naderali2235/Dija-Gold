@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -21,6 +21,7 @@ public class PurchaseOrderDto
     public string? Terms { get; set; }
     public string? Notes { get; set; }
     public List<PurchaseOrderItemDto> Items { get; set; } = new();
+    public List<string> AvailableStatuses { get; set; } = new(); // Available status transitions
 }
 
 public class PurchaseOrderItemDto
@@ -37,64 +38,106 @@ public class PurchaseOrderItemDto
     public decimal LineTotal { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public bool IsReceived { get; set; } // Helper property for frontend
+    public bool CanEdit { get; set; } // Helper property to determine if item can be edited
 }
 
 public class CreatePurchaseOrderRequestDto
 {
-    [Required]
+
     public int SupplierId { get; set; }
 
-    [Required]
+
     public int BranchId { get; set; }
 
     public DateTime? ExpectedDeliveryDate { get; set; }
 
-    [MaxLength(1000)]
+
     public string? Terms { get; set; }
 
-    [MaxLength(1000)]
+
     public string? Notes { get; set; }
 
-    [MinLength(1)]
+
     public List<CreatePurchaseOrderItemRequestDto> Items { get; set; } = new();
 }
 
 public class CreatePurchaseOrderItemRequestDto
 {
-    [Required]
+
     public int ProductId { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal QuantityOrdered { get; set; }
 
-    [Range(0.001, double.MaxValue)]
+
     public decimal WeightOrdered { get; set; }
 
-    [Range(0, double.MaxValue)]
+
     public decimal UnitCost { get; set; }
 
-    [MaxLength(500)]
+
+    public string? Notes { get; set; }
+}
+
+public class UpdatePurchaseOrderRequestDto
+{
+
+    public int SupplierId { get; set; }
+
+
+    public int BranchId { get; set; }
+
+    public DateTime? ExpectedDeliveryDate { get; set; }
+
+
+    public string? Terms { get; set; }
+
+
+    public string? Notes { get; set; }
+
+
+    public List<UpdatePurchaseOrderItemRequestDto> Items { get; set; } = new();
+}
+
+public class UpdatePurchaseOrderItemRequestDto
+{
+    public int? Id { get; set; } // null for new items, existing ID for updates
+
+
+    public int ProductId { get; set; }
+    
+
+    public decimal QuantityOrdered { get; set; }
+
+
+    public decimal WeightOrdered { get; set; }
+
+
+    public decimal UnitCost { get; set; }
+
+
     public string? Notes { get; set; }
 }
 
 public class ReceivePurchaseOrderRequestDto
 {
-    [Required]
+
     public int PurchaseOrderId { get; set; }
 
-    [MinLength(1)]
+
     public List<ReceivePurchaseOrderItemDto> Items { get; set; } = new();
 }
 
 public class ReceivePurchaseOrderItemDto
 {
-    [Required]
+
     public int PurchaseOrderItemId { get; set; }
 
-    [Range(0, double.MaxValue)]
+
     public decimal QuantityReceived { get; set; }
 
-    [Range(0, double.MaxValue)]
+
     public decimal WeightReceived { get; set; }
 }
 
@@ -108,6 +151,42 @@ public class PurchaseOrderSearchRequestDto
     public DateTime? ToDate { get; set; }
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 50;
+}
+
+public class UpdatePurchaseOrderStatusRequestDto
+{
+
+    public string NewStatus { get; set; } = string.Empty;
+    
+
+    public string? StatusNotes { get; set; }
+}
+
+public class PurchaseOrderStatusTransitionDto
+{
+    public string CurrentStatus { get; set; } = string.Empty;
+    public List<string> AvailableTransitions { get; set; } = new();
+    public string? ValidationMessage { get; set; }
+}
+
+public class ProcessPurchaseOrderPaymentRequestDto
+{
+    public int PurchaseOrderId { get; set; }
+    public decimal PaymentAmount { get; set; }
+    public int PaymentMethodId { get; set; }
+    public string? Notes { get; set; }
+    public string? ReferenceNumber { get; set; }
+    public int? ProcessedByUserId { get; set; }
+}
+
+public class PurchaseOrderPaymentResult
+{
+    public bool IsSuccess { get; set; }
+    public string? ErrorMessage { get; set; }
+    public PurchaseOrderDto? PurchaseOrder { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal OutstandingAmount { get; set; }
+    public string TransactionNumber { get; set; } = string.Empty;
 }
 
 

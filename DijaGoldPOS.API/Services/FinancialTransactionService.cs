@@ -1,8 +1,10 @@
+using DijaGoldPOS.API.IRepositories;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
-
 using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
+using Serilog.Context;
 
 namespace DijaGoldPOS.API.Services;
 
@@ -14,77 +16,139 @@ public class FinancialTransactionService : IFinancialTransactionService
     private readonly IFinancialTransactionRepository _financialTransactionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditService _auditService;
+    private readonly IStructuredLoggingService _structuredLogging;
     private readonly ILogger<FinancialTransactionService> _logger;
 
     public FinancialTransactionService(
         IFinancialTransactionRepository financialTransactionRepository,
         IUnitOfWork unitOfWork,
         IAuditService auditService,
+        IStructuredLoggingService structuredLogging,
         ILogger<FinancialTransactionService> logger)
     {
         _financialTransactionRepository = financialTransactionRepository;
         _unitOfWork = unitOfWork;
         _auditService = auditService;
+        _structuredLogging = structuredLogging;
         _logger = logger;
     }
 
     public async Task<FinancialTransaction> CreateFinancialTransactionAsync(CreateFinancialTransactionRequest request, string userId)
     {
+        using var performanceTimer = _structuredLogging.BeginPerformanceTimer(
+            "CreateFinancialTransaction",
+            new Dictionary<string, object>
+            {
+                ["BranchId"] = request.BranchId,
+                ["TransactionTypeId"] = request.TransactionTypeId,
+                ["TotalAmount"] = request.TotalAmount,
+                ["UserId"] = userId
+            });
+
         try
         {
-            // Validate request
-            if (request.TotalAmount <= 0)
-                throw new ArgumentException("Total amount must be greater than zero");
-
-            if (request.AmountPaid < request.TotalAmount)
-                throw new ArgumentException("Amount paid cannot be less than total amount");
-
-            // Generate transaction number
-            var transactionNumber = await _financialTransactionRepository.GetNextTransactionNumberAsync(request.BranchId);
-
-            // Create financial transaction
-            var financialTransaction = new FinancialTransaction
+            using (LogContext.PushProperty("Operation", "CreateFinancialTransaction"))
+            using (LogContext.PushProperty("BranchId", request.BranchId))
+            using (LogContext.PushProperty("TransactionTypeId", request.TransactionTypeId))
+            using (LogContext.PushProperty("TotalAmount", request.TotalAmount))
+            using (LogContext.PushProperty("UserId", userId))
             {
-                TransactionNumber = transactionNumber,
-                TransactionTypeId = request.TransactionTypeId,
-                BusinessEntityId = request.BusinessEntityId,
-                BusinessEntityTypeId = request.BusinessEntityTypeId,
-                TransactionDate = DateTime.UtcNow,
-                Subtotal = request.Subtotal,
-                TotalTaxAmount = request.TotalTaxAmount,
-                TotalDiscountAmount = request.TotalDiscountAmount,
-                TotalAmount = request.TotalAmount,
-                AmountPaid = request.AmountPaid,
-                ChangeGiven = request.ChangeGiven,
-                PaymentMethodId = request.PaymentMethodId,
-                StatusId = LookupTableConstants.FinancialTransactionStatusCompleted, // Default to completed for current workflow
-                ProcessedByUserId = userId,
-                ApprovedByUserId = request.ApprovedByUserId,
-                Notes = request.Notes,
-                ReceiptPrinted = false,
-                GeneralLedgerPosted = false
-            };
+                // Validate request
+                if (request.TotalAmount <= 0)
+                {
+                    await _structuredLogging.LogSecurityEventAsync(
+                        "INVALID_TRANSACTION_AMOUNT",
+                        $"Attempted to create transaction with invalid amount: {request.TotalAmount}",
+                        new Dictionary<string, object>
+                        {
+                            ["TotalAmount"] = request.TotalAmount,
+                            ["UserId"] = userId,
+                            ["BranchId"] = request.BranchId
+                        });
+                    throw new ArgumentException("Total amount must be greater than zero");
+                }
 
-            // Add to repository
-            await _financialTransactionRepository.AddAsync(financialTransaction);
-            await _unitOfWork.SaveChangesAsync();
+                if (request.AmountPaid < request.TotalAmount)
+                {
+                    await _structuredLogging.LogSecurityEventAsync(
+                        "INSUFFICIENT_PAYMENT",
+                        $"Payment amount {request.AmountPaid} less than total {request.TotalAmount}",
+                        new Dictionary<string, object>
+                        {
+                            ["AmountPaid"] = request.AmountPaid,
+                            ["TotalAmount"] = request.TotalAmount,
+                            ["UserId"] = userId
+                        });
+                    throw new ArgumentException("Amount paid cannot be less than total amount");
+                }
 
-            // Audit log
-            await _auditService.LogActionAsync(
-                userId,
-                "Create",
-                "FinancialTransaction",
-                financialTransaction.Id.ToString(),
-                $"Created financial transaction {transactionNumber}");
+                // Generate transaction number
+                var transactionNumber = await _financialTransactionRepository.GetNextTransactionNumberAsync(request.BranchId);
 
-            _logger.LogInformation("Financial transaction {TransactionNumber} created successfully by user {UserId}", 
-                transactionNumber, userId);
+                // Create financial transaction
+                var financialTransaction = new FinancialTransaction
+                {
+                    TransactionNumber = transactionNumber,
+                    TransactionTypeId = request.TransactionTypeId,
+                    BusinessEntityId = request.BusinessEntityId,
+                    BusinessEntityTypeId = request.BusinessEntityTypeId,
+                    TransactionDate = DateTime.UtcNow,
+                    Subtotal = request.Subtotal,
+                    TotalTaxAmount = request.TotalTaxAmount,
+                    TotalDiscountAmount = request.TotalDiscountAmount,
+                    TotalAmount = request.TotalAmount,
+                    AmountPaid = request.AmountPaid,
+                    ChangeGiven = request.ChangeGiven,
+                    PaymentMethodId = request.PaymentMethodId,
+                    StatusId = LookupTableConstants.FinancialTransactionStatusCompleted,
+                    ProcessedByUserId = userId,
+                    ApprovedByUserId = request.ApprovedByUserId,
+                    Notes = request.Notes,
+                    ReceiptPrinted = false,
+                    GeneralLedgerPosted = false
+                };
 
-            return financialTransaction;
+                // Add to repository
+                await _financialTransactionRepository.AddAsync(financialTransaction);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Structured audit log with full context
+                await _structuredLogging.LogBusinessOperationAsync(
+                    "CREATE_FINANCIAL_TRANSACTION",
+                    "FinancialTransaction",
+                    financialTransaction.Id.ToString(),
+                    new
+                    {
+                        TransactionNumber = transactionNumber,
+                        TransactionTypeId = request.TransactionTypeId,
+                        BusinessEntityId = request.BusinessEntityId,
+                        TotalAmount = request.TotalAmount,
+                        AmountPaid = request.AmountPaid,
+                        BranchId = request.BranchId
+                    },
+                    $"Created financial transaction {transactionNumber} with amount {request.TotalAmount:C}");
+
+                _logger.LogInformation("Financial transaction {TransactionNumber} created successfully by user {UserId} with amount {TotalAmount}",
+                    transactionNumber, userId, request.TotalAmount);
+
+                return financialTransaction;
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating financial transaction");
+            await _structuredLogging.LogErrorAsync(
+                ex,
+                "CreateFinancialTransaction",
+                "FinancialTransaction",
+                null,
+                new Dictionary<string, object>
+                {
+                    ["BranchId"] = request.BranchId,
+                    ["TransactionTypeId"] = request.TransactionTypeId,
+                    ["TotalAmount"] = request.TotalAmount,
+                    ["UserId"] = userId
+                });
+
             throw;
         }
     }
@@ -194,45 +258,107 @@ public class FinancialTransactionService : IFinancialTransactionService
 
     public async Task<FinancialTransactionResult> VoidFinancialTransactionAsync(int transactionId, string reason, string userId)
     {
+        using var performanceTimer = _structuredLogging.BeginPerformanceTimer(
+            "VoidFinancialTransaction",
+            new Dictionary<string, object>
+            {
+                ["TransactionId"] = transactionId,
+                ["UserId"] = userId,
+                ["Reason"] = reason
+            });
+
         try
         {
-            var transaction = await _financialTransactionRepository.GetByIdAsync(transactionId);
-            if (transaction == null)
-                return new FinancialTransactionResult { IsSuccess = false, ErrorMessage = "Transaction not found" };
+            using (LogContext.PushProperty("Operation", "VoidFinancialTransaction"))
+            using (LogContext.PushProperty("TransactionId", transactionId))
+            using (LogContext.PushProperty("UserId", userId))
+            using (LogContext.PushProperty("Reason", reason))
+            {
+                var transaction = await _financialTransactionRepository.GetByIdAsync(transactionId);
+                if (transaction == null)
+                {
+                    await _structuredLogging.LogSecurityEventAsync(
+                        "VOID_TRANSACTION_NOT_FOUND",
+                        $"Attempted to void non-existent transaction {transactionId}",
+                        new Dictionary<string, object>
+                        {
+                            ["TransactionId"] = transactionId,
+                            ["UserId"] = userId
+                        });
 
-            // Validate if transaction can be voided
-            var (canVoid, errorMessage) = await CanVoidFinancialTransactionAsync(transactionId);
-            if (!canVoid)
-                return new FinancialTransactionResult { IsSuccess = false, ErrorMessage = errorMessage };
+                    return new FinancialTransactionResult { IsSuccess = false, ErrorMessage = "Transaction not found" };
+                }
 
-            // Store old values for audit
-            var oldValues = new { transaction.StatusId, transaction.Notes };
+                // Validate if transaction can be voided
+                var (canVoid, errorMessage) = await CanVoidFinancialTransactionAsync(transactionId);
+                if (!canVoid)
+                {
+                    await _structuredLogging.LogSecurityEventAsync(
+                        "VOID_TRANSACTION_VALIDATION_FAILED",
+                        $"Void validation failed for transaction {transactionId}: {errorMessage}",
+                        new Dictionary<string, object>
+                        {
+                            ["TransactionId"] = transactionId,
+                            ["TransactionNumber"] = transaction.TransactionNumber,
+                            ["UserId"] = userId,
+                            ["ErrorMessage"] = errorMessage ?? "Unknown error"
+                        });
 
-            // Update transaction status
-            transaction.StatusId = LookupTableConstants.FinancialTransactionStatusCancelled;
-            transaction.Notes = string.IsNullOrEmpty(transaction.Notes) ? reason : $"{transaction.Notes}; Voided: {reason}";
-            transaction.ModifiedAt = DateTime.UtcNow;
-            transaction.ModifiedBy = userId;
+                    return new FinancialTransactionResult { IsSuccess = false, ErrorMessage = errorMessage };
+                }
 
-            // Save changes
-            await _unitOfWork.SaveChangesAsync();
+                // Store old values for audit
+                var oldValues = new
+                {
+                    transaction.StatusId,
+                    transaction.Notes,
+                    transaction.TotalAmount
+                };
 
-            // Audit log
-            await _auditService.LogActionAsync(
-                userId,
-                "Void",
-                "FinancialTransaction",
-                transactionId.ToString(),
-                $"Voided financial transaction {transaction.TransactionNumber}. Reason: {reason}");
+                // Update transaction status
+                transaction.StatusId = LookupTableConstants.FinancialTransactionStatusCancelled;
+                transaction.Notes = string.IsNullOrEmpty(transaction.Notes) ? reason : $"{transaction.Notes}; Voided: {reason}";
+                transaction.ModifiedAt = DateTime.UtcNow;
+                transaction.ModifiedBy = userId;
 
-            _logger.LogInformation("Financial transaction {TransactionNumber} voided successfully by user {UserId}", 
-                transaction.TransactionNumber, userId);
+                // Save changes
+                await _unitOfWork.SaveChangesAsync();
 
-            return new FinancialTransactionResult { IsSuccess = true, Transaction = transaction };
+                // Structured audit log with full context
+                await _structuredLogging.LogDataModificationAsync(
+                    "VOID_FINANCIAL_TRANSACTION",
+                    "FinancialTransaction",
+                    transactionId.ToString(),
+                    oldValues,
+                    new
+                    {
+                        transaction.StatusId,
+                        transaction.Notes,
+                        transaction.TotalAmount,
+                        VoidReason = reason
+                    },
+                    $"Voided financial transaction {transaction.TransactionNumber} for amount {transaction.TotalAmount:C}. Reason: {reason}");
+
+                _logger.LogWarning("Financial transaction {TransactionNumber} voided by user {UserId} for amount {TotalAmount}. Reason: {Reason}",
+                    transaction.TransactionNumber, userId, transaction.TotalAmount, reason);
+
+                return new FinancialTransactionResult { IsSuccess = true, Transaction = transaction };
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error voiding financial transaction {TransactionId}", transactionId);
+            await _structuredLogging.LogErrorAsync(
+                ex,
+                "VoidFinancialTransaction",
+                "FinancialTransaction",
+                transactionId.ToString(),
+                new Dictionary<string, object>
+                {
+                    ["TransactionId"] = transactionId,
+                    ["UserId"] = userId,
+                    ["Reason"] = reason
+                });
+
             return new FinancialTransactionResult { IsSuccess = false, ErrorMessage = "An error occurred while voiding the transaction" };
         }
     }

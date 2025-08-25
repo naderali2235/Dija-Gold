@@ -21,7 +21,7 @@ public class LookupProfile : Profile
         CreateMap<OrderTypeLookup, OrderTypeLookupDto>();
         CreateMap<OrderStatusLookup, OrderStatusLookupDto>();
         CreateMap<SubCategoryLookup, SubCategoryLookupDto>();
-        CreateMap<TransactionStatusLookup, OrderStatusLookupDto>(); // Assuming this maps to OrderStatusLookupDto
-        CreateMap<TransactionTypeLookup, OrderTypeLookupDto>(); // Assuming this maps to OrderTypeLookupDto
+        CreateMap<TransactionStatusLookup, TransactionStatusLookupDto>();
+        CreateMap<TransactionTypeLookup, TransactionTypeLookupDto>();
     }
 }

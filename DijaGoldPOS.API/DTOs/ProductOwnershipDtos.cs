@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -37,32 +37,32 @@ public class ProductOwnershipDto
 /// </summary>
 public class ProductOwnershipRequest
 {
-    [Required]
+
     public int ProductId { get; set; }
     
-    [Required]
+
     public int BranchId { get; set; }
     
     public int? SupplierId { get; set; }
     public int? PurchaseOrderId { get; set; }
     public int? CustomerPurchaseId { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal TotalQuantity { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal TotalWeight { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal OwnedQuantity { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal OwnedWeight { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal TotalCost { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal AmountPaid { get; set; }
 }
 
@@ -93,10 +93,10 @@ public class OwnershipMovementDto
 /// </summary>
 public class CreateOwnershipMovementRequest
 {
-    [Required]
+
     public int ProductOwnershipId { get; set; }
     
-    [Required]
+
     public string MovementType { get; set; } = string.Empty;
     
     public decimal QuantityChange { get; set; }
@@ -143,19 +143,19 @@ public class OwnershipAlertDto
 /// </summary>
 public class ConvertRawGoldRequest
 {
-    [Required]
+
     public int RawGoldProductId { get; set; }
     
-    [Required]
+
     public int BranchId { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal WeightToConvert { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal QuantityToConvert { get; set; }
     
-    [MinLength(1)]
+
     public List<NewProductFromRawGold> NewProducts { get; set; } = new();
 }
 
@@ -164,13 +164,13 @@ public class ConvertRawGoldRequest
 /// </summary>
 public class NewProductFromRawGold
 {
-    [Required]
+
     public int ProductId { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal Quantity { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal Weight { get; set; }
 }
 

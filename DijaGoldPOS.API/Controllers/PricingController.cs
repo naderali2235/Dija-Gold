@@ -103,11 +103,6 @@ public class PricingController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var goldRateUpdates = request.GoldRates.Select(gr => new GoldRateUpdate
@@ -198,11 +193,6 @@ public class PricingController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var makingChargesUpdate = new MakingChargesUpdate
@@ -285,11 +275,6 @@ public class PricingController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var taxConfigurationUpdate = new TaxConfigurationUpdate
@@ -335,11 +320,6 @@ public class PricingController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // This would need to get the product from the database
             // For now, we'll assume it's passed in the request or retrieved separately
             
@@ -401,11 +381,6 @@ public class PricingController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // Get the product from database
             var product = await _context.Products
                 .Include(p => p.CategoryType)

@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models.LookupTables;
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models;
@@ -12,20 +12,20 @@ public class GoldRate : BaseEntity
     /// <summary>
     /// Karat type for this rate
     /// </summary>
-    [Required]
+
     public int KaratTypeId { get; set; }
     
     /// <summary>
     /// Rate per gram in Egyptian Pounds
     /// </summary>
-    [Required]
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal RatePerGram { get; set; }
     
     /// <summary>
     /// Effective start date and time for this rate
     /// </summary>
-    [Required]
+
     public DateTime EffectiveFrom { get; set; }
     
     /// <summary>

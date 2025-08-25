@@ -1,4 +1,5 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -114,5 +115,54 @@ public class ProductOwnershipRepository : Repository<ProductOwnership>, IProduct
             .Include(po => po.CustomerPurchase)
             .Include(po => po.OwnershipMovements.OrderByDescending(om => om.MovementDate))
             .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Get ownership records with pagination and filtering
+    /// </summary>
+    public async Task<(List<ProductOwnership> Items, int TotalCount)> GetWithPaginationAsync(
+        int branchId,
+        string? searchTerm = null,
+        int? supplierId = null,
+        int pageNumber = 1,
+        int pageSize = 10)
+    {
+        var query = _context.ProductOwnerships
+            .Where(po => po.BranchId == branchId && po.IsActive)
+            .Include(po => po.Product)
+            .Include(po => po.Supplier)
+            .Include(po => po.Branch)
+            .Include(po => po.PurchaseOrder)
+            .Include(po => po.CustomerPurchase)
+            .AsQueryable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            query = query.Where(po => 
+                po.Product.Name.Contains(searchTerm) ||
+                po.Product.ProductCode.Contains(searchTerm) ||
+                (po.Supplier != null && po.Supplier.CompanyName.Contains(searchTerm)) ||
+                (po.PurchaseOrder != null && po.PurchaseOrder.PurchaseOrderNumber.Contains(searchTerm))
+            );
+        }
+
+        // Apply supplier filter
+        if (supplierId.HasValue)
+        {
+            query = query.Where(po => po.SupplierId == supplierId.Value);
+        }
+
+        // Get total count
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination
+        var items = await query
+            .OrderByDescending(po => po.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
     }
 }

@@ -49,11 +49,6 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             // Convert DTO to service request
@@ -334,11 +329,6 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             // Convert DTO to service request
@@ -384,11 +374,6 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             // Convert DTO to service request

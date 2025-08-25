@@ -1,0 +1,47 @@
+# DijaGold POS API Environment Variables
+# Copy this file to .env and update with your actual values
+
+# Database Configuration
+DB_SERVER=localhost
+DB_NAME=DijaGoldPOS
+DB_USER=your_db_user
+DB_PASSWORD=your_secure_db_password
+
+# JWT Configuration
+JWT_SECRET_KEY=YourVeryLongAndSecureSecretKeyForJWTTokenGeneration2024!@#$%^&*()
+JWT_ISSUER=DijaGoldPOS
+JWT_AUDIENCE=DijaGoldPOSUsers
+
+# Company Information
+COMPANY_NAME=Dija Gold
+COMPANY_ADDRESS=123 Gold Street, Cairo, Egypt
+COMPANY_PHONE=+20 2 1234567
+TAX_REGISTRATION_NUMBER=123-456-789
+COMMERCIAL_REGISTRATION_NUMBER=987654321
+
+# Receipt Configuration
+RECEIPT_HEADER_LINE1=DIJA GOLD
+RECEIPT_HEADER_LINE2=Premium Gold Retailer
+RECEIPT_HEADER_LINE3=123 Gold Street, Cairo, Egypt
+RECEIPT_HEADER_LINE4=Tel: +20 2 1234567
+RECEIPT_FOOTER_LINE1=Thank you for choosing Dija Gold
+RECEIPT_FOOTER_LINE2=Return Policy: 7 days with receipt
+RECEIPT_FOOTER_LINE3=Visit us at www.dijagold.com
+RECEIPT_PRINTER_NAME=Default
+
+# Label Printer Configuration
+LABEL_PRINTER_HOST=192.168.1.100
+LABEL_PRINTER_NAME=LabelPrinter
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+
+# Host Configuration
+ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+
+# Note: Seq API key should be configured directly in appsettings.json
+# Get API key from your Seq server at: http://your-seq-server/#/settings/apikeys
+
+# ASP.NET Core Configuration
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=https://*:5001;http://*:5000

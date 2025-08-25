@@ -45,11 +45,6 @@ public class FinancialTransactionsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             // Convert DTO to service request
@@ -240,11 +235,6 @@ public class FinancialTransactionsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var result = await _financialTransactionService.VoidFinancialTransactionAsync(id, request.Reason, userId);

@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,13 +12,13 @@ public class CustomerPurchaseItem : BaseEntity
     /// <summary>
     /// Customer purchase this item belongs to
     /// </summary>
-    [Required]
+
     public int CustomerPurchaseId { get; set; }
     
     /// <summary>
     /// Product being purchased from customer
     /// </summary>
-    [Required]
+
     public int ProductId { get; set; }
     
     /// <summary>
@@ -48,7 +48,7 @@ public class CustomerPurchaseItem : BaseEntity
     /// <summary>
     /// Notes about this item
     /// </summary>
-    [MaxLength(500)]
+
     public string? Notes { get; set; }
     
     /// <summary>

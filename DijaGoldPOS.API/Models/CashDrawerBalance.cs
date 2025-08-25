@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.Models;
 
@@ -20,27 +20,27 @@ public class CashDrawerBalance : BaseEntity
     /// <summary>
     /// Date of the balance record
     /// </summary>
-    [Required]
+
     public DateTime BalanceDate { get; set; }
     
     /// <summary>
     /// Opening balance for the day
     /// </summary>
-    [Required]
-    [Range(0, double.MaxValue, ErrorMessage = "Opening balance must be non-negative")]
+
+
     public decimal OpeningBalance { get; set; }
     
     /// <summary>
     /// Expected closing balance based on transactions
     /// </summary>
-    [Required]
-    [Range(0, double.MaxValue, ErrorMessage = "Expected closing balance must be non-negative")]
+
+
     public decimal ExpectedClosingBalance { get; set; }
     
     /// <summary>
     /// Actual closing balance counted by staff
     /// </summary>
-    [Range(0, double.MaxValue, ErrorMessage = "Actual closing balance must be non-negative")]
+
     public decimal? ActualClosingBalance { get; set; }
     
     /// <summary>
@@ -71,7 +71,7 @@ public class CashDrawerBalance : BaseEntity
     /// <summary>
     /// Notes about the day's cash handling
     /// </summary>
-    [MaxLength(500)]
+
     public string? Notes { get; set; }
     
     /// <summary>
@@ -92,7 +92,7 @@ public class CashDrawerBalance : BaseEntity
     /// <summary>
     /// Settlement notes/reason
     /// </summary>
-    [MaxLength(500)]
+
     public string? SettlementNotes { get; set; }
 }
 

@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -39,48 +39,48 @@ public class ProductDto
 /// </summary>
 public class CreateProductRequestDto
 {
-    [Required(ErrorMessage = "Product code is required")]
-    [StringLength(50, ErrorMessage = "Product code cannot exceed 50 characters")]
+
+
     public string ProductCode { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Product name is required")]
-    [StringLength(200, ErrorMessage = "Product name cannot exceed 200 characters")]
+
+
     public string Name { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Category type is required")]
+
     public int CategoryTypeId { get; set; }
 
-    [Required(ErrorMessage = "Karat type is required")]
+
     public int KaratTypeId { get; set; }
 
-    [Required(ErrorMessage = "Weight is required")]
-    [Range(0.001, 999999.999, ErrorMessage = "Weight must be between 0.001 and 999999.999 grams")]
+
+
     public decimal Weight { get; set; }
 
-    [StringLength(100, ErrorMessage = "Brand cannot exceed 100 characters")]
+
     public string? Brand { get; set; }
 
-    [StringLength(100, ErrorMessage = "Design/Style cannot exceed 100 characters")]
+
     public string? DesignStyle { get; set; }
 
     public int? SubCategoryId { get; set; }
 
-    [StringLength(50, ErrorMessage = "Sub-category cannot exceed 50 characters")]
+
     public string? SubCategory { get; set; } // Legacy field for backward compatibility
 
-    [StringLength(50, ErrorMessage = "Shape cannot exceed 50 characters")]
+
     public string? Shape { get; set; }
 
-    [StringLength(100, ErrorMessage = "Purity certificate number cannot exceed 100 characters")]
+
     public string? PurityCertificateNumber { get; set; }
 
-    [StringLength(50, ErrorMessage = "Country of origin cannot exceed 50 characters")]
+
     public string? CountryOfOrigin { get; set; }
 
-    [Range(1900, 2100, ErrorMessage = "Year of minting must be between 1900 and 2100")]
+
     public int? YearOfMinting { get; set; }
 
-    [Range(0, 999999.99, ErrorMessage = "Face value must be between 0 and 999999.99")]
+
     public decimal? FaceValue { get; set; }
 
     public bool? HasNumismaticValue { get; set; }
@@ -89,7 +89,7 @@ public class CreateProductRequestDto
 
     public int? ProductMakingChargesTypeId { get; set; }
     
-    [Range(0, 999999.9999, ErrorMessage = "Product making charges value must be between 0 and 999999.9999")]
+
     public decimal? ProductMakingChargesValue { get; set; }
     
     public bool UseProductMakingCharges { get; set; } = false;
@@ -102,7 +102,7 @@ public class CreateProductRequestDto
 /// </summary>
 public class UpdateProductRequestDto : CreateProductRequestDto
 {
-    [Required(ErrorMessage = "Product ID is required")]
+
     public int Id { get; set; }
 }
 
@@ -174,6 +174,6 @@ public class ProductPricingDto
 /// </summary>
 public class DecodeQrRequestDto
 {
-    [Required]
+
     public string Payload { get; set; } = string.Empty;
 }

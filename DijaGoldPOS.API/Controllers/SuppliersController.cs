@@ -1,9 +1,11 @@
 using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +23,7 @@ public class SuppliersController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ISupplierRepository _supplierRepository;
+    private readonly ISupplierService _supplierService;
     private readonly IAuditService _auditService;
     private readonly ILogger<SuppliersController> _logger;
     private readonly IMapper _mapper;
@@ -28,12 +31,14 @@ public class SuppliersController : ControllerBase
     public SuppliersController(
         ApplicationDbContext context,
         ISupplierRepository supplierRepository,
+        ISupplierService supplierService,
         IAuditService auditService,
         ILogger<SuppliersController> logger,
         IMapper mapper)
     {
         _context = context;
         _supplierRepository = supplierRepository;
+        _supplierService = supplierService;
         _auditService = auditService;
         _logger = logger;
         _mapper = mapper;
@@ -91,30 +96,11 @@ public class SuppliersController : ControllerBase
             // Get total count
             var totalCount = await query.CountAsync();
 
-            // Apply pagination
+            // Apply pagination and mapping
             var suppliers = await query
                 .Skip((searchRequest.PageNumber - 1) * searchRequest.PageSize)
                 .Take(searchRequest.PageSize)
-                .Select(s => new SupplierDto
-                {
-                    Id = s.Id,
-                    CompanyName = s.CompanyName,
-                    ContactPersonName = s.ContactPersonName,
-                    Phone = s.Phone,
-                    Email = s.Email,
-                    Address = s.Address,
-                    TaxRegistrationNumber = s.TaxRegistrationNumber,
-                    CommercialRegistrationNumber = s.CommercialRegistrationNumber,
-                    CreditLimit = s.CreditLimit,
-                    CurrentBalance = s.CurrentBalance,
-                    PaymentTermsDays = s.PaymentTermsDays,
-                    CreditLimitEnforced = s.CreditLimitEnforced,
-                    PaymentTerms = s.PaymentTerms,
-                    Notes = s.Notes,
-                    LastTransactionDate = s.LastTransactionDate,
-                    CreatedAt = s.CreatedAt,
-                    IsActive = s.IsActive
-                })
+                .ProjectTo<SupplierDto>(_mapper.ConfigurationProvider)
                 .ToListAsync();
 
             var result = new PagedResult<SupplierDto>
@@ -148,34 +134,15 @@ public class SuppliersController : ControllerBase
     {
         try
         {
-            var supplier = await _context.Suppliers
-                .FirstOrDefaultAsync(s => s.Id == id);
+            var supplierDto = await _context.Suppliers
+                .Where(s => s.Id == id)
+                .ProjectTo<SupplierDto>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-            if (supplier == null)
+            if (supplierDto == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Supplier not found"));
             }
-
-            var supplierDto = new SupplierDto
-            {
-                Id = supplier.Id,
-                CompanyName = supplier.CompanyName,
-                ContactPersonName = supplier.ContactPersonName,
-                Phone = supplier.Phone,
-                Email = supplier.Email,
-                Address = supplier.Address,
-                TaxRegistrationNumber = supplier.TaxRegistrationNumber,
-                CommercialRegistrationNumber = supplier.CommercialRegistrationNumber,
-                CreditLimit = supplier.CreditLimit,
-                CurrentBalance = supplier.CurrentBalance,
-                PaymentTermsDays = supplier.PaymentTermsDays,
-                CreditLimitEnforced = supplier.CreditLimitEnforced,
-                PaymentTerms = supplier.PaymentTerms,
-                Notes = supplier.Notes,
-                LastTransactionDate = supplier.LastTransactionDate,
-                CreatedAt = supplier.CreatedAt,
-                IsActive = supplier.IsActive
-            };
 
             return Ok(ApiResponse<SupplierDto>.SuccessResponse(supplierDto));
         }
@@ -199,11 +166,6 @@ public class SuppliersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // Check for duplicate tax registration number
             if (!string.IsNullOrWhiteSpace(request.TaxRegistrationNumber))
             {
@@ -303,11 +265,6 @@ public class SuppliersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var supplier = await _context.Suppliers.FindAsync(id);
             if (supplier == null)
             {
@@ -468,7 +425,7 @@ public class SuppliersController : ControllerBase
                     ProductId = p.Id,
                     ProductCode = p.ProductCode,
                     ProductName = p.Name,
-                    CategoryType = p.CategoryType.ToString(),
+                    CategoryType = p.CategoryType != null ? p.CategoryType.Name : "Unknown",
                     Weight = p.Weight,
                     CreatedAt = p.CreatedAt,
                     IsActive = p.IsActive
@@ -556,11 +513,6 @@ public class SuppliersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var supplier = await _context.Suppliers.FindAsync(id);
             if (supplier == null)
             {
@@ -697,6 +649,95 @@ public class SuppliersController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving transactions for supplier {SupplierId}", id);
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving supplier transactions"));
+        }
+    }
+
+    /// <summary>
+    /// Get suppliers with credit alerts
+    /// </summary>
+    /// <param name="warningPercentage">Warning threshold percentage (default: 80%)</param>
+    /// <returns>List of suppliers with credit alerts</returns>
+    [HttpGet("credit-alerts")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<List<SupplierCreditAlertDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSupplierCreditAlerts([FromQuery] decimal warningPercentage = 0.8m)
+    {
+        try
+        {
+            var alerts = await _supplierService.GetAllSupplierCreditAlertsAsync(warningPercentage);
+            return Ok(ApiResponse<List<SupplierCreditAlertDto>>.SuccessResponse(alerts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving supplier credit alerts");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving supplier credit alerts"));
+        }
+    }
+
+    /// <summary>
+    /// Get suppliers near credit limit
+    /// </summary>
+    /// <param name="warningPercentage">Warning threshold percentage (default: 80%)</param>
+    /// <returns>List of suppliers near credit limit</returns>
+    [HttpGet("near-credit-limit")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<List<SupplierCreditAlertDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSuppliersNearCreditLimit([FromQuery] decimal warningPercentage = 0.8m)
+    {
+        try
+        {
+            var alerts = await _supplierService.GetSuppliersNearCreditLimitAsync(warningPercentage);
+            return Ok(ApiResponse<List<SupplierCreditAlertDto>>.SuccessResponse(alerts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving suppliers near credit limit");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving suppliers near credit limit"));
+        }
+    }
+
+    /// <summary>
+    /// Get suppliers over credit limit
+    /// </summary>
+    /// <returns>List of suppliers over credit limit</returns>
+    [HttpGet("over-credit-limit")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<List<SupplierCreditAlertDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSuppliersOverCreditLimit()
+    {
+        try
+        {
+            var alerts = await _supplierService.GetSuppliersOverCreditLimitAsync();
+            return Ok(ApiResponse<List<SupplierCreditAlertDto>>.SuccessResponse(alerts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving suppliers over credit limit");
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving suppliers over credit limit"));
+        }
+    }
+
+    /// <summary>
+    /// Validate supplier credit before purchase
+    /// </summary>
+    /// <param name="supplierId">Supplier ID</param>
+    /// <param name="amount">Purchase amount</param>
+    /// <returns>Credit validation result</returns>
+    [HttpGet("{supplierId}/validate-credit")]
+    [Authorize(Policy = "ManagerOnly")]
+    [ProducesResponseType(typeof(ApiResponse<SupplierCreditValidationResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ValidateSupplierCredit(int supplierId, [FromQuery] decimal amount)
+    {
+        try
+        {
+            var result = await _supplierService.ValidateSupplierCreditAsync(supplierId, amount);
+            return Ok(ApiResponse<SupplierCreditValidationResult>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating supplier credit. SupplierId: {SupplierId}", supplierId);
+            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while validating supplier credit"));
         }
     }
 }

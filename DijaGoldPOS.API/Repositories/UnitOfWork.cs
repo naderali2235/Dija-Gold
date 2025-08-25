@@ -1,4 +1,6 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.IRepositories;
+using DijaGoldPOS.API.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -16,7 +18,8 @@ public class UnitOfWork : IUnitOfWork
     private IProductRepository? _products;
     private IInventoryRepository? _inventory;
     private IInventoryMovementRepository? _inventoryMovements;
-    // Legacy Transactions repository removed
+    private IProductOwnershipRepository? _productOwnership;
+    private IFinancialTransactionRepository? _financialTransactions;
     private IGoldRateRepository? _goldRates;
     private ICustomerRepository? _customers;
     private IBranchRepository? _branches;
@@ -38,7 +41,11 @@ public class UnitOfWork : IUnitOfWork
     public IInventoryMovementRepository InventoryMovements =>
         _inventoryMovements ??= new InventoryMovementRepository(_context);
 
-    // Legacy Transactions repository removed - using FinancialTransactions instead
+    public IProductOwnershipRepository ProductOwnership =>
+        _productOwnership ??= new ProductOwnershipRepository(_context);
+
+    public IFinancialTransactionRepository FinancialTransactions =>
+        _financialTransactions ??= new FinancialTransactionRepository(_context);
 
     public IGoldRateRepository GoldRates =>
         _goldRates ??= new GoldRateRepository(_context);
@@ -54,6 +61,17 @@ public class UnitOfWork : IUnitOfWork
 
     public IPurchaseOrderRepository PurchaseOrders =>
         _purchaseOrders ??= new PurchaseOrderRepository(_context);
+
+    /// <summary>
+    /// Get a generic repository for the specified entity type
+    /// </summary>
+    /// <typeparam name="T">Entity type</typeparam>
+    /// <returns>Repository instance for the entity type</returns>
+    public IRepository<T> Repository<T>() where T : BaseEntity
+    {
+        ThrowIfDisposed();
+        return new Repository<T>(_context);
+    }
 
     /// <summary>
     /// Check if the unit of work has been disposed

@@ -1,7 +1,7 @@
-using System.ComponentModel.DataAnnotations;
+
+using DijaGoldPOS.API.Models.LookupTables;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-using DijaGoldPOS.API.Models.LookupTables;
 
 namespace DijaGoldPOS.API.Models;
 
@@ -13,26 +13,26 @@ public class FinancialTransaction : BaseEntity
     /// <summary>
     /// Transaction number (sequential, unique per branch)
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string TransactionNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Transaction date and time
     /// </summary>
-    [Required]
+
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Branch where transaction occurred
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
     /// Type of financial transaction
     /// </summary>
-    [Required]
+
     public int TransactionTypeId { get; set; }
     
     /// <summary>
@@ -43,20 +43,19 @@ public class FinancialTransaction : BaseEntity
     /// <summary>
     /// Type of business entity (Order, RepairJob, etc.)
     /// </summary>
-    [Required]
+
     public int BusinessEntityTypeId { get; set; }
     
     /// <summary>
     /// User who processed the transaction
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+    [ForeignKey("ProcessedByUser")]
     public string ProcessedByUserId { get; set; } = string.Empty;
     
     /// <summary>
     /// User who approved the transaction (if required)
     /// </summary>
-    [MaxLength(450)]
+    [ForeignKey("ApprovedByUser")]
     public string? ApprovedByUserId { get; set; }
     
     /// <summary>
@@ -98,13 +97,13 @@ public class FinancialTransaction : BaseEntity
     /// <summary>
     /// Payment method used
     /// </summary>
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
     /// <summary>
     /// Transaction status
     /// </summary>
-    [Required]
+
     public int StatusId { get; set; }
     
     /// <summary>
@@ -115,13 +114,13 @@ public class FinancialTransaction : BaseEntity
     /// <summary>
     /// Reason for refund/reversal
     /// </summary>
-    [MaxLength(500)]
+
     public string? ReversalReason { get; set; }
     
     /// <summary>
     /// Additional notes for the transaction
     /// </summary>
-    [MaxLength(2000)]
+
     public string? Notes { get; set; }
     
     /// <summary>

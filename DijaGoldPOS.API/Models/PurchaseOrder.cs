@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,26 +12,26 @@ public class PurchaseOrder : BaseEntity
     /// <summary>
     /// Purchase order number
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string PurchaseOrderNumber { get; set; } = string.Empty;
     
     /// <summary>
     /// Supplier for this purchase order
     /// </summary>
-    [Required]
+
     public int SupplierId { get; set; }
     
     /// <summary>
     /// Branch requesting the purchase
     /// </summary>
-    [Required]
+
     public int BranchId { get; set; }
     
     /// <summary>
     /// Purchase order date
     /// </summary>
-    [Required]
+
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
@@ -65,28 +65,32 @@ public class PurchaseOrder : BaseEntity
     /// <summary>
     /// Order status
     /// </summary>
-    [Required]
-    [MaxLength(20)]
+
+
     public string Status { get; set; } = "Pending"; // Pending, Received, Cancelled
     
     /// <summary>
     /// Payment status
     /// </summary>
-    [Required]
-    [MaxLength(20)]
+
+
     public string PaymentStatus { get; set; } = "Unpaid"; // Unpaid, Partial, Paid
     
     /// <summary>
     /// Special terms and conditions
     /// </summary>
-    [MaxLength(1000)]
+
     public string? Terms { get; set; }
     
     /// <summary>
     /// Notes about the purchase order
     /// </summary>
-    [MaxLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Status ID for the purchase order
+    /// </summary>
+    public int? StatusId { get; set; }
     
     /// <summary>
     /// Navigation property to supplier
@@ -105,4 +109,10 @@ public class PurchaseOrder : BaseEntity
     /// </summary>
     [JsonIgnore]
     public virtual ICollection<PurchaseOrderItem> PurchaseOrderItems { get; set; } = new List<PurchaseOrderItem>();
+
+    /// <summary>
+    /// Navigation property to product ownerships related to this purchase order
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<ProductOwnership> ProductOwnerships { get; set; } = new List<ProductOwnership>();
 }

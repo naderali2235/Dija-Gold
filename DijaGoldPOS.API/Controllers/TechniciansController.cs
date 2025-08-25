@@ -36,11 +36,6 @@ public class TechniciansController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage, technician) = await _technicianService.CreateTechnicianAsync(request, userId);
@@ -106,11 +101,6 @@ public class TechniciansController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _technicianService.UpdateTechnicianAsync(id, request, userId);

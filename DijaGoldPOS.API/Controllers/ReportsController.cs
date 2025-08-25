@@ -355,95 +355,7 @@ public class ReportsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Export report to Excel
-    /// </summary>
-    /// <param name="request">Export request containing report type, report name, and JSON report data</param>
-    /// <returns>Excel file</returns>
-    [HttpPost("export/excel")]
-    [Authorize(Policy = "CashierOrManager")]
-    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ExportToExcel([FromBody] ExportReportRequestDto request)
-    {
-        try
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
 
-            var reportData = System.Text.Json.JsonSerializer.Deserialize<object>(request.ReportDataJson);
-            if (reportData == null)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid report data"));
-            }
-
-            var excelBytes = await _reportService.ExportToExcelAsync(reportData, request.ReportName);
-
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
-            await _auditService.LogAsync(
-                userId,
-                "EXPORT_REPORT",
-                "Report",
-                request.ReportType,
-                $"Exported {request.ReportName} to Excel"
-            );
-
-            var fileName = $"{request.ReportName}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
-            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error exporting report to Excel");
-            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while exporting the report"));
-        }
-    }
-
-    /// <summary>
-    /// Export report to PDF
-    /// </summary>
-    /// <param name="request">Export request containing report type, report name, and JSON report data</param>
-    /// <returns>PDF file</returns>
-    [HttpPost("export/pdf")]
-    [Authorize(Policy = "CashierOrManager")]
-    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ExportToPdf([FromBody] ExportReportRequestDto request)
-    {
-        try
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
-            var reportData = System.Text.Json.JsonSerializer.Deserialize<object>(request.ReportDataJson);
-            if (reportData == null)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid report data"));
-            }
-
-            var pdfBytes = await _reportService.ExportToPdfAsync(reportData, request.ReportName);
-
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
-            await _auditService.LogAsync(
-                userId,
-                "EXPORT_REPORT",
-                "Report",
-                request.ReportType,
-                $"Exported {request.ReportName} to PDF"
-            );
-
-            var fileName = $"{request.ReportName}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
-            return File(pdfBytes, "application/pdf", fileName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error exporting report to PDF");
-            return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while exporting the report"));
-        }
-    }
 
     /// <summary>
     /// Get available report types
@@ -477,16 +389,6 @@ public class ReportsController : ControllerBase
             return StatusCode(500, ApiResponse.ErrorResponse("An error occurred while retrieving report types"));
         }
     }
-}
-
-/// <summary>
-/// Export report request DTO
-/// </summary>
-public class ExportReportRequestDto
-{
-    public string ReportType { get; set; } = string.Empty;
-    public string ReportName { get; set; } = string.Empty;
-    public string ReportDataJson { get; set; } = string.Empty;
 }
 
 /// <summary>

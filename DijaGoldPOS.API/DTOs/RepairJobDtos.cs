@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -52,10 +52,10 @@ public class RepairJobDto
 /// </summary>
 public class CreateRepairJobRequestDto
 {
-    [Required(ErrorMessage = "Financial Transaction ID is required")]
+
     public int FinancialTransactionId { get; set; }
 
-    [Required(ErrorMessage = "Priority is required")]
+
     public int PriorityId { get; set; } = 2; // Default to Medium
 
     public int? AssignedTechnicianId { get; set; }
@@ -67,7 +67,7 @@ public class CreateRepairJobRequestDto
 /// </summary>
 public class UpdateRepairJobStatusRequestDto
 {
-    [Required(ErrorMessage = "Status is required")]
+
     public int StatusId { get; set; }
 
     public string? TechnicianNotes { get; set; }
@@ -85,7 +85,7 @@ public class UpdateRepairJobStatusRequestDto
 /// </summary>
 public class AssignTechnicianRequestDto
 {
-    [Required(ErrorMessage = "Technician ID is required")]
+
     public int TechnicianId { get; set; }
 
     public string? TechnicianNotes { get; set; }
@@ -96,8 +96,7 @@ public class AssignTechnicianRequestDto
 /// </summary>
 public class CompleteRepairRequestDto
 {
-    [Required(ErrorMessage = "Actual cost is required")]
-    [Range(0.01, double.MaxValue, ErrorMessage = "Actual cost must be greater than 0")]
+
     public decimal ActualCost { get; set; }
 
     public string? TechnicianNotes { get; set; }
@@ -114,8 +113,8 @@ public class CompleteRepairRequestDto
 /// </summary>
 public class QualityCheckRequestDto
 {
-    [Required(ErrorMessage = "Quality check notes are required")]
-    [StringLength(500, ErrorMessage = "Quality check notes cannot exceed 500 characters")]
+
+
     public string QualityCheckNotes { get; set; } = string.Empty;
 
     public bool Passed { get; set; } = true;

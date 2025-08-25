@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 
 namespace DijaGoldPOS.API.DTOs;
 
@@ -46,25 +46,25 @@ public class CustomerPurchaseItemDto
 /// </summary>
 public class CreateCustomerPurchaseRequest
 {
-    [Required]
+
     public int CustomerId { get; set; }
     
-    [Required]
+
     public int BranchId { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal TotalAmount { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal AmountPaid { get; set; }
     
-    [Required]
+
     public int PaymentMethodId { get; set; }
     
-    [MaxLength(1000)]
+
     public string? Notes { get; set; }
     
-    [MinLength(1)]
+
     public List<CreateCustomerPurchaseItemRequest> Items { get; set; } = new();
 }
 
@@ -73,22 +73,22 @@ public class CreateCustomerPurchaseRequest
 /// </summary>
 public class CreateCustomerPurchaseItemRequest
 {
-    [Required]
+
     public int ProductId { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal Quantity { get; set; }
     
-    [Range(0.001, double.MaxValue)]
+
     public decimal Weight { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal UnitPrice { get; set; }
     
-    [Range(0, double.MaxValue)]
+
     public decimal TotalAmount { get; set; }
     
-    [MaxLength(500)]
+
     public string? Notes { get; set; }
 }
 

@@ -38,11 +38,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage, repairJob) = await _repairJobService.CreateRepairJobAsync(request, userId);
@@ -135,11 +130,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _repairJobService.UpdateRepairJobStatusAsync(id, request, userId);
@@ -172,11 +162,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _repairJobService.AssignTechnicianAsync(id, request, userId);
@@ -209,11 +194,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _repairJobService.CompleteRepairAsync(id, request, userId);
@@ -278,11 +258,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _repairJobService.DeliverRepairAsync(id, request, userId);
@@ -315,11 +290,6 @@ public class RepairJobsController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             var (isSuccess, errorMessage) = await _repairJobService.CancelRepairAsync(id, request.Reason, userId);

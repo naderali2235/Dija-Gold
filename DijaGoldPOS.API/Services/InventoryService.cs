@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Repositories;
 

@@ -2,6 +2,9 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Shared;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -23,19 +26,22 @@ public class UsersController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IAuditService _auditService;
     private readonly ILogger<UsersController> _logger;
+    private readonly IMapper _mapper;
 
     public UsersController(
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         ApplicationDbContext context,
         IAuditService auditService,
-        ILogger<UsersController> logger)
+        ILogger<UsersController> logger,
+        IMapper mapper)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _context = context;
         _auditService = auditService;
         _logger = logger;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -208,11 +214,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             // Check if username already exists
             var existingUser = await _userManager.FindByNameAsync(request.UserName);
             if (existingUser != null)
@@ -342,11 +343,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
@@ -453,11 +449,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var user = await _userManager.FindByIdAsync(id);
             if (user == null)
             {
@@ -531,11 +522,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
@@ -674,11 +660,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var user = await _userManager.FindByIdAsync(id);
             if (user == null)
             {
@@ -791,11 +772,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.ErrorResponse("Invalid input", ModelState));
-            }
-
             var user = await _userManager.FindByIdAsync(id);
             if (user == null)
             {

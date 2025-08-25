@@ -1,6 +1,5 @@
 using DijaGoldPOS.API.Models;
-
-using DijaGoldPOS.API.Repositories;
+using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
 using DijaGoldPOS.API.DTOs;
@@ -39,63 +38,14 @@ public class OrderService : IOrderService
     {
         try
         {
-            // Validate request
-            if (request.Items == null || !request.Items.Any())
-                throw new ArgumentException("Order must have at least one item");
-
-            // Generate order number
+            // Validate and create order
+            ValidateOrderRequest(request);
             var orderNumber = await _orderRepository.GetNextOrderNumberAsync(request.BranchId);
+            var order = CreateOrderEntity(request, userId, orderNumber);
+            AddOrderItems(order, request.Items);
 
-            // Create order
-            var order = new Order
-            {
-                OrderNumber = orderNumber,
-                OrderTypeId = request.OrderTypeId,
-                OrderDate = DateTime.UtcNow,
-                BranchId = request.BranchId,
-                CustomerId = request.CustomerId,
-                GoldRateId = request.GoldRateId,
-                StatusId = LookupTableConstants.OrderStatusCompleted, // Default to completed for current workflow
-                CashierId = userId,
-                Notes = request.Notes,
-                EstimatedCompletionDate = request.EstimatedCompletionDate
-            };
-
-            // Add order items
-            foreach (var itemRequest in request.Items)
-            {
-                var orderItem = new OrderItem
-                {
-                    ProductId = itemRequest.ProductId,
-                    Quantity = itemRequest.Quantity,
-                    UnitPrice = 0, // Will be calculated based on product and gold rate
-                    TotalPrice = 0, // Will be calculated
-                    DiscountPercentage = itemRequest.CustomDiscountPercentage ?? 0,
-                    DiscountAmount = 0, // Will be calculated
-                    FinalPrice = 0, // Will be calculated
-                    MakingCharges = 0, // Will be calculated
-                    TaxAmount = 0, // Will be calculated
-                    TotalAmount = 0, // Will be calculated
-                    Notes = itemRequest.Notes
-                };
-
-                order.OrderItems.Add(orderItem);
-            }
-
-            // Add to repository
-            await _orderRepository.AddAsync(order);
-            await _unitOfWork.SaveChangesAsync();
-
-            // Audit log
-            await _auditService.LogActionAsync(
-                userId,
-                "Create",
-                "Order",
-                order.Id.ToString(),
-                $"Created order {orderNumber}");
-
-            _logger.LogInformation("Order {OrderNumber} created successfully by user {UserId}", 
-                orderNumber, userId);
+            // Save order and log
+            await SaveOrderAsync(order, userId, orderNumber);
 
             return order;
         }
@@ -104,6 +54,83 @@ public class OrderService : IOrderService
             _logger.LogError(ex, "Error creating order");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Validate the order creation request
+    /// </summary>
+    private static void ValidateOrderRequest(CreateOrderRequest request)
+    {
+        if (request.Items == null || !request.Items.Any())
+        {
+            throw new ArgumentException("Order must have at least one item");
+        }
+    }
+
+    /// <summary>
+    /// Create the Order entity from the request
+    /// </summary>
+    private static Order CreateOrderEntity(CreateOrderRequest request, string userId, string orderNumber)
+    {
+        return new Order
+        {
+            OrderNumber = orderNumber,
+            OrderTypeId = request.OrderTypeId,
+            OrderDate = DateTime.UtcNow,
+            BranchId = request.BranchId,
+            CustomerId = request.CustomerId,
+            GoldRateId = request.GoldRateId,
+            StatusId = LookupTableConstants.OrderStatusCompleted,
+            CashierId = userId,
+            Notes = request.Notes,
+            EstimatedCompletionDate = request.EstimatedCompletionDate
+        };
+    }
+
+    /// <summary>
+    /// Add order items to the order
+    /// </summary>
+    private static void AddOrderItems(Order order, List<CreateOrderItemRequest> items)
+    {
+        foreach (var itemRequest in items)
+        {
+            var orderItem = new OrderItem
+            {
+                ProductId = itemRequest.ProductId,
+                Quantity = itemRequest.Quantity,
+                UnitPrice = 0, // Will be calculated based on product and gold rate
+                TotalPrice = 0, // Will be calculated
+                DiscountPercentage = itemRequest.CustomDiscountPercentage ?? 0,
+                DiscountAmount = 0, // Will be calculated
+                FinalPrice = 0, // Will be calculated
+                MakingCharges = 0, // Will be calculated
+                TaxAmount = 0, // Will be calculated
+                TotalAmount = 0, // Will be calculated
+                Notes = itemRequest.Notes
+            };
+
+            order.OrderItems.Add(orderItem);
+        }
+    }
+
+    /// <summary>
+    /// Save the order and log the action
+    /// </summary>
+    private async Task SaveOrderAsync(Order order, string userId, string orderNumber)
+    {
+        await _orderRepository.AddAsync(order);
+        await _unitOfWork.SaveChangesAsync();
+
+        // Audit log
+        await _auditService.LogActionAsync(
+            userId,
+            "Create",
+            "Order",
+            order.Id.ToString(),
+            $"Created order {orderNumber}");
+
+        _logger.LogInformation("Order {OrderNumber} created successfully by user {UserId}",
+            orderNumber, userId);
     }
 
     public async Task<Order?> GetOrderAsync(int orderId)

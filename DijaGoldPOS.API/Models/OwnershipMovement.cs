@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,26 +12,26 @@ public class OwnershipMovement : BaseEntity
     /// <summary>
     /// Product ownership record this movement affects
     /// </summary>
-    [Required]
+
     public int ProductOwnershipId { get; set; }
     
     /// <summary>
     /// Type of movement (Purchase, Payment, Sale, Adjustment, Conversion)
     /// </summary>
-    [Required]
-    [MaxLength(50)]
+
+
     public string MovementType { get; set; } = string.Empty;
     
     /// <summary>
     /// Date and time when the movement occurred
     /// </summary>
-    [Required]
+
     public DateTime MovementDate { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Reference to source document (TransactionId, PurchaseOrderId, etc.)
     /// </summary>
-    [MaxLength(100)]
+
     public string? ReferenceNumber { get; set; }
     
     /// <summary>
@@ -79,14 +79,14 @@ public class OwnershipMovement : BaseEntity
     /// <summary>
     /// Notes about the movement
     /// </summary>
-    [MaxLength(500)]
+
     public string? Notes { get; set; }
     
     /// <summary>
     /// User who created this movement
     /// </summary>
-    [Required]
-    [MaxLength(450)]
+
+
     public string CreatedByUserId { get; set; } = string.Empty;
     
     /// <summary>
