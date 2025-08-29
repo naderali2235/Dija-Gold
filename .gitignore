@@ -1,4 +1,4 @@
-﻿# Visual Studio
+# Visual Studio
 .vs/
 *.user
 *.suo
@@ -50,3 +50,4 @@ ssl-certs/
 #  node_modules
 
 DIjaGoldPOS.System.UI/node_modules/
+.env
