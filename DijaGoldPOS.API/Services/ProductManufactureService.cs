@@ -35,25 +35,30 @@ public class ProductManufactureService : IProductManufactureService
     {
         try
         {
-            // Validate sufficient raw gold is available
-            var isAvailable = await _repository.IsSufficientRawGoldAvailableAsync(createDto.SourcePurchaseOrderItemId, createDto.ConsumedWeight + createDto.WastageWeight);
+            // Calculate total weight needed for the requested quantity
+            var totalWeightPerPiece = createDto.ConsumedWeight + createDto.WastageWeight;
+            var totalWeightNeeded = totalWeightPerPiece * createDto.QuantityToProduce;
+
+            // Validate sufficient raw gold is available for the requested quantity
+            var isAvailable = await IsRawGoldSufficientAsync(createDto.SourceRawGoldPurchaseOrderItemId, totalWeightNeeded);
             if (!isAvailable)
             {
-                throw new InvalidOperationException("Insufficient raw gold weight available for manufacturing this product");
+                throw new InvalidOperationException($"Insufficient raw gold weight available for manufacturing {createDto.QuantityToProduce} pieces. Required: {totalWeightNeeded}g");
             }
 
-            // Validate karat compatibility
-            await ValidateKaratCompatibilityAsync(createDto.ProductId, createDto.SourcePurchaseOrderItemId);
+            // Validate karat compatibility using raw gold purchase order item
+            await ValidateRawGoldKaratCompatibilityAsync(createDto.ProductId, createDto.SourceRawGoldPurchaseOrderItemId);
 
             // Calculate comprehensive manufacturing cost including raw gold cost basis
-            var totalCost = await CalculateTotalManufacturingCostAsync(createDto);
+            var totalCost = await CalculateRawGoldManufacturingCostAsync(createDto);
 
             var entity = new ProductManufacture
             {
                 ProductId = createDto.ProductId,
-                SourcePurchaseOrderItemId = createDto.SourcePurchaseOrderItemId,
-                ConsumedWeight = createDto.ConsumedWeight,
-                WastageWeight = createDto.WastageWeight,
+                QuantityProduced = createDto.QuantityToProduce,
+                SourceRawGoldPurchaseOrderItemId = createDto.SourceRawGoldPurchaseOrderItemId,
+                ConsumedWeight = totalWeightNeeded,
+                WastageWeight = createDto.WastageWeight * createDto.QuantityToProduce,
                 ManufactureDate = DateTime.UtcNow,
                 ManufacturingCostPerGram = createDto.ManufacturingCostPerGram,
                 TotalManufacturingCost = totalCost, // Now includes both raw gold cost + manufacturing cost
@@ -64,14 +69,42 @@ public class ProductManufactureService : IProductManufactureService
                 Priority = createDto.Priority ?? "Normal",
                 EstimatedCompletionDate = createDto.EstimatedCompletionDate,
                 BranchId = createDto.BranchId,
-                TechnicianId = createDto.TechnicianId ?? 0
+                TechnicianId = createDto.TechnicianId
             };
 
             await _repository.AddAsync(entity);
+            
+            // Save the ProductManufacture entity first to get the ID
             await _unitOfWork.SaveChangesAsync();
 
-            // Update inventory for the finished product
-            await UpdateProductInventoryAsync(entity.ProductId, createDto.BranchId, 1, entity.TotalManufacturingCost);
+            // Create raw material record for tracking (now that we have the ProductManufacture ID)
+            var rawMaterial = new ProductManufactureRawMaterial
+            {
+                ProductManufactureId = entity.Id,
+                RawGoldPurchaseOrderItemId = createDto.SourceRawGoldPurchaseOrderItemId,
+                ConsumedWeight = totalWeightNeeded,
+                WastageWeight = createDto.WastageWeight * createDto.QuantityToProduce,
+                CostPerGram = createDto.ManufacturingCostPerGram,
+                TotalRawMaterialCost = totalCost,
+                ContributionPercentage = 1.0m, // 100% since it's the only source
+                SequenceOrder = 1,
+                Notes = $"Raw gold from purchase order item {createDto.SourceRawGoldPurchaseOrderItemId}"
+            };
+
+            // Add raw material record to the context
+            await _unitOfWork.Repository<ProductManufactureRawMaterial>().AddAsync(rawMaterial);
+
+            // Update raw gold consumption in the raw gold purchase order item
+            await UpdateRawGoldConsumptionAsync(createDto.SourceRawGoldPurchaseOrderItemId, totalWeightNeeded);
+
+            // Update raw gold inventory
+            await UpdateRawGoldInventoryAsync(createDto.SourceRawGoldPurchaseOrderItemId, createDto.BranchId, totalWeightNeeded);
+
+            // Update inventory for the finished product (add the quantity produced)
+            await UpdateProductInventoryAsync(entity.ProductId, createDto.BranchId, createDto.QuantityToProduce, entity.TotalManufacturingCost);
+
+            // Save all remaining changes
+            await _unitOfWork.SaveChangesAsync();
 
             return await GetManufacturingRecordByIdAsync(entity.Id) ??
                 throw new InvalidOperationException("Failed to retrieve created record");
@@ -259,13 +292,26 @@ public class ProductManufactureService : IProductManufactureService
         }
     }
 
-    public async Task<IEnumerable<object>> GetAvailableRawGoldItemsAsync()
+    public async Task<IEnumerable<RawGoldPurchaseOrderItemDto>> GetAvailableRawGoldItemsAsync(int? branchId = null)
     {
         try
         {
-            // This is a placeholder - in a real implementation, you'd query for available raw gold items
-            // For now, return empty list since we need to implement the logic
-            return await Task.FromResult(new List<object>());
+            var query = _unitOfWork.Repository<RawGoldPurchaseOrderItem>()
+                .GetQueryable()
+                .Where(item => item.Status == "Received" && item.AvailableWeightForManufacturing > 0);
+
+            if (branchId.HasValue)
+            {
+                query = query.Where(item => item.RawGoldPurchaseOrder.BranchId == branchId.Value);
+            }
+
+            var items = await query
+                .Include(item => item.KaratType)
+                .Include(item => item.RawGoldPurchaseOrder)
+                .ThenInclude(po => po.Supplier)
+                .ToListAsync();
+
+            return _mapper.Map<IEnumerable<RawGoldPurchaseOrderItemDto>>(items);
         }
         catch (Exception ex)
         {
@@ -274,41 +320,41 @@ public class ProductManufactureService : IProductManufactureService
         }
     }
 
-    public async Task<decimal> GetRemainingWeightAsync(int purchaseOrderItemId)
+    public async Task<decimal> GetRemainingWeightAsync(int rawGoldPurchaseOrderItemId)
     {
         try
         {
-            var purchaseOrderItem = await _unitOfWork.Repository<PurchaseOrderItem>().GetByIdAsync(purchaseOrderItemId);
-            if (purchaseOrderItem == null)
+            var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>().GetByIdAsync(rawGoldPurchaseOrderItemId);
+            if (rawGoldItem == null)
             {
-                throw new InvalidOperationException($"Purchase order item with ID {purchaseOrderItemId} not found");
+                throw new InvalidOperationException($"Raw gold purchase order item with ID {rawGoldPurchaseOrderItemId} not found");
             }
 
             // Calculate total weight already consumed in manufacturing
-            var totalConsumedWeight = await _repository.GetTotalConsumedWeightByPurchaseOrderItemAsync(purchaseOrderItemId);
+            var totalConsumedWeight = await _repository.GetTotalConsumedWeightByRawGoldItemAsync(rawGoldPurchaseOrderItemId);
 
             // Calculate remaining weight
-            var remainingWeight = purchaseOrderItem.WeightReceived - totalConsumedWeight;
+            var remainingWeight = rawGoldItem.WeightReceived - totalConsumedWeight;
 
             return Math.Max(0, remainingWeight); // Ensure non-negative result
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving remaining weight for purchase order item {PurchaseOrderItemId}", purchaseOrderItemId);
+            _logger.LogError(ex, "Error retrieving remaining weight for raw gold purchase order item {RawGoldPurchaseOrderItemId}", rawGoldPurchaseOrderItemId);
             throw;
         }
     }
 
-    public async Task<bool> CheckSufficientWeightAsync(int purchaseOrderItemId, decimal requiredWeight)
+    public async Task<bool> CheckSufficientWeightAsync(int rawGoldPurchaseOrderItemId, decimal requiredWeight)
     {
         try
         {
-            var remainingWeight = await GetRemainingWeightAsync(purchaseOrderItemId);
+            var remainingWeight = await GetRemainingWeightAsync(rawGoldPurchaseOrderItemId);
             return remainingWeight >= requiredWeight;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking sufficient weight for purchase order item {PurchaseOrderItemId}", purchaseOrderItemId);
+            _logger.LogError(ex, "Error checking sufficient weight for raw gold purchase order item {RawGoldPurchaseOrderItemId}", rawGoldPurchaseOrderItemId);
             throw;
         }
     }
@@ -324,15 +370,15 @@ public class ProductManufactureService : IProductManufactureService
                 return (false, "Product not found");
             }
 
-            // Validate that the purchase order item exists
-            var purchaseOrderItem = await _unitOfWork.Repository<PurchaseOrderItem>().GetByIdAsync(createDto.SourcePurchaseOrderItemId);
-            if (purchaseOrderItem == null)
+            // Validate that the raw gold purchase order item exists
+            var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>().GetByIdAsync(createDto.SourceRawGoldPurchaseOrderItemId);
+            if (rawGoldItem == null)
             {
-                return (false, "Purchase order item not found");
+                return (false, "Raw gold purchase order item not found");
             }
 
             // Validate sufficient raw gold is available
-            var isAvailable = await _repository.IsSufficientRawGoldAvailableAsync(createDto.SourcePurchaseOrderItemId, createDto.ConsumedWeight + createDto.WastageWeight);
+            var isAvailable = await IsRawGoldSufficientAsync(createDto.SourceRawGoldPurchaseOrderItemId, createDto.ConsumedWeight + createDto.WastageWeight);
             if (!isAvailable)
             {
                 return (false, "Insufficient raw gold weight available for manufacturing this product");
@@ -341,7 +387,7 @@ public class ProductManufactureService : IProductManufactureService
             // Validate karat compatibility
             try
             {
-                await ValidateKaratCompatibilityAsync(createDto.ProductId, createDto.SourcePurchaseOrderItemId);
+                await ValidateRawGoldKaratCompatibilityAsync(createDto.ProductId, createDto.SourceRawGoldPurchaseOrderItemId);
             }
             catch (InvalidOperationException ex)
             {
@@ -434,43 +480,60 @@ public class ProductManufactureService : IProductManufactureService
 
     #region Helper Methods
 
-    private async Task ValidateKaratCompatibilityAsync(int productId, int purchaseOrderItemId)
+    private async Task<bool> IsRawGoldSufficientAsync(int rawGoldPurchaseOrderItemId, decimal requiredWeight)
     {
-        var product = await _unitOfWork.Repository<Product>().GetByIdAsync(productId);
-        var purchaseOrderItem = await _unitOfWork.Repository<PurchaseOrderItem>().GetByIdAsync(purchaseOrderItemId);
-
-        if (product == null || purchaseOrderItem == null)
+        try
         {
-            throw new InvalidOperationException("Invalid product or purchase order item");
-        }
-
-        // For raw gold items, validate karat compatibility
-        if (purchaseOrderItem.IsRawGold && purchaseOrderItem.RawGoldKaratTypeId.HasValue)
-        {
-            if (product.KaratTypeId != purchaseOrderItem.RawGoldKaratTypeId.Value)
+            var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>().GetByIdAsync(rawGoldPurchaseOrderItemId);
+            if (rawGoldItem == null)
             {
-                throw new InvalidOperationException(
-                    $"Product karat ({product.KaratType?.Name ?? "Unknown"}) does not match raw gold karat ({purchaseOrderItem.RawGoldKaratType?.Name ?? "Unknown"})"
-                );
+                return false;
             }
+
+            return rawGoldItem.AvailableWeightForManufacturing >= requiredWeight;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking raw gold sufficiency for item {RawGoldPurchaseOrderItemId}", rawGoldPurchaseOrderItemId);
+            return false;
         }
     }
 
-    private async Task<decimal> CalculateTotalManufacturingCostAsync(CreateProductManufactureDto createDto)
+    private async Task ValidateRawGoldKaratCompatibilityAsync(int productId, int rawGoldPurchaseOrderItemId)
     {
-        // Get the purchase order item to calculate raw gold cost
-        var purchaseOrderItem = await _unitOfWork.Repository<PurchaseOrderItem>().GetByIdAsync(createDto.SourcePurchaseOrderItemId);
-        if (purchaseOrderItem == null)
+        var product = await _unitOfWork.Repository<Product>()
+            .GetQueryable()
+            .Include(p => p.KaratType)
+            .FirstOrDefaultAsync(p => p.Id == productId);
+            
+        var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>()
+            .GetQueryable()
+            .Include(item => item.KaratType)
+            .FirstOrDefaultAsync(item => item.Id == rawGoldPurchaseOrderItemId);
+
+        if (product == null || rawGoldItem == null)
         {
-            throw new InvalidOperationException("Purchase order item not found");
+            throw new InvalidOperationException("Invalid product or raw gold purchase order item");
         }
 
-        // Raw gold cost = (consumed weight / total received weight) * total line cost
-        var rawGoldCost = 0m;
-        if (purchaseOrderItem.WeightReceived > 0)
+        // Validate karat compatibility between product and raw gold
+        if (product.KaratTypeId != rawGoldItem.KaratTypeId)
         {
-            rawGoldCost = (createDto.ConsumedWeight / purchaseOrderItem.WeightReceived) * purchaseOrderItem.LineTotal;
+            throw new InvalidOperationException($"Karat type mismatch: Product requires {product.KaratType?.Name} but raw gold is {rawGoldItem.KaratType?.Name}");
         }
+    }
+
+    private async Task<decimal> CalculateRawGoldManufacturingCostAsync(CreateProductManufactureDto createDto)
+    {
+        // Get the raw gold purchase order item to calculate raw gold cost
+        var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>().GetByIdAsync(createDto.SourceRawGoldPurchaseOrderItemId);
+        if (rawGoldItem == null)
+        {
+            throw new InvalidOperationException("Raw gold purchase order item not found");
+        }
+
+        // Raw gold cost = consumed weight * unit cost per gram
+        var rawGoldCost = createDto.ConsumedWeight * rawGoldItem.UnitCostPerGram;
 
         // Manufacturing cost = consumed weight * manufacturing cost per gram
         var manufacturingCost = createDto.ConsumedWeight * createDto.ManufacturingCostPerGram;
@@ -479,14 +542,88 @@ public class ProductManufactureService : IProductManufactureService
         return rawGoldCost + manufacturingCost;
     }
 
+    private async Task UpdateRawGoldConsumptionAsync(int rawGoldPurchaseOrderItemId, decimal consumedWeight)
+    {
+        try
+        {
+            var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>().GetByIdAsync(rawGoldPurchaseOrderItemId);
+            if (rawGoldItem == null)
+            {
+                throw new InvalidOperationException($"Raw gold purchase order item with ID {rawGoldPurchaseOrderItemId} not found");
+            }
+
+            // Update consumed weight
+            rawGoldItem.WeightConsumedInManufacturing += consumedWeight;
+            _unitOfWork.Repository<RawGoldPurchaseOrderItem>().Update(rawGoldItem);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating raw gold consumption for item {RawGoldPurchaseOrderItemId}", rawGoldPurchaseOrderItemId);
+            throw;
+        }
+    }
+
+    private async Task UpdateRawGoldInventoryAsync(int rawGoldPurchaseOrderItemId, int branchId, decimal consumedWeight)
+    {
+        try
+        {
+            // Get the raw gold item to determine karat type
+            var rawGoldItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>()
+                .GetQueryable()
+                .Include(item => item.KaratType)
+                .FirstOrDefaultAsync(item => item.Id == rawGoldPurchaseOrderItemId);
+
+            if (rawGoldItem == null)
+            {
+                throw new InvalidOperationException($"Raw gold purchase order item with ID {rawGoldPurchaseOrderItemId} not found");
+            }
+
+            // Find or create raw gold inventory record
+            var rawGoldInventory = await _unitOfWork.Repository<RawGoldInventory>()
+                .FindFirstAsync(inv => inv.BranchId == branchId && inv.KaratTypeId == rawGoldItem.KaratTypeId);
+
+            if (rawGoldInventory != null)
+            {
+                // Update existing inventory - reduce weight on hand
+                rawGoldInventory.WeightOnHand -= consumedWeight;
+                rawGoldInventory.LastMovementDate = DateTime.UtcNow;
+                _unitOfWork.Repository<RawGoldInventory>().Update(rawGoldInventory);
+
+                // Record inventory movement
+                var movement = new RawGoldInventoryMovement
+                {
+                    RawGoldInventoryId = rawGoldInventory.Id,
+                    MovementType = "Manufacturing Consumption",
+                    WeightChange = -consumedWeight,
+                    WeightBalance = rawGoldInventory.WeightOnHand,
+                    MovementDate = DateTime.UtcNow,
+                    ReferenceNumber = $"MANUF-{DateTime.UtcNow:yyyyMMdd-HHmmss}",
+                    UnitCost = rawGoldItem.UnitCostPerGram,
+                    TotalCost = consumedWeight * rawGoldItem.UnitCostPerGram,
+                    Notes = $"Raw gold consumed in manufacturing"
+                };
+
+                await _unitOfWork.Repository<RawGoldInventoryMovement>().AddAsync(movement);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating raw gold inventory for item {RawGoldPurchaseOrderItemId}", rawGoldPurchaseOrderItemId);
+            throw;
+        }
+    }
+
     private async Task UpdateProductInventoryAsync(int productId, int branchId, decimal quantity, decimal unitCost)
     {
         try
         {
+
             // Get or create inventory record
             var inventory = await _unitOfWork.Repository<Inventory>()
                 .FindFirstAsync(i => i.ProductId == productId && i.BranchId == branchId);
 
+            bool isNewInventory = inventory == null;
+            
             if (inventory == null)
             {
                 // Create new inventory record
@@ -501,6 +638,9 @@ public class ProductManufactureService : IProductManufactureService
                     ReorderPoint = 10
                 };
                 await _unitOfWork.Repository<Inventory>().AddAsync(inventory);
+                
+                // Save changes to get the inventory ID
+                await _unitOfWork.SaveChangesAsync();
             }
             else
             {
@@ -510,7 +650,7 @@ public class ProductManufactureService : IProductManufactureService
                 _unitOfWork.Repository<Inventory>().Update(inventory);
             }
 
-            // Record inventory movement
+            // Record inventory movement (now inventory.Id is available)
             var movement = new InventoryMovement
             {
                 InventoryId = inventory.Id,
@@ -523,7 +663,6 @@ public class ProductManufactureService : IProductManufactureService
             };
 
             await _unitOfWork.Repository<InventoryMovement>().AddAsync(movement);
-            await _unitOfWork.SaveChangesAsync();
         }
         catch (Exception ex)
         {

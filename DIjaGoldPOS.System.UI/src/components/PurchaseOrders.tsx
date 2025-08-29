@@ -5,80 +5,57 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { Textarea } from './ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from './ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from './ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from './ui/tabs';
-import {
-  FileText,
-  Plus,
-  Search,
-  Eye,
-  Edit,
-  Truck,
-  Calendar,
-  DollarSign,
-  Package,
-  CheckCircle,
-  Clock,
-  AlertTriangle,
-  X,
-  Loader2,
-} from 'lucide-react';
-import { useAuth } from './AuthContext';
-import { formatCurrency } from './utils/currency';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { toast } from 'sonner';
+import { Plus, ShoppingCart, Eye, Zap, Trash2, Edit, Truck, CheckCircle, Package, X, Loader2, Clock, DollarSign, Search, FileText } from 'lucide-react';
+import { 
+  usePaginatedSuppliers, 
+  usePaginatedProducts, 
+  usePaginatedBranches, 
+  useKaratTypes, 
+  useSearchPurchaseOrders, 
+  useCreatePurchaseOrder, 
+  useReceivePurchaseOrder,
+  useUpdatePurchaseOrderStatus,
+  useCreateRawGoldPurchaseOrder,
+  useUpdateRawGoldPurchaseOrderStatus,
+  useReceiveRawGoldPurchaseOrder,
+  useCurrentUser
+} from '../hooks/useApi';
 import { 
   PurchaseOrderDto, 
   PurchaseOrderItemDto,
   CreatePurchaseOrderRequest,
   CreatePurchaseOrderItemRequest,
+  UpdatePurchaseOrderStatusRequest,
   ReceivePurchaseOrderRequest,
   ReceivePurchaseOrderItemDto,
   SupplierDto,
   Product,
   BranchDto
 } from '../services/api';
-import { 
-  useSearchPurchaseOrders,
-  useCreatePurchaseOrder,
-  useReceivePurchaseOrder,
-  usePaginatedSuppliers,
-  usePaginatedProducts,
-  usePaginatedBranches
-} from '../hooks/useApi';
-import { toast } from 'sonner';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+
+// Utility function for currency formatting
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(amount);
+};
 
 export default function PurchaseOrders() {
-  const { isManager } = useAuth();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { fetchUser } = useCurrentUser();
+  const isManager = currentUser?.role === 'Manager' || currentUser?.roles?.includes('Manager');
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [orderType, setOrderType] = useState('all'); // 'all', 'regular', 'raw-gold'
   const [isNewPOOpen, setIsNewPOOpen] = useState(false);
+  const [isNewRawGoldPOOpen, setIsNewRawGoldPOOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrderDto | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -101,6 +78,22 @@ export default function PurchaseOrders() {
     error: receiveError,
     execute: receivePurchaseOrder 
   } = useReceivePurchaseOrder();
+
+  const { 
+    execute: updatePurchaseOrderStatus 
+  } = useUpdatePurchaseOrderStatus();
+
+  const { 
+    execute: createRawGoldPurchaseOrder 
+  } = useCreateRawGoldPurchaseOrder();
+
+  const { 
+    execute: updateRawGoldPurchaseOrderStatus 
+  } = useUpdateRawGoldPurchaseOrderStatus();
+
+  const { 
+    execute: receiveRawGoldPurchaseOrder 
+  } = useReceiveRawGoldPurchaseOrder();
 
   // Load suppliers, products, and branches
   const { 
@@ -133,7 +126,14 @@ export default function PurchaseOrders() {
     isActive: true
   });
 
-  // Form state for new PO
+  // Load karat types using the hook
+  const { 
+    data: karatTypes, 
+    loading: karatTypesLoading,
+    fetchKaratTypes 
+  } = useKaratTypes();
+
+  // Form state for regular PO
   const [poForm, setPOForm] = useState({
     supplierId: '',
     branchId: '',
@@ -143,6 +143,16 @@ export default function PurchaseOrders() {
     items: [{ productId: '', quantity: '', weight: '', unitCost: '', notes: '' }],
   });
 
+  // Form state for raw gold PO
+  const [rawGoldPOForm, setRawGoldPOForm] = useState({
+    supplierId: '',
+    branchId: '',
+    expectedDelivery: '',
+    terms: '',
+    notes: '',
+    items: [{ karatTypeId: '', weightOrdered: '', costPerGram: '', description: '', notes: '' }],
+  });
+
   // Load data on component mount
   useEffect(() => {
     loadData();
@@ -150,17 +160,29 @@ export default function PurchaseOrders() {
 
   const loadData = async () => {
     try {
-      // Load purchase orders
-      await searchPurchaseOrders({
-        pageNumber: 1,
-        pageSize: 100
-      });
+      // Load current user first
+      const user = await fetchUser();
+      if (user) {
+        setCurrentUser(user);
+        console.log('Current user loaded:', user);
+        console.log('User role:', user.roles);
+      }
 
-      // Load suppliers, products, and branches
+      // Load both regular and raw gold purchase orders
+      await Promise.all([
+        searchPurchaseOrders({
+          pageNumber: 1,
+          pageSize: 100
+        }),
+        loadRawGoldPurchaseOrders()
+      ]);
+
+      // Load suppliers, products, branches, and karat types
       await Promise.all([
         fetchSuppliers(),
         fetchProducts(),
-        fetchBranches()
+        fetchBranches(),
+        fetchKaratTypes()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -168,8 +190,40 @@ export default function PurchaseOrders() {
     }
   };
 
+  // State for raw gold purchase orders
+  const [rawGoldPurchaseOrders, setRawGoldPurchaseOrders] = useState<any[]>([]);
+
+  const loadRawGoldPurchaseOrders = async () => {
+    try {
+      const { rawGoldPurchaseOrdersApi } = await import('../services/api');
+      const rawGoldPOs = await rawGoldPurchaseOrdersApi.getRawGoldPurchaseOrders();
+      
+      // Convert raw gold POs to match the regular PO format for display
+      const formattedRawGoldPOs = rawGoldPOs.map((po: any) => ({
+        ...po,
+        type: 'raw-gold',
+        items: po.rawGoldPurchaseOrderItems || po.items || [],
+        // Ensure consistent property names
+        purchaseOrderNumber: po.purchaseOrderNumber,
+        orderDate: po.orderDate,
+        expectedDeliveryDate: po.expectedDeliveryDate,
+        actualDeliveryDate: po.actualDeliveryDate,
+        totalAmount: po.totalAmount,
+        status: po.status,
+        supplierId: po.supplierId,
+        branchId: po.branchId
+      }));
+      
+      setRawGoldPurchaseOrders(formattedRawGoldPOs);
+    } catch (error) {
+      console.error('Error loading raw gold purchase orders:', error);
+    }
+  };
+
   // Extract data from API responses
-  const purchaseOrders = purchaseOrdersData?.items || [];
+  const regularPurchaseOrders = purchaseOrdersData?.items || [];
+  const allPurchaseOrders = [...regularPurchaseOrders, ...rawGoldPurchaseOrders];
+  const purchaseOrders = allPurchaseOrders;
   const suppliers = suppliersData?.items || [];
   const products = productsData?.items || [];
   const branches = branchesData?.items || [];
@@ -210,6 +264,36 @@ export default function PurchaseOrders() {
       ...poForm,
       items: [...poForm.items, { productId: '', quantity: '', weight: '', unitCost: '', notes: '' }],
     });
+  };
+
+  const addRawGoldPOItem = () => {
+    setRawGoldPOForm({
+      ...rawGoldPOForm,
+      items: [...rawGoldPOForm.items, { karatTypeId: '', weightOrdered: '', costPerGram: '', description: '', notes: '' }],
+    });
+  };
+
+  const removeRawGoldPOItem = (index: number) => {
+    const newItems = rawGoldPOForm.items.filter((_, i) => i !== index);
+    setRawGoldPOForm({ ...rawGoldPOForm, items: newItems });
+  };
+
+  const updateRawGoldPOItem = (index: number, field: string, value: string) => {
+    const newItems = [...rawGoldPOForm.items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setRawGoldPOForm({ ...rawGoldPOForm, items: newItems });
+  };
+
+  const calculateRawGoldTotal = (weightOrdered: string, costPerGram: string) => {
+    const w = parseFloat(weightOrdered) || 0;
+    const cost = parseFloat(costPerGram) || 0;
+    return w * cost;
+  };
+
+  const getRawGoldTotalAmount = () => {
+    return rawGoldPOForm.items.reduce((total, item) => {
+      return total + calculateRawGoldTotal(item.weightOrdered, item.costPerGram);
+    }, 0);
   };
 
   const removePOItem = (index: number) => {
@@ -278,41 +362,158 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleStatusUpdate = async (poId: number, newStatus: string) => {
+  const handleCreateRawGoldPO = async () => {
+    if (!isManager) {
+      toast.error('Only managers can create raw gold purchase orders');
+      return;
+    }
+
+    if (!rawGoldPOForm.supplierId || !rawGoldPOForm.branchId) {
+      toast.error('Please select supplier and branch');
+      return;
+    }
+
+    if (rawGoldPOForm.items.length === 0 || rawGoldPOForm.items.some(item => !item.karatTypeId || !item.weightOrdered || !item.costPerGram)) {
+      toast.error('Please add at least one item with all required fields');
+      return;
+    }
+
+    try {
+      const request = {
+        supplierId: parseInt(rawGoldPOForm.supplierId),
+        branchId: parseInt(rawGoldPOForm.branchId),
+        notes: rawGoldPOForm.notes,
+        items: rawGoldPOForm.items.map(item => ({
+          karatTypeId: parseInt(item.karatTypeId),
+          weightOrdered: parseFloat(item.weightOrdered),
+          costPerGram: parseFloat(item.costPerGram),
+          description: item.description || '',
+          notes: item.notes || undefined
+        }))
+      };
+
+      await createRawGoldPurchaseOrder(request);
+      toast.success('Raw gold purchase order created successfully');
+      setIsNewRawGoldPOOpen(false);
+      setIsEditMode(false);
+      setSelectedPO(null);
+      resetRawGoldForm();
+      loadData(); // Reload the data
+    } catch (error) {
+      console.error('Error creating raw gold purchase order:', error);
+      toast.error('Failed to create raw gold purchase order');
+    }
+  };
+
+  const handleUpdateRawGoldPO = async () => {
+    if (!isManager) {
+      toast.error('Only managers can update raw gold purchase orders');
+      return;
+    }
+
+    if (!selectedPO) {
+      toast.error('No purchase order selected for editing');
+      return;
+    }
+
+    if (!rawGoldPOForm.supplierId || !rawGoldPOForm.branchId) {
+      toast.error('Please select supplier and branch');
+      return;
+    }
+
+    if (rawGoldPOForm.items.length === 0 || rawGoldPOForm.items.some(item => !item.karatTypeId || !item.weightOrdered || !item.costPerGram)) {
+      toast.error('Please add at least one item with all required fields');
+      return;
+    }
+
+    try {
+      const { rawGoldPurchaseOrdersApi } = await import('../services/api');
+      const request = {
+        supplierId: parseInt(rawGoldPOForm.supplierId),
+        branchId: parseInt(rawGoldPOForm.branchId),
+        notes: rawGoldPOForm.notes,
+        items: rawGoldPOForm.items.map(item => ({
+          karatTypeId: parseInt(item.karatTypeId),
+          weightOrdered: parseFloat(item.weightOrdered),
+          costPerGram: parseFloat(item.costPerGram),
+          description: item.description || '',
+          notes: item.notes || undefined
+        }))
+      };
+
+      await rawGoldPurchaseOrdersApi.updateRawGoldPurchaseOrder(selectedPO.id, request);
+      toast.success('Raw gold purchase order updated successfully');
+      setIsNewRawGoldPOOpen(false);
+      setIsEditMode(false);
+      setSelectedPO(null);
+      resetRawGoldForm();
+      loadData(); // Reload the data
+    } catch (error) {
+      console.error('Error updating raw gold purchase order:', error);
+      toast.error('Failed to update raw gold purchase order');
+    }
+  };
+
+  const handleStatusUpdate = async (poId: number, newStatus: string, poType?: string) => {
     if (!isManager) {
       toast.error('Only managers can update purchase order status');
       return;
     }
 
     try {
-      // Note: The current API only has endpoints for create, get, search, and receive
-      // Status updates for 'sent', 'confirmed', etc. would need additional API endpoints
-      // For now, we'll show a message indicating this functionality needs backend support
-      toast.info(`Status update to ${newStatus} requires backend API enhancement`);
+      if (poType === 'raw-gold') {
+        // Use raw gold purchase orders hook for raw gold POs
+        const request = {
+          newStatus: newStatus,
+          statusNotes: undefined
+        };
+        
+        await updateRawGoldPurchaseOrderStatus(poId, request);
+      } else {
+        // Use regular purchase orders hook for regular POs
+        const request: UpdatePurchaseOrderStatusRequest = {
+          newStatus: newStatus,
+          statusNotes: undefined
+        };
+        
+        await updatePurchaseOrderStatus(poId, request);
+      }
       
-      // Uncomment below when status update API endpoint is available:
-      // await purchaseOrdersApi.updateStatus(poId, newStatus);
-      // toast.success(`Purchase order status updated to ${newStatus}`);
-      // loadData(); // Reload the data
+      toast.success(`Purchase order status updated to ${newStatus}`);
+      loadData(); // Reload the data
     } catch (error) {
       console.error('Error updating purchase order status:', error);
       toast.error('Failed to update purchase order status');
     }
   };
 
-  const handleReceivePO = async (poId: number, items: ReceivePurchaseOrderItemDto[]) => {
+  const handleReceivePO = async (poId: number, items: ReceivePurchaseOrderItemDto[], poType?: string) => {
     if (!isManager) {
       toast.error('Only managers can receive purchase orders');
       return;
     }
 
     try {
-      const request: ReceivePurchaseOrderRequest = {
-        purchaseOrderId: poId,
-        items: items
-      };
-
-      await receivePurchaseOrder(request);
+      if (poType === 'raw-gold') {
+        // Use raw gold purchase orders hook for raw gold POs
+        const request = {
+          items: items.map(item => ({
+            rawGoldPurchaseOrderItemId: item.purchaseOrderItemId,
+            weightReceived: item.weightReceived
+          }))
+        };
+        
+        await receiveRawGoldPurchaseOrder(poId, request);
+      } else {
+        // Use regular purchase orders hook for regular POs
+        const request = {
+          purchaseOrderId: poId,
+          items: items
+        };
+        
+        await receivePurchaseOrder(request);
+      }
+      
       toast.success('Purchase order received successfully');
       loadData(); // Reload the data
     } catch (error) {
@@ -329,6 +530,17 @@ export default function PurchaseOrders() {
       terms: '',
       notes: '',
       items: [{ productId: '', quantity: '', weight: '', unitCost: '', notes: '' }],
+    });
+  };
+
+  const resetRawGoldForm = () => {
+    setRawGoldPOForm({
+      supplierId: '',
+      branchId: '',
+      expectedDelivery: '',
+      terms: '',
+      notes: '',
+      items: [{ karatTypeId: '', weightOrdered: '', costPerGram: '', description: '', notes: '' }],
     });
   };
 
@@ -363,6 +575,12 @@ export default function PurchaseOrders() {
     return product ? product.productCode : '';
   };
 
+  // Helper function to get karat type name by ID
+  const getKaratTypeName = (karatTypeId: number) => {
+    const karatType = karatTypes?.find(k => k.id === karatTypeId);
+    return karatType ? karatType.name : `Karat ID: ${karatTypeId}`;
+  };
+
   const loading = purchaseOrdersLoading || suppliersLoading || productsLoading || branchesLoading || createLoading || receiveLoading;
 
   if (loading && purchaseOrders.length === 0) {
@@ -382,18 +600,19 @@ export default function PurchaseOrders() {
           <p className="text-muted-foreground">Manage supplier purchase orders and deliveries</p>
         </div>
         {isManager && (
-          <Dialog open={isNewPOOpen} onOpenChange={setIsNewPOOpen}>
-            <DialogTrigger asChild>
-              <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
-                <Plus className="mr-2 h-4 w-4" />
-                New Purchase Order
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Dialog open={isNewPOOpen} onOpenChange={setIsNewPOOpen}>
+              <DialogTrigger asChild>
+                <Button className="touch-target pos-button-primary bg-blue-600 hover:bg-blue-700 text-white">
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  New Regular PO
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Create Purchase Order</DialogTitle>
+                <DialogTitle>Create Regular Purchase Order</DialogTitle>
                 <DialogDescription>
-                  Create a new purchase order for supplier inventory
+                  Create a new regular purchase order for supplier inventory
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
@@ -456,68 +675,80 @@ export default function PurchaseOrders() {
                   </div>
                   
                   {poForm.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-3 space-y-1">
-                        <Label className="text-xs">Product</Label>
-                        <Select value={item.productId} onValueChange={(value) => updatePOItem(index, 'productId', value)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select product" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map(product => (
-                              <SelectItem key={product.id} value={product.id.toString()}>
-                                {product.name} ({product.productCode})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    <div key={index} className="space-y-3 p-4 border rounded-lg">
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-4 space-y-1">
+                          <Label className="text-xs">Product</Label>
+                          <Select value={item.productId} onValueChange={(value) => updatePOItem(index, 'productId', value)}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map(product => (
+                                <SelectItem key={product.id} value={product.id.toString()}>
+                                  {product.name} ({product.productCode})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Quantity</Label>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updatePOItem(index, 'quantity', e.target.value)}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Weight (g)</Label>
+                          <Input
+                            type="number"
+                            value={item.weight}
+                            onChange={(e) => updatePOItem(index, 'weight', e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Unit Cost</Label>
+                          <Input
+                            type="number"
+                            value={item.unitCost}
+                            onChange={(e) => updatePOItem(index, 'unitCost', e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                          <Label className="text-xs">Total</Label>
+                          <Input
+                            value={formatCurrency(calculateTotal(item.quantity, item.unitCost))}
+                            readOnly
+                            className="bg-muted text-xs"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          {poForm.items.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removePOItem(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Quantity</Label>
+                      
+                      <div className="space-y-1">
+                        <Label className="text-xs">Notes</Label>
                         <Input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updatePOItem(index, 'quantity', e.target.value)}
-                          placeholder="0"
+                          value={item.notes}
+                          onChange={(e) => updatePOItem(index, 'notes', e.target.value)}
+                          placeholder="Item notes"
+                          className="text-xs"
                         />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Weight (g)</Label>
-                        <Input
-                          type="number"
-                          value={item.weight}
-                          onChange={(e) => updatePOItem(index, 'weight', e.target.value)}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Unit Cost</Label>
-                        <Input
-                          type="number"
-                          value={item.unitCost}
-                          onChange={(e) => updatePOItem(index, 'unitCost', e.target.value)}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Total</Label>
-                        <Input
-                          value={formatCurrency(calculateTotal(item.quantity, item.unitCost))}
-                          readOnly
-                          className="bg-muted"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        {poForm.items.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removePOItem(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                     </div>
                   ))}
@@ -545,14 +776,205 @@ export default function PurchaseOrders() {
                 <Button 
                   onClick={handleCreatePO} 
                   disabled={createLoading}
-                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  className="pos-button-primary bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Purchase Order
+                  Create Regular Purchase Order
                 </Button>
               </div>
             </DialogContent>
           </Dialog>
+          
+          <Dialog open={isNewRawGoldPOOpen} onOpenChange={setIsNewRawGoldPOOpen}>
+            <DialogTrigger asChild>
+              <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+                <Zap className="mr-2 h-4 w-4" />
+                New Raw Gold PO
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-7xl max-h-screen overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{isEditMode && selectedPO ? 'Edit Raw Gold Purchase Order' : 'Create Raw Gold Purchase Order'}</DialogTitle>
+                <DialogDescription>
+                  {isEditMode && selectedPO ? 'Edit the raw gold purchase order details' : 'Create a new raw gold purchase order for supplier inventory'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Supplier</Label>
+                    <Select value={rawGoldPOForm.supplierId} onValueChange={(value) => setRawGoldPOForm({...rawGoldPOForm, supplierId: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select supplier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliers.map(supplier => (
+                          <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                            {supplier.companyName} - {supplier.contactPersonName || 'No contact'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    <Select value={rawGoldPOForm.branchId} onValueChange={(value) => setRawGoldPOForm({...rawGoldPOForm, branchId: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {branches.map(branch => (
+                          <SelectItem key={branch.id} value={branch.id.toString()}>
+                            {branch.name} ({branch.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Expected Delivery</Label>
+                    <Input
+                      type="date"
+                      value={rawGoldPOForm.expectedDelivery}
+                      onChange={(e) => setRawGoldPOForm({...rawGoldPOForm, expectedDelivery: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Terms</Label>
+                    <Input
+                      value={rawGoldPOForm.terms}
+                      onChange={(e) => setRawGoldPOForm({...rawGoldPOForm, terms: e.target.value})}
+                      placeholder="Payment terms"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Raw Gold Items</Label>
+                    <Button type="button" variant="outline" onClick={addRawGoldPOItem} size="sm">
+                      <Plus className="mr-1 h-3 w-3" />
+                      Add Raw Gold Item
+                    </Button>
+                  </div>
+                  
+                  {rawGoldPOForm.items.map((item, index) => (
+                    <div key={index} className="space-y-3 p-4 border rounded-lg bg-yellow-50">
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-3 space-y-1">
+                          <Label className="text-xs">Karat Type</Label>
+                          <Select value={item.karatTypeId} onValueChange={(value) => updateRawGoldPOItem(index, 'karatTypeId', value)}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select karat type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {karatTypes?.map(karatType => (
+                                <SelectItem key={karatType.id} value={karatType.id.toString()}>
+                                  {karatType.name}
+                                </SelectItem>
+                              )) || []}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Weight (g)</Label>
+                          <Input
+                            type="number"
+                            value={item.weightOrdered}
+                            onChange={(e) => updateRawGoldPOItem(index, 'weightOrdered', e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Cost per Gram</Label>
+                          <Input
+                            type="number"
+                            value={item.costPerGram}
+                            onChange={(e) => updateRawGoldPOItem(index, 'costPerGram', e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="col-span-4 space-y-1">
+                          <Label className="text-xs">Total Cost</Label>
+                          <Input
+                            value={formatCurrency(calculateRawGoldTotal(item.weightOrdered, item.costPerGram))}
+                            readOnly
+                            className="bg-muted text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-11 space-y-1">
+                          <Label className="text-xs">Description</Label>
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateRawGoldPOItem(index, 'description', e.target.value)}
+                            placeholder="e.g., 24K Gold Bars, 22K Gold Scrap"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          {rawGoldPOForm.items.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeRawGoldPOItem(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <Label className="text-xs">Notes</Label>
+                        <Input
+                          value={item.notes}
+                          onChange={(e) => updateRawGoldPOItem(index, 'notes', e.target.value)}
+                          placeholder="Raw gold item notes"
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="text-right pt-4 border-t">
+                    <p className="text-lg font-semibold">
+                      Total: {formatCurrency(getRawGoldTotalAmount())}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={rawGoldPOForm.notes}
+                    onChange={(e) => setRawGoldPOForm({...rawGoldPOForm, notes: e.target.value})}
+                    placeholder="Additional notes for this raw gold purchase order"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <Button variant="outline" onClick={() => {
+                  setIsNewRawGoldPOOpen(false);
+                  setIsEditMode(false);
+                  setSelectedPO(null);
+                  resetRawGoldForm();
+                }}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={isEditMode ? handleUpdateRawGoldPO : handleCreateRawGoldPO} 
+                  disabled={createLoading}
+                  className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                >
+                  {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isEditMode ? 'Update Raw Gold Purchase Order' : 'Create Raw Gold Purchase Order'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          </div>
         )}
       </div>
 
@@ -667,6 +1089,7 @@ export default function PurchaseOrders() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>PO Number</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Supplier</TableHead>
                       <TableHead>Branch</TableHead>
                       <TableHead>Order Date</TableHead>
@@ -680,6 +1103,19 @@ export default function PurchaseOrders() {
                     {filteredPOs.map((po) => (
                       <TableRow key={po.id}>
                         <TableCell className="font-medium">{po.purchaseOrderNumber}</TableCell>
+                        <TableCell>
+                          {po.type === 'raw-gold' ? (
+                            <Badge className="bg-yellow-100 text-yellow-800">
+                              <Zap className="mr-1 h-3 w-3" />
+                              Raw Gold
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-blue-100 text-blue-800">
+                              <ShoppingCart className="mr-1 h-3 w-3" />
+                              Regular
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{getSupplierName(po.supplierId)}</p>
@@ -707,13 +1143,141 @@ export default function PurchaseOrders() {
                         <TableCell>{getStatusBadge(po.status)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            {/* Status Change Buttons */}
+                            {isManager && po.status !== 'Received' && po.status !== 'Cancelled' && (
+                              <>
+                                {po.status === 'Pending' && (
+                                  <Button
+                                    onClick={() => handleStatusUpdate(po.id, 'Sent', po.type)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-blue-600 hover:bg-blue-50"
+                                  >
+                                    <Truck className="h-4 w-4 mr-1" />
+                                    Send
+                                  </Button>
+                                )}
+                                {po.status === 'Sent' && (
+                                  <Button
+                                    onClick={() => handleStatusUpdate(po.id, 'Confirmed', po.type)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-yellow-600 hover:bg-yellow-50"
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Confirm
+                                  </Button>
+                                )}
+                                {po.status === 'Confirmed' && (
+                                  <Button
+                                    onClick={() => handleReceivePO(po.id, po.items.map((item: any) => {
+                                      if (po.type === 'raw-gold') {
+                                        return {
+                                          purchaseOrderItemId: item.id,
+                                          weightReceived: item.weightOrdered - (item.weightReceived || 0)
+                                        };
+                                      } else {
+                                        return {
+                                          purchaseOrderItemId: item.id,
+                                          quantityReceived: item.quantityOrdered - (item.quantityReceived || 0),
+                                          weightReceived: item.weightOrdered - (item.weightReceived || 0)
+                                        };
+                                      }
+                                    }), po.type)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-green-600 hover:bg-green-50"
+                                  >
+                                    <Package className="h-4 w-4 mr-1" />
+                                    Receive
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            
+                            {/* Edit Buttons */}
+                            {isManager && po.status === 'Pending' && (
+                              <>
+                                {po.type === 'raw-gold' ? (
+                                  <Button
+                                    onClick={() => {
+                                      setSelectedPO(po);
+                                      setIsEditMode(true);
+                                      // Populate the raw gold form with existing data
+                                      setRawGoldPOForm({
+                                        supplierId: po.supplierId.toString(),
+                                        branchId: po.branchId.toString(),
+                                        expectedDelivery: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toISOString().split('T')[0] : '',
+                                        terms: po.terms || '',
+                                        notes: po.notes || '',
+                                        items: po.items.map((item: any) => ({
+                                          karatTypeId: item.karatTypeId.toString(),
+                                          weightOrdered: item.weightOrdered.toString(),
+                                          costPerGram: item.unitCostPerGram ? item.unitCostPerGram.toString() : item.costPerGram?.toString() || '',
+                                          description: item.description || '',
+                                          notes: item.notes || ''
+                                        }))
+                                      });
+                                      setIsNewRawGoldPOOpen(true);
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-yellow-600 hover:bg-yellow-50"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => {
+                                      setSelectedPO(po);
+                                      setIsEditMode(true);
+                                      // Populate the regular form with existing data
+                                      setPOForm({
+                                        supplierId: po.supplierId.toString(),
+                                        branchId: po.branchId.toString(),
+                                        expectedDelivery: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toISOString().split('T')[0] : '',
+                                        terms: po.terms || '',
+                                        notes: po.notes || '',
+                                        items: po.items.map((item: any) => ({
+                                          productId: item.productId.toString(),
+                                          quantity: item.quantityOrdered.toString(),
+                                          weight: item.weightOrdered.toString(),
+                                          unitCost: item.unitCost.toString(),
+                                          notes: item.notes || ''
+                                        }))
+                                      });
+                                      setIsNewPOOpen(true);
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-blue-600 hover:bg-blue-50"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+
+                            {/* Delete Button for Pending Orders */}
+                            {isManager && po.status === 'Pending' && (
+                              <Button
+                                onClick={() => handleStatusUpdate(po.id, 'Cancelled', po.type)}
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {/* View Details Dialog */}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button variant="outline" size="sm" className="touch-target">
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
-                              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                              <DialogContent className="max-w-7xl max-h-screen overflow-y-auto">
                                 <DialogHeader>
                                   <DialogTitle>{po.purchaseOrderNumber} - Details</DialogTitle>
                                 </DialogHeader>
@@ -737,6 +1301,22 @@ export default function PurchaseOrders() {
                                       <Label>Total Amount</Label>
                                       <p className="text-lg font-semibold">{formatCurrency(po.totalAmount)}</p>
                                     </div>
+                                    <div>
+                                      <Label>Order Type</Label>
+                                      <div className="mt-1">
+                                        {po.type === 'raw-gold' ? (
+                                          <Badge className="bg-yellow-100 text-yellow-800">
+                                            <Zap className="mr-1 h-3 w-3" />
+                                            Raw Gold
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="bg-blue-100 text-blue-800">
+                                            <ShoppingCart className="mr-1 h-3 w-3" />
+                                            Regular
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
 
                                   <div>
@@ -744,46 +1324,88 @@ export default function PurchaseOrders() {
                                     <Table>
                                       <TableHeader>
                                         <TableRow>
-                                          <TableHead>Product</TableHead>
-                                          <TableHead>Quantity</TableHead>
-                                          <TableHead>Weight</TableHead>
-                                          <TableHead>Unit Cost</TableHead>
-                                          <TableHead>Total</TableHead>
-                                          <TableHead>Status</TableHead>
+                                          {po.type === 'raw-gold' ? (
+                                            <>
+                                              <TableHead>Karat Type</TableHead>
+                                              <TableHead>Weight Ordered</TableHead>
+                                              <TableHead>Weight Received</TableHead>
+                                              <TableHead>Cost per Gram</TableHead>
+                                              <TableHead>Total</TableHead>
+                                              <TableHead>Status</TableHead>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <TableHead>Product</TableHead>
+                                              <TableHead>Quantity</TableHead>
+                                              <TableHead>Weight</TableHead>
+                                              <TableHead>Unit Cost</TableHead>
+                                              <TableHead>Total</TableHead>
+                                              <TableHead>Status</TableHead>
+                                            </>
+                                          )}
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
-                                        {po.items.map((item) => (
+                                        {po.items.map((item: any) => (
                                           <TableRow key={item.id}>
-                                            <TableCell>
-                                              <div>
-                                                <p className="font-medium">{getProductName(item.productId)}</p>
-                                                <p className="text-sm text-muted-foreground">{getProductCode(item.productId)}</p>
-                                              </div>
-                                            </TableCell>
-                                            <TableCell>
-                                              {item.quantityOrdered}
-                                              {item.quantityReceived > 0 && (
-                                                <span className="text-sm text-green-600 ml-2">
-                                                  ({item.quantityReceived} received)
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                            <TableCell>
-                                              {item.weightOrdered}g
-                                              {item.weightReceived > 0 && (
-                                                <span className="text-sm text-green-600 ml-2">
-                                                  ({item.weightReceived}g received)
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                            <TableCell>{formatCurrency(item.unitCost)}</TableCell>
-                                            <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
-                                            <TableCell>
-                                              <Badge variant={item.status === 'Received' ? 'default' : 'outline'}>
-                                                {item.status}
-                                              </Badge>
-                                            </TableCell>
+                                            {po.type === 'raw-gold' ? (
+                                              <>
+                                                <TableCell>
+                                                  <div>
+                                                    <p className="font-medium">{getKaratTypeName(item.karatTypeId)}</p>
+                                                    <p className="text-sm text-muted-foreground">{item.description}</p>
+                                                  </div>
+                                                </TableCell>
+                                                <TableCell>{item.weightOrdered}g</TableCell>
+                                                <TableCell>
+                                                  {item.weightReceived || 0}g
+                                                  {item.weightReceived > 0 && (
+                                                    <span className="text-sm text-green-600 ml-2">
+                                                      ✓
+                                                    </span>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>{formatCurrency(item.unitCostPerGram)}</TableCell>
+                                                <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
+                                                <TableCell>
+                                                  <Badge variant={item.status === 'Received' ? 'default' : 'outline'}>
+                                                    {item.status}
+                                                  </Badge>
+                                                </TableCell>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <TableCell>
+                                                  <div>
+                                                    <p className="font-medium">{getProductName(item.productId)}</p>
+                                                    <p className="text-sm text-muted-foreground">{getProductCode(item.productId)}</p>
+                                                  </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                  {item.quantityOrdered}
+                                                  {item.quantityReceived > 0 && (
+                                                    <span className="text-sm text-green-600 ml-2">
+                                                      ({item.quantityReceived} received)
+                                                    </span>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {item.weightOrdered}g
+                                                  {item.weightReceived > 0 && (
+                                                    <span className="text-sm text-green-600 ml-2">
+                                                      ({item.weightReceived}g received)
+                                                    </span>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>{formatCurrency(item.unitCost)}</TableCell>
+                                                <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
+                                                <TableCell>
+                                                  <Badge variant={item.status === 'Received' ? 'default' : 'outline'}>
+                                                    {item.status}
+                                                  </Badge>
+                                                </TableCell>
+                                              </>
+                                            )}
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -801,7 +1423,7 @@ export default function PurchaseOrders() {
                                     <div className="flex gap-2 pt-4 border-t">
                                       {po.status === 'Pending' && (
                                         <Button
-                                          onClick={() => handleStatusUpdate(po.id, 'Sent')}
+                                          onClick={() => handleStatusUpdate(po.id, 'Sent', po.type)}
                                           size="sm"
                                         >
                                           Send to Supplier
@@ -809,7 +1431,7 @@ export default function PurchaseOrders() {
                                       )}
                                       {po.status === 'Sent' && (
                                         <Button
-                                          onClick={() => handleStatusUpdate(po.id, 'Confirmed')}
+                                          onClick={() => handleStatusUpdate(po.id, 'Confirmed', po.type)}
                                           size="sm"
                                         >
                                           Mark Confirmed
@@ -817,18 +1439,18 @@ export default function PurchaseOrders() {
                                       )}
                                       {po.status === 'Confirmed' && (
                                         <Button
-                                          onClick={() => handleReceivePO(po.id, po.items.map(item => ({
+                                          onClick={() => handleReceivePO(po.id, po.items.map((item: any) => ({
                                             purchaseOrderItemId: item.id,
                                             quantityReceived: item.quantityOrdered - item.quantityReceived,
                                             weightReceived: item.weightOrdered - item.weightReceived
-                                          })))}
+                                          })), po.type)}
                                           size="sm"
                                         >
                                           Mark Received
                                         </Button>
                                       )}
                                       <Button
-                                        onClick={() => handleStatusUpdate(po.id, 'Cancelled')}
+                                        onClick={() => handleStatusUpdate(po.id, 'Cancelled', po.type)}
                                         variant="destructive"
                                         size="sm"
                                       >
@@ -839,11 +1461,6 @@ export default function PurchaseOrders() {
                                 </div>
                               </DialogContent>
                             </Dialog>
-                            {isManager && (
-                              <Button variant="outline" size="sm" className="touch-target">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
                           </div>
                         </TableCell>
                       </TableRow>

@@ -32,7 +32,7 @@ public class CustomerPurchaseRepository : Repository<CustomerPurchase>, ICustome
             .Include(cp => cp.Branch)
             .Include(cp => cp.PaymentMethod)
             .Include(cp => cp.CustomerPurchaseItems)
-                .ThenInclude(cpi => cpi.Product)
+                .ThenInclude(cpi => cpi.KaratType)
             .FirstOrDefaultAsync();
     }
 
@@ -43,6 +43,7 @@ public class CustomerPurchaseRepository : Repository<CustomerPurchase>, ICustome
             .Include(cp => cp.Branch)
             .Include(cp => cp.PaymentMethod)
             .Include(cp => cp.CustomerPurchaseItems)
+                .ThenInclude(cpi => cpi.KaratType)
             .OrderByDescending(cp => cp.PurchaseDate)
             .ToListAsync();
     }
@@ -54,6 +55,7 @@ public class CustomerPurchaseRepository : Repository<CustomerPurchase>, ICustome
             .Include(cp => cp.Customer)
             .Include(cp => cp.PaymentMethod)
             .Include(cp => cp.CustomerPurchaseItems)
+                .ThenInclude(cpi => cpi.KaratType)
             .OrderByDescending(cp => cp.PurchaseDate)
             .ToListAsync();
     }
@@ -66,6 +68,7 @@ public class CustomerPurchaseRepository : Repository<CustomerPurchase>, ICustome
             .Include(cp => cp.Branch)
             .Include(cp => cp.PaymentMethod)
             .Include(cp => cp.CustomerPurchaseItems)
+                .ThenInclude(cpi => cpi.KaratType)
             .OrderByDescending(cp => cp.PurchaseDate)
             .ToListAsync();
     }

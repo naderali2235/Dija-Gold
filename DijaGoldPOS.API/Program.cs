@@ -149,10 +149,25 @@ builder.Services.AddCors(options =>
             }
             else
             {
-                policy.WithOrigins(corsOrigins)
+                // In development, allow any localhost origin for flexibility
+                if (builder.Environment.IsDevelopment())
+                {
+                    policy.SetIsOriginAllowed(origin =>
+                        origin.StartsWith("http://localhost:") ||
+                        origin.StartsWith("https://localhost:") ||
+                        corsOrigins.Contains(origin))
                       .AllowAnyHeader()
                       .AllowAnyMethod()
                       .AllowCredentials();
+                }
+                else
+                {
+                    // FIXED: Added .WithOrigins(corsOrigins) here
+                    policy.WithOrigins(corsOrigins)
+                          .AllowAnyHeader()
+                          .AllowAnyMethod()
+                          .AllowCredentials();
+                }
             }
         }
         else
@@ -167,7 +182,6 @@ builder.Services.AddCors(options =>
         }
     });
 });
-
 
 // Add Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -355,7 +369,7 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-   await DbInitializer.InitializeAsync(context, userManager, roleManager);
+    await DbInitializer.InitializeAsync(context, userManager, roleManager);
 }
 
 app.Run();

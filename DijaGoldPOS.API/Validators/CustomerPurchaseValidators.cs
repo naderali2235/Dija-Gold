@@ -72,18 +72,7 @@ public class CustomerPurchaseItemDtoValidator : AbstractValidator<CustomerPurcha
         RuleFor(x => x.CustomerPurchaseId)
             .GreaterThan(0);
 
-        RuleFor(x => x.ProductId)
-            .GreaterThan(0);
-
-        RuleFor(x => x.ProductName)
-            .NotEmpty()
-            .MaximumLength(200);
-
-        RuleFor(x => x.ProductCode)
-            .NotEmpty()
-            .MaximumLength(50);
-
-        RuleFor(x => x.Quantity)
+        RuleFor(x => x.KaratTypeId)
             .GreaterThan(0);
 
         RuleFor(x => x.Weight)
@@ -142,10 +131,7 @@ public class CreateCustomerPurchaseItemRequestValidator : AbstractValidator<Crea
 {
     public CreateCustomerPurchaseItemRequestValidator()
     {
-        RuleFor(x => x.ProductId)
-            .GreaterThan(0);
-
-        RuleFor(x => x.Quantity)
+        RuleFor(x => x.KaratTypeId)
             .GreaterThan(0);
 
         RuleFor(x => x.Weight)
@@ -161,10 +147,10 @@ public class CreateCustomerPurchaseItemRequestValidator : AbstractValidator<Crea
             .MaximumLength(500)
             .When(x => !string.IsNullOrWhiteSpace(x.Notes));
 
-        // Business rule validation
+        // Business rule validation for gold purchases
         RuleFor(x => x)
-            .Must(x => x.TotalAmount == x.Quantity * x.UnitPrice)
-            .WithMessage("Total amount must equal quantity times unit price");
+            .Must(x => x.TotalAmount == x.Weight * x.UnitPrice)
+            .WithMessage("Total amount must equal weight times unit price");
     }
 }
 

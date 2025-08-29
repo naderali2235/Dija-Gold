@@ -133,8 +133,10 @@ public static class ServiceCollectionExtensions
 
         // Core business services
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+        services.AddScoped<ICustomerPurchaseService, CustomerPurchaseService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IReportService, ReportService>();
 
@@ -155,6 +157,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPricingService, PricingService>();
         services.AddScoped<IReceiptService, ReceiptService>();
         services.AddScoped<ILabelPrintingService, LabelPrintingService>();
+
+        // Raw gold services
+        services.AddScoped<IRawGoldPurchaseOrderService, RawGoldPurchaseOrderService>();
+
+        // Enhanced ownership and costing services
+        services.AddScoped<IOwnershipConsolidationService, OwnershipConsolidationService>();
+        services.AddScoped<IWeightedAverageCostingService, WeightedAverageCostingService>();
 
         return services;
     }

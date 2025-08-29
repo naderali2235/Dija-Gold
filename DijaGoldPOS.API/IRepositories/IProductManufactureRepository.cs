@@ -58,4 +58,9 @@ public interface IProductManufactureRepository : IRepository<ProductManufacture>
     /// Get total consumed weight by purchase order item
     /// </summary>
     Task<decimal> GetTotalConsumedWeightByPurchaseOrderItemAsync(int purchaseOrderItemId);
+
+    /// <summary>
+    /// Get total consumed weight by raw gold purchase order item
+    /// </summary>
+    Task<decimal> GetTotalConsumedWeightByRawGoldItemAsync(int rawGoldPurchaseOrderItemId);
 }

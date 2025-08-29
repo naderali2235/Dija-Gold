@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -231,19 +231,19 @@ export default function Users() {
 
     try {
       const updateUserData: UpdateUserRequest = {
-        Id: selectedUser.Id,
+        Id: selectedUser.id,
         FullName: userForm.fullName,
         Email: userForm.email,
         EmployeeCode: userForm.employeeCode || undefined,
         BranchId: userForm.branchId || undefined,
       };
 
-      await updateUser(selectedUser.Id, updateUserData);
+      await updateUser(selectedUser.id, updateUserData);
       
       // Update roles if changed
-      if (JSON.stringify(userForm.roles.sort()) !== JSON.stringify(selectedUser.Roles.sort())) {
-        await updateUserRoles(selectedUser.Id, {
-          UserId: selectedUser.Id,
+      if (JSON.stringify(userForm.roles.sort()) !== JSON.stringify(selectedUser.roles.sort())) {
+        await updateUserRoles(selectedUser.id, {
+          UserId: selectedUser.id,
           Roles: userForm.roles,
         });
       }
@@ -287,8 +287,8 @@ export default function Users() {
     }
 
     try {
-      await resetUserPassword(selectedUser.Id, {
-        UserId: selectedUser.Id,
+      await resetUserPassword(selectedUser.id, {
+        UserId: selectedUser.id,
         NewPassword: newPassword,
         ForcePasswordChange: true,
       });
@@ -309,8 +309,8 @@ export default function Users() {
     // Fetch user activity and permissions
     try {
       const [activity, permissions] = await Promise.all([
-        fetchUserActivity(user.Id, { pageSize: 10 }),
-        fetchUserPermissions(user.Id),
+        fetchUserActivity(user.id, { pageSize: 10 }),
+        fetchUserPermissions(user.id),
       ]);
       setUserActivity(activity);
       setUserPermissions(permissions);
@@ -325,15 +325,15 @@ export default function Users() {
 
   const populateForm = (user: UserDto) => {
     setUserForm({
-      userName: user.UserName,
-      fullName: user.FullName,
-      email: user.Email,
-      employeeCode: user.EmployeeCode || '',
+      userName: user.userName,
+      fullName: user.fullName,
+      email: user.email ,
+      employeeCode: user.employeeCode || '',
       password: '',
       confirmPassword: '',
-      roles: user.Roles,
-      branchId: user.BranchId || null,
-      isActive: user.IsActive,
+      roles: user.roles,
+      branchId: user.branchId || null,
+      isActive: user.isActive,
     });
   };
 
@@ -449,28 +449,28 @@ export default function Users() {
                 </TableHeader>
                 <TableBody>
                   {usersData.items.map((user) => (
-                    <TableRow key={user.Id}>
+                    <TableRow key={user.id}>
                       <TableCell>
                         <div className="flex items-center space-x-3">
                           <UserIcon className="h-8 w-8 text-muted-foreground" />
                           <div>
-                            <div className="font-medium">{user.FullName}</div>
+                            <div className="font-medium">{user.fullName}</div>
                             <div className="text-sm text-muted-foreground">
-                              @{user.UserName}
+                              @{user.userName}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {user.Email}
+                              {user.email}
                             </div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
-                          {user.Roles.map((role: string) => (
+                          {user.roles.map((role: string) => (
                             <Badge 
                               key={role} 
                               variant="secondary" 
-                              className={getRoleBadgeColor(user.Roles)}
+                              className={getRoleBadgeColor(user.roles)}
                             >
                               {role}
                             </Badge>
@@ -478,19 +478,19 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {user.BranchName || 'No Branch'}
+                        {user.branchName || 'No Branch'}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Switch
-                            checked={user.IsActive}
+                            checked={user.isActive}
                             onCheckedChange={(checked: boolean) => 
-                              handleToggleUserStatus(user.Id, checked)
+                              handleToggleUserStatus(user.id, checked)
                             }
                             disabled={statusLoading}
                           />
                           <span className="text-sm">
-                            {user.IsActive ? (
+                            {user.isActive ? (
                               <span className="flex items-center text-green-600">
                                 <CheckCircle className="h-4 w-4 mr-1" />
                                 Active
@@ -506,7 +506,7 @@ export default function Users() {
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {user.LastLoginAt ? formatDate(user.LastLoginAt) : 'Never'}
+                          {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -715,8 +715,8 @@ export default function Users() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <UserIcon className="h-5 w-5" />
-                {selectedUser.FullName}
-                {!selectedUser.IsActive && (
+                {selectedUser.fullName}
+                {!selectedUser.isActive && (
                   <Badge variant="secondary" className="bg-red-100 text-red-800">
                     Inactive
                   </Badge>
@@ -783,8 +783,8 @@ export default function Users() {
                       </Select>
                     ) : (
                       <div className="flex gap-2">
-                        {selectedUser.Roles.map(role => (
-                          <Badge key={role} variant="secondary" className={getRoleBadgeColor(selectedUser.Roles)}>
+                        {selectedUser.roles.map(role => (
+                          <Badge key={role} variant="secondary" className={getRoleBadgeColor(selectedUser.roles)}>
                             {role}
                           </Badge>
                         ))}
@@ -815,19 +815,19 @@ export default function Users() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input value={selectedUser.BranchName || 'No Branch'} readOnly />
+                      <Input value={selectedUser.branchName || 'No Branch'} readOnly />
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Last Login</Label>
                     <div className="p-2 bg-muted rounded">
-                      {selectedUser.LastLoginAt ? formatDate(selectedUser.LastLoginAt) : 'Never'}
+                      {selectedUser.lastLoginAt ? formatDate(selectedUser.lastLoginAt) : 'Never'}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Account Created</Label>
                     <div className="p-2 bg-muted rounded">
-                      {formatDate(selectedUser.CreatedAt)}
+                      {formatDate(selectedUser.createdAt)}
                     </div>
                   </div>
                 </div>
@@ -904,13 +904,13 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Account Status</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.IsActive ? 'Account is active and can log in' : 'Account is disabled'}
+                        {selectedUser.isActive ? 'Account is active and can log in' : 'Account is disabled'}
                       </p>
                     </div>
                     <Switch
-                      checked={selectedUser.IsActive}
+                      checked={selectedUser.isActive}
                       onCheckedChange={(checked: boolean) => 
-                        handleToggleUserStatus(selectedUser.Id, checked)
+                        handleToggleUserStatus(selectedUser.id, checked)
                       }
                       disabled={statusLoading}
                     />
@@ -920,11 +920,11 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Email Confirmed</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.EmailConfirmed ? 'Email address is verified' : 'Email needs verification'}
+                        {selectedUser.emailConfirmed ? 'Email address is verified' : 'Email needs verification'}
                       </p>
                     </div>
-                    <Badge variant={selectedUser.EmailConfirmed ? "default" : "secondary"}>
-                      {selectedUser.EmailConfirmed ? 'Verified' : 'Unverified'}
+                    <Badge variant={selectedUser.emailConfirmed ? "default" : "secondary"}>
+                      {selectedUser.emailConfirmed ? 'Verified' : 'Unverified'}
                     </Badge>
                   </div>
                   
@@ -932,11 +932,11 @@ export default function Users() {
                     <div>
                       <Label className="text-base font-medium">Account Lockout</Label>
                       <p className="text-sm text-muted-foreground">
-                        {selectedUser.LockoutEnd ? 'Account is temporarily locked' : 'Account is not locked'}
+                        {selectedUser.lockoutEnd ? 'Account is temporarily locked' : 'Account is not locked'}
                       </p>
                     </div>
-                    <Badge variant={selectedUser.LockoutEnd ? "destructive" : "default"}>
-                      {selectedUser.LockoutEnd ? 'Locked' : 'Unlocked'}
+                    <Badge variant={selectedUser.lockoutEnd ? "destructive" : "default"}>
+                      {selectedUser.lockoutEnd ? 'Locked' : 'Unlocked'}
                     </Badge>
                   </div>
                 </div>
@@ -980,7 +980,7 @@ export default function Users() {
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
-              {selectedUser && `Set a new password for ${selectedUser.FullName} (${selectedUser.UserName})`}
+              {selectedUser && `Set a new password for ${selectedUser.fullName} (${selectedUser.userName})`}
             </DialogDescription>
           </DialogHeader>
           

@@ -10,7 +10,7 @@ public class CreateProductManufactureDtoValidator : AbstractValidator<CreateProd
         RuleFor(x => x.ProductId)
             .GreaterThan(0);
 
-        RuleFor(x => x.SourcePurchaseOrderItemId)
+        RuleFor(x => x.SourceRawGoldPurchaseOrderItemId)
             .GreaterThan(0);
 
         RuleFor(x => x.ConsumedWeight)
@@ -44,7 +44,7 @@ public class CreateProductManufactureDtoValidator : AbstractValidator<CreateProd
 
         RuleFor(x => x.TechnicianId)
             .GreaterThan(0)
-            .When(x => x.TechnicianId.HasValue);
+            .When(x => x.TechnicianId != 0);
 
         RuleFor(x => x.Priority)
             .MaximumLength(20)

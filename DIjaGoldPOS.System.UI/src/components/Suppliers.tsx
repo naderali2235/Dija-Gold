@@ -53,6 +53,7 @@ import {
   Building,
   CreditCard,
   ShoppingCart,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
@@ -295,13 +296,31 @@ export default function Suppliers() {
     }
   };
 
+  const canDeleteSupplier = (supplier: SupplierDto) => {
+    // Check if supplier has no transactions and zero balance
+    return supplier.currentBalance === 0 && !supplier.lastTransactionDate;
+  };
+
   const handleDeleteSupplier = async (supplierId: number, supplierName: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${supplierName}?`)) return;
+    const supplier = suppliersData?.items?.find(s => s.id === supplierId);
+    if (!supplier) return;
+
+    if (!canDeleteSupplier(supplier)) {
+      toast.error('Cannot delete supplier with outstanding balance, transactions, or purchase orders');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${supplierName}?\n\nThis action cannot be undone.`)) return;
 
     try {
       await deleteSupplier(supplierId);
       toast.success('Supplier deleted successfully');
       refetchSuppliers();
+      // Close dialog if it's open for this supplier
+      if (selectedSupplier?.id === supplierId) {
+        setSelectedSupplier(null);
+        setIsEditMode(false);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete supplier');
     }
@@ -316,7 +335,7 @@ export default function Suppliers() {
       const [products, balance, transactions, purchaseOrders] = await Promise.all([
         fetchSupplierProducts(supplier.id),
         fetchSupplierBalance(supplier.id),
-        fetchSupplierTransactions(supplier.id, { pageSize: 10 }),
+        fetchSupplierTransactions(supplier.id),
         searchPurchaseOrders({ supplierId: supplier.id }),
       ]);
       setSupplierProducts(products);
@@ -639,20 +658,42 @@ export default function Suppliers() {
                                 <Eye className="h-4 w-4" />
                               </Button>
                               {isManager && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedSupplier(supplier);
-                                    populateForm(supplier);
-                                    setIsEditMode(true);
-                                    // Fetch supplier data for edit mode
-                                    handleViewSupplierDetails(supplier);
-                                  }}
-                                  className="touch-target"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedSupplier(supplier);
+                                      populateForm(supplier);
+                                      setIsEditMode(true);
+                                      // Fetch supplier data for edit mode
+                                      handleViewSupplierDetails(supplier);
+                                    }}
+                                    className="touch-target"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(`/purchase-orders?supplierId=${supplier.id}`, '_blank')}
+                                    className="touch-target bg-blue-50 hover:bg-blue-100"
+                                    title="Create Purchase Order"
+                                  >
+                                    <ShoppingCart className="h-4 w-4" />
+                                  </Button>
+                                  {canDeleteSupplier(supplier) && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDeleteSupplier(supplier.id, supplier.companyName)}
+                                      className="touch-target text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      title="Delete Supplier"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </TableCell>
@@ -962,40 +1003,165 @@ export default function Suppliers() {
           setSelectedSupplier(null);
           setIsEditMode(false);
         }}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {isEditMode ? 'Edit Supplier' : 'Supplier Details'} - SUP-{selectedSupplier.id.toString().padStart(3, '0')}
               </DialogTitle>
             </DialogHeader>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Company Name</Label>
-                <Input
-                  value={supplierForm.companyName}
-                  onChange={(e) => setSupplierForm({...supplierForm, companyName: e.target.value})}
-                  readOnly={!isEditMode}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Contact Person</Label>
-                <Input
-                  value={supplierForm.contactPersonName}
-                  onChange={(e) => setSupplierForm({...supplierForm, contactPersonName: e.target.value})}
-                  readOnly={!isEditMode}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Current Balance</Label>
-                <div className="p-2 bg-muted rounded">
-                  {formatCurrency(selectedSupplier.currentBalance)}
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Company Name *</Label>
+                    <Input
+                      value={supplierForm.companyName}
+                      onChange={(e) => setSupplierForm({...supplierForm, companyName: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contact Person</Label>
+                    <Input
+                      value={supplierForm.contactPersonName}
+                      onChange={(e) => setSupplierForm({...supplierForm, contactPersonName: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input
+                      value={supplierForm.phone}
+                      onChange={(e) => setSupplierForm({...supplierForm, phone: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      value={supplierForm.email}
+                      onChange={(e) => setSupplierForm({...supplierForm, email: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Address</Label>
+                    <Input
+                      value={supplierForm.address}
+                      onChange={(e) => setSupplierForm({...supplierForm, address: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Total Purchases</Label>
-                <div className="p-2 bg-muted rounded">
-                  {formatCurrency(0)}
+
+              {/* Registration Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Registration Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tax Registration Number</Label>
+                    <Input
+                      value={supplierForm.taxRegistrationNumber}
+                      onChange={(e) => setSupplierForm({...supplierForm, taxRegistrationNumber: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Commercial Registration Number</Label>
+                    <Input
+                      value={supplierForm.commercialRegistrationNumber}
+                      onChange={(e) => setSupplierForm({...supplierForm, commercialRegistrationNumber: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Financial Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Current Balance</Label>
+                    <div className="p-2 bg-muted rounded">
+                      <span className={getBalanceColor(selectedSupplier.currentBalance)}>
+                        {formatCurrency(selectedSupplier.currentBalance)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Credit Limit</Label>
+                    <Input
+                      type="number"
+                      value={supplierForm.creditLimit}
+                      onChange={(e) => setSupplierForm({...supplierForm, creditLimit: parseFloat(e.target.value) || 0})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Payment Terms (Days)</Label>
+                    <Input
+                      type="number"
+                      value={supplierForm.paymentTermsDays}
+                      onChange={(e) => setSupplierForm({...supplierForm, paymentTermsDays: parseInt(e.target.value) || 0})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Payment Terms</Label>
+                    <Input
+                      value={supplierForm.paymentTerms}
+                      onChange={(e) => setSupplierForm({...supplierForm, paymentTerms: e.target.value})}
+                      readOnly={!isEditMode}
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="creditLimitEnforced"
+                        checked={supplierForm.creditLimitEnforced}
+                        onChange={(e) => setSupplierForm({...supplierForm, creditLimitEnforced: e.target.checked})}
+                        disabled={!isEditMode}
+                        className="rounded"
+                      />
+                      <Label htmlFor="creditLimitEnforced">Enforce Credit Limit</Label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Additional Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <div className="p-2 bg-muted rounded">
+                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadgeColor(selectedSupplier.isActive)}`}>
+                        {selectedSupplier.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Created Date</Label>
+                    <div className="p-2 bg-muted rounded">
+                      {formatDate(selectedSupplier.createdAt)}
+                    </div>
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Notes</Label>
+                    <Textarea
+                      value={supplierForm.notes}
+                      onChange={(e) => setSupplierForm({...supplierForm, notes: e.target.value})}
+                      readOnly={!isEditMode}
+                      rows={3}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1016,6 +1182,16 @@ export default function Suppliers() {
                 <Button onClick={() => setIsEditMode(true)} className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Supplier
+                </Button>
+              )}
+              {!isEditMode && isManager && canDeleteSupplier(selectedSupplier) && (
+                <Button 
+                  onClick={() => handleDeleteSupplier(selectedSupplier.id, selectedSupplier.companyName)} 
+                  variant="destructive"
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Supplier
                 </Button>
               )}
             </div>

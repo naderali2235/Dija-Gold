@@ -28,109 +28,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { Search, Eye, Filter, Calendar, Package, FileText } from 'lucide-react';
+import { Search, Eye, Filter, Calendar, Package, FileText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatCurrency } from './utils/currency';
-
-// Order interface to match the API
-interface Order {
-  id: number;
-  orderNumber: string;
-  orderType: string;
-  orderDate: string;
-  customerId?: number;
-  customerName?: string;
-  branchId: number;
-  branchName: string;
-  totalAmount: number;
-  orderStatus: string;
-  items: OrderItem[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface OrderItem {
-  id: number;
-  productId: number;
-  productName: string;
-  productCode: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  weight?: number;
-  karatType?: string;
-  categoryType?: string;
-}
+import { usePaginatedOrders, useOrder } from '../hooks/useApi';
+import { OrderDto, OrderItemDto } from '../services/api';
 
 const Orders: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
 
-  // Mock data for now - replace with actual API call
-  useEffect(() => {
-    const mockOrders: Order[] = [
-      {
-        id: 1,
-        orderNumber: 'ORD-001',
-        orderType: 'Sale',
-        orderDate: '2024-01-15',
-        customerId: 1,
-        customerName: 'John Doe',
-        branchId: 1,
-        branchName: 'Main Branch',
-        totalAmount: 2500.00,
-        orderStatus: 'Completed',
-        items: [
-          {
-            id: 1,
-            productId: 1,
-            productName: 'Gold Ring',
-            productCode: 'GR-001',
-            quantity: 1,
-            unitPrice: 2500.00,
-            totalPrice: 2500.00,
-            weight: 5.5,
-            karatType: '22K',
-            categoryType: 'GoldJewelry'
-          }
-        ],
-        createdAt: '2024-01-15T10:00:00Z',
-        updatedAt: '2024-01-15T10:30:00Z'
-      },
-      {
-        id: 2,
-        orderNumber: 'ORD-002',
-        orderType: 'Repair',
-        orderDate: '2024-01-16',
-        customerId: 2,
-        customerName: 'Jane Smith',
-        branchId: 1,
-        branchName: 'Main Branch',
-        totalAmount: 150.00,
-        orderStatus: 'In Progress',
-        items: [],
-        createdAt: '2024-01-16T14:00:00Z',
-        updatedAt: '2024-01-16T14:00:00Z'
-      }
-    ];
-
-    setTimeout(() => {
-      setOrders(mockOrders);
-      setLoading(false);
-    }, 1000);
-  }, []);
-
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || order.orderStatus === filterStatus;
-    const matchesType = filterType === 'all' || order.orderType === filterType;
-    
-    return matchesSearch && matchesStatus && matchesType;
+  // Use paginated orders hook
+  const {
+    data: ordersData,
+    loading: ordersLoading,
+    error: ordersError,
+    params,
+    updateParams,
+    nextPage,
+    prevPage,
+    setPage,
+    hasNextPage,
+    hasPrevPage
+  } = usePaginatedOrders({
+    searchTerm: searchTerm || undefined,
+    orderStatus: filterStatus !== 'all' ? filterStatus : undefined,
+    orderType: filterType !== 'all' ? filterType : undefined
   });
+
+  // Get order details hook
+  const { execute: fetchOrder, loading: orderLoading, error: orderError } = useOrder();
+
+  const handleSearch = () => {
+    updateParams({
+      searchTerm: searchTerm || undefined,
+      orderStatus: filterStatus !== 'all' ? filterStatus : undefined,
+      orderType: filterType !== 'all' ? filterType : undefined,
+      pageNumber: 1
+    });
+  };
+
+  const handleOrderView = async (orderId: number) => {
+    try {
+      const orderDetails = await fetchOrder(orderId);
+      setSelectedOrder(orderDetails);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+    }
+  };
+
+  useEffect(() => {
+    handleSearch();
+  }, [filterStatus, filterType]);
+
+  const orders = ordersData?.items || [];
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -158,13 +110,11 @@ const Orders: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  // Helper function to calculate total amount from order items
+  const calculateTotalAmount = (order: OrderDto): number => {
+    return order.items?.reduce((total, item) => total + (item.totalAmount || 0), 0) || 0;
+  };
+
 
   return (
     <div className="space-y-6">
@@ -232,156 +182,224 @@ const Orders: React.FC = () => {
       {/* Orders Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Orders ({filteredOrders.length})</CardTitle>
-          <CardDescription>
-            {filteredOrders.length === 0 ? 'No orders found' : `Showing ${filteredOrders.length} orders`}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Orders ({ordersData?.totalCount || 0})</CardTitle>
+              <CardDescription>
+                {ordersLoading ? 'Loading orders...' : 
+                 ordersError ? 'Error loading orders' :
+                 orders.length === 0 ? 'No orders found' : 
+                 `Showing ${orders.length} of ${ordersData?.totalCount || 0} orders`}
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSearch}
+              disabled={ordersLoading}
+            >
+              <Search className="mr-2 h-4 w-4" />
+              Search
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          {filteredOrders.length === 0 ? (
+          {ordersError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              Error loading orders: {ordersError}
+            </div>
+          )}
+          
+          {ordersLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading orders...</p>
+            </div>
+          ) : orders.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No orders found matching your criteria</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getTypeIcon(order.orderType)}
-                        {order.orderType}
-                      </div>
-                    </TableCell>
-                    <TableCell>{order.customerName || 'N/A'}</TableCell>
-                    <TableCell>
-                      {new Date(order.orderDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{formatCurrency(order.totalAmount)}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(order.orderStatus)}>
-                        {order.orderStatus}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedOrder(order)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-4xl">
-                          <DialogHeader>
-                            <DialogTitle>Order Details - {order.orderNumber}</DialogTitle>
-                            <DialogDescription>
-                              View complete order information and items
-                            </DialogDescription>
-                          </DialogHeader>
-                          {selectedOrder && (
-                            <div className="space-y-6">
-                              {/* Order Info */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Order Number</Label>
-                                  <p className="font-medium">{selectedOrder.orderNumber}</p>
-                                </div>
-                                <div>
-                                  <Label>Order Type</Label>
-                                  <p className="font-medium">{selectedOrder.orderType}</p>
-                                </div>
-                                <div>
-                                  <Label>Customer</Label>
-                                  <p className="font-medium">{selectedOrder.customerName || 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <Label>Branch</Label>
-                                  <p className="font-medium">{selectedOrder.branchName}</p>
-                                </div>
-                                <div>
-                                  <Label>Order Date</Label>
-                                  <p className="font-medium">
-                                    {new Date(selectedOrder.orderDate).toLocaleDateString()}
-                                  </p>
-                                </div>
-                                <div>
-                                  <Label>Status</Label>
-                                  <Badge className={getStatusColor(selectedOrder.orderStatus)}>
-                                    {selectedOrder.orderStatus}
-                                  </Badge>
-                                </div>
-                              </div>
-
-                              <Separator />
-
-                              {/* Order Items */}
-                              {selectedOrder.items.length > 0 && (
-                                <div>
-                                  <h3 className="text-lg font-semibold mb-4">Order Items</h3>
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>Product</TableHead>
-                                        <TableHead>Code</TableHead>
-                                        <TableHead>Quantity</TableHead>
-                                        <TableHead>Unit Price</TableHead>
-                                        <TableHead>Total</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {selectedOrder.items.map((item) => (
-                                        <TableRow key={item.id}>
-                                          <TableCell>{item.productName}</TableCell>
-                                          <TableCell>{item.productCode}</TableCell>
-                                          <TableCell>{item.quantity}</TableCell>
-                                          <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
-                                          <TableCell>{formatCurrency(item.totalPrice)}</TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              )}
-
-                              <Separator />
-
-                              {/* Order Total */}
-                              <div className="flex justify-end">
-                                <div className="text-right">
-                                  <Label>Total Amount</Label>
-                                  <p className="text-2xl font-bold text-primary">
-                                    {formatCurrency(selectedOrder.totalAmount)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order #</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getTypeIcon(order.orderTypeDescription)}
+                          {order.orderTypeDescription}
+                        </div>
+                      </TableCell>
+                      <TableCell>{order.customerName || 'N/A'}</TableCell>
+                      <TableCell>
+                        {new Date(order.orderDate).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{formatCurrency(calculateTotalAmount(order))}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(order.statusDescription)}>
+                          {order.statusDescription}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOrderView(order.id)}
+                          disabled={orderLoading}
+                        >
+                          {orderLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {/* Pagination Controls */}
+              {ordersData && ordersData.totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Page {ordersData.pageNumber} of {ordersData.totalPages}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={prevPage}
+                      disabled={!hasPrevPage || ordersLoading}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={nextPage}
+                      disabled={!hasNextPage || ordersLoading}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
+      
+      {/* Order Details Dialog */}
+      {selectedOrder && (
+        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Order Details - {selectedOrder.orderNumber}</DialogTitle>
+              <DialogDescription>
+                View complete order information and items
+              </DialogDescription>
+            </DialogHeader>
+            {orderError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {orderError}
+              </div>
+            )}
+            <div className="space-y-6">
+              {/* Order Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Order Number</Label>
+                  <p className="font-medium">{selectedOrder.orderNumber}</p>
+                </div>
+                <div>
+                  <Label>Order Type</Label>
+                  <p className="font-medium">{selectedOrder.orderTypeDescription}</p>
+                </div>
+                <div>
+                  <Label>Customer</Label>
+                  <p className="font-medium">{selectedOrder.customerName || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label>Cashier</Label>
+                  <p className="font-medium">{selectedOrder.cashierName}</p>
+                </div>
+                <div>
+                  <Label>Order Date</Label>
+                  <p className="font-medium">
+                    {new Date(selectedOrder.orderDate).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Badge className={getStatusColor(selectedOrder.statusDescription)}>
+                    {selectedOrder.statusDescription}
+                  </Badge>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Order Items */}
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Order Items</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Unit Price</TableHead>
+                        <TableHead>Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrder.items.map((item: OrderItemDto) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.productName}</TableCell>
+                          <TableCell>{item.productCode}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+                          <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Order Total */}
+              <div className="flex justify-end">
+                <div className="text-right">
+                  <Label>Total Amount</Label>
+                  <p className="text-2xl font-bold text-primary">
+                    {formatCurrency(calculateTotalAmount(selectedOrder))}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

@@ -85,14 +85,8 @@ public class CustomerPurchase : BaseEntity
     public virtual PaymentMethodLookup PaymentMethod { get; set; } = null!;
     
     /// <summary>
-    /// Navigation property to purchase items
+    /// Navigation property to purchase items (gold amounts purchased)
     /// </summary>
     [JsonIgnore]
     public virtual ICollection<CustomerPurchaseItem> CustomerPurchaseItems { get; set; } = new List<CustomerPurchaseItem>();
-    
-    /// <summary>
-    /// Navigation property to product ownership records
-    /// </summary>
-    [JsonIgnore]
-    public virtual ICollection<ProductOwnership> ProductOwnerships { get; set; } = new List<ProductOwnership>();
 }

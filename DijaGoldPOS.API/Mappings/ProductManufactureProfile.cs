@@ -15,8 +15,8 @@ public class ProductManufactureProfile : Profile
         CreateMap<ProductManufacture, ProductManufactureDto>()
             .ForMember(dest => dest.ProductName, opt => opt.MapFrom(src => src.Product.Name))
             .ForMember(dest => dest.ProductCode, opt => opt.MapFrom(src => src.Product.ProductCode))
-            .ForMember(dest => dest.PurchaseOrderNumber, opt => opt.MapFrom(src => src.SourcePurchaseOrderItem.PurchaseOrder.PurchaseOrderNumber))
-            .ForMember(dest => dest.SupplierName, opt => opt.MapFrom(src => src.SourcePurchaseOrderItem.PurchaseOrder.Supplier.CompanyName));
+            .ForMember(dest => dest.PurchaseOrderNumber, opt => opt.MapFrom(src => src.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.PurchaseOrderNumber))
+            .ForMember(dest => dest.SupplierName, opt => opt.MapFrom(src => src.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.Supplier.CompanyName));
 
         // DTO to Entity mappings
         CreateMap<CreateProductManufactureDto, ProductManufacture>();

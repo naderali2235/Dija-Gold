@@ -24,6 +24,7 @@ public class SupplierDto
     public DateTime? LastTransactionDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
+    public bool IsSystemSupplier { get; set; }
 }
 
 /// <summary>

@@ -37,23 +37,32 @@ public class PurchaseOrderService : IPurchaseOrderService
 
     public async Task<PurchaseOrderDto> CreateAsync(CreatePurchaseOrderRequestDto request, string userId)
     {
-        // Validate supplier credit limit before creating purchase order
-        var creditValidation = await _supplierService.ValidateSupplierCreditAsync(request.SupplierId, request.Items.Sum(i => i.UnitCost * i.QuantityOrdered));
-        if (!creditValidation.CanPurchase)
+        // Skip credit validation for system suppliers (DijaGold)
+        var supplier = await _uow.Suppliers.GetByIdAsync(request.SupplierId);
+        if (supplier != null && !supplier.IsSystemSupplier)
         {
-            _logger.LogWarning("Purchase order creation blocked due to credit limit violation. SupplierId: {SupplierId}, Amount: {Amount}",
-                request.SupplierId, request.Items.Sum(i => i.UnitCost * i.QuantityOrdered));
-
-            throw new ValidationException($"Cannot create purchase order: {creditValidation.Message}");
-        }
-
-        // Log credit validation warnings if any
-        if (creditValidation.Warnings.Any())
-        {
-            foreach (var warning in creditValidation.Warnings)
+            // Validate supplier credit limit before creating purchase order
+            var creditValidation = await _supplierService.ValidateSupplierCreditAsync(request.SupplierId, request.Items.Sum(i => i.UnitCost * i.QuantityOrdered));
+            if (!creditValidation.CanPurchase)
             {
-                _logger.LogWarning("Credit validation warning for supplier {SupplierId}: {Warning}", request.SupplierId, warning);
+                _logger.LogWarning("Purchase order creation blocked due to credit limit violation. SupplierId: {SupplierId}, Amount: {Amount}",
+                    request.SupplierId, request.Items.Sum(i => i.UnitCost * i.QuantityOrdered));
+
+                throw new ValidationException($"Cannot create purchase order: {creditValidation.Message}");
             }
+
+            // Log credit validation warnings if any
+            if (creditValidation.Warnings.Any())
+            {
+                foreach (var warning in creditValidation.Warnings)
+                {
+                    _logger.LogWarning("Credit validation warning for supplier {SupplierId}: {Warning}", request.SupplierId, warning);
+                }
+            }
+        }
+        else if (supplier?.IsSystemSupplier == true)
+        {
+            _logger.LogInformation("Skipping credit validation for system supplier {SupplierId}", request.SupplierId);
         }
 
         // Generate PO number: PO-YYYYMMDD-XXXX
@@ -83,8 +92,7 @@ public class PurchaseOrderService : IPurchaseOrderService
                 QuantityOrdered = item.QuantityOrdered,
                 WeightOrdered = item.WeightOrdered,
                 UnitCost = item.UnitCost,
-                LineTotal = lineTotal,
-                Status = "Pending",
+                LineTotal = item.UnitCost * item.QuantityOrdered,
                 Notes = item.Notes
             });
             purchaseOrder.TotalAmount += lineTotal;
@@ -139,46 +147,175 @@ public class PurchaseOrderService : IPurchaseOrderService
 
     public async Task<bool> ReceiveAsync(ReceivePurchaseOrderRequestDto request, string userId)
     {
-        return await _uow.ExecuteInTransactionAsync(async () =>
+        try
         {
-            var po = await _uow.PurchaseOrders.GetWithItemsAsync(request.PurchaseOrderId);
-            if (po == null || po.Status == "Cancelled") return false;
+            _logger.LogInformation("Starting purchase order receipt process. PO ID: {PurchaseOrderId}, User: {UserId}", 
+                request.PurchaseOrderId, userId);
 
-            foreach (var item in request.Items)
+            // Input validation
+            if (request == null)
+                throw new ArgumentNullException(nameof(request), "Receive purchase order request cannot be null");
+            
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            
+            if (request.Items == null || !request.Items.Any())
+                throw new ValidationException("No items provided for receiving");
+
+            return await _uow.ExecuteInTransactionAsync(async () =>
             {
-                var poItem = po.PurchaseOrderItems.FirstOrDefault(i => i.Id == item.PurchaseOrderItemId);
-                if (poItem == null) continue;
+                try
+                {
+                    // Fetch purchase order with items
+                    var po = await _uow.PurchaseOrders.GetWithItemsAsync(request.PurchaseOrderId);
+                    if (po == null)
+                    {
+                        _logger.LogWarning("Purchase order not found. PO ID: {PurchaseOrderId}", request.PurchaseOrderId);
+                        throw new InvalidOperationException($"Purchase order with ID {request.PurchaseOrderId} not found");
+                    }
 
-                // Update purchase order item received quantities
-                poItem.QuantityReceived += item.QuantityReceived;
-                poItem.WeightReceived += item.WeightReceived;
-                poItem.Status = poItem.QuantityReceived >= poItem.QuantityOrdered ? "Received" : "Pending";
+                    if (po.Status == "Cancelled")
+                    {
+                        _logger.LogWarning("Cannot receive cancelled purchase order. PO: {PurchaseOrderNumber}", po.PurchaseOrderNumber);
+                        throw new InvalidOperationException($"Cannot receive cancelled purchase order {po.PurchaseOrderNumber}");
+                    }
 
-                // Update inventory for this item
-                await UpdateInventoryForReceivedItem(poItem, item, po.BranchId, userId);
+                    if (po.Status == "Completed")
+                    {
+                        _logger.LogWarning("Purchase order already completed. PO: {PurchaseOrderNumber}", po.PurchaseOrderNumber);
+                        throw new InvalidOperationException($"Purchase order {po.PurchaseOrderNumber} is already completed");
+                    }
 
-                // Create ownership restriction for this item (with no payment recorded)
-                await CreateOwnershipRestrictionForReceivedItem(poItem, item, po, userId);
-            }
+                    // Fetch supplier once for efficiency
+                    var supplier = await _uow.Suppliers.GetByIdAsync(po.SupplierId);
+                    if (supplier == null)
+                    {
+                        _logger.LogError("Supplier not found for purchase order. Supplier ID: {SupplierId}, PO: {PurchaseOrderNumber}", 
+                            po.SupplierId, po.PurchaseOrderNumber);
+                        throw new InvalidOperationException($"Supplier not found for purchase order {po.PurchaseOrderNumber}");
+                    }
 
-            if (po.PurchaseOrderItems.All(i => i.Status == "Received"))
-            {
-                po.Status = "Received";
-                po.ActualDeliveryDate = DateTime.UtcNow;
-            }
+                    var processedItems = 0;
+                    var errors = new List<string>();
 
-            await _uow.SaveChangesAsync();
+                    // Process each received item
+                    foreach (var item in request.Items)
+                    {
+                        try
+                        {
+                            // Validate received item
+                            if (item.QuantityReceived < 0 || item.WeightReceived < 0)
+                            {
+                                errors.Add($"Invalid received quantities for item {item.PurchaseOrderItemId}");
+                                continue;
+                            }
 
-            await _auditService.LogAsync(userId, "RECEIVE_PURCHASE_ORDER", nameof(PurchaseOrder), po.Id.ToString(),
-                $"Received items for PO {po.PurchaseOrderNumber}");
+                            var poItem = po.PurchaseOrderItems.FirstOrDefault(i => i.Id == item.PurchaseOrderItemId);
+                            if (poItem == null)
+                            {
+                                errors.Add($"Purchase order item not found: {item.PurchaseOrderItemId}");
+                                continue;
+                            }
 
-            return true;
-        });
+                            // Validate received quantities don't exceed ordered quantities
+                            if (poItem.QuantityReceived + item.QuantityReceived > poItem.QuantityOrdered)
+                            {
+                                errors.Add($"Received quantity ({poItem.QuantityReceived + item.QuantityReceived}) exceeds ordered quantity ({poItem.QuantityOrdered}) for item {item.PurchaseOrderItemId}");
+                                continue;
+                            }
+
+                            // Update purchase order item received quantities
+                            poItem.QuantityReceived += item.QuantityReceived;
+                            poItem.WeightReceived += item.WeightReceived;
+                            poItem.Status = poItem.QuantityReceived >= poItem.QuantityOrdered ? "Received" : "Pending";
+
+                            // Prepare inventory updates for this item
+                            var (inventory, movement) = await PrepareInventoryUpdatesForReceivedItem(poItem, item, po.BranchId, userId);
+
+                            // Prepare ownership based on supplier type
+                            ProductOwnership ownership;
+                            if (supplier.IsSystemSupplier)
+                            {
+                                // For system supplier (DijaGold), purchases go directly to company balance
+                                ownership = await PrepareSystemSupplierOwnership(poItem, item, po, userId);
+                            }
+                            else
+                            {
+                                // Create ownership restriction for this item (with no payment recorded)
+                                ownership = await PrepareOwnershipRestrictionForReceivedItem(poItem, item, po, userId);
+                            }
+
+                            processedItems++;
+                            _logger.LogDebug("Successfully processed item {ItemId} for PO {PurchaseOrderNumber}", 
+                                item.PurchaseOrderItemId, po.PurchaseOrderNumber);
+                        }
+                        catch (Exception itemEx)
+                        {
+                            _logger.LogError(itemEx, "Error processing item {ItemId} for PO {PurchaseOrderNumber}", 
+                                item.PurchaseOrderItemId, po.PurchaseOrderNumber);
+                            errors.Add($"Error processing item {item.PurchaseOrderItemId}: {itemEx.Message}");
+                        }
+                    }
+
+                    // Check if any items were processed successfully
+                    if (processedItems == 0)
+                    {
+                        var errorMessage = errors.Any() 
+                            ? $"Failed to process any items: {string.Join("; ", errors)}"
+                            : "No valid items found to process";
+                        
+                        _logger.LogError("No items were successfully processed for PO {PurchaseOrderNumber}. Errors: {Errors}", 
+                            po.PurchaseOrderNumber, string.Join("; ", errors));
+                        throw new InvalidOperationException(errorMessage);
+                    }
+
+                    // Log warnings for any failed items
+                    if (errors.Any())
+                    {
+                        _logger.LogWarning("Some items failed to process for PO {PurchaseOrderNumber}. Errors: {Errors}", 
+                            po.PurchaseOrderNumber, string.Join("; ", errors));
+                    }
+
+                    // Update purchase order status if all items are received
+                    if (po.PurchaseOrderItems.All(i => i.Status == "Received"))
+                    {
+                        po.Status = "Received";
+                        po.ActualDeliveryDate = DateTime.UtcNow;
+                        _logger.LogInformation("Purchase order fully received. PO: {PurchaseOrderNumber}", po.PurchaseOrderNumber);
+                    }
+
+                    // Save all changes within the transaction
+                    await _uow.SaveChangesAsync();
+
+                    // Log successful completion
+                    await _auditService.LogAsync(userId, "RECEIVE_PURCHASE_ORDER", nameof(PurchaseOrder), po.Id.ToString(),
+                        $"Received {processedItems} items for PO {po.PurchaseOrderNumber}. Status: {po.Status}");
+
+                    _logger.LogInformation("Successfully completed purchase order receipt. PO: {PurchaseOrderNumber}, Items processed: {ProcessedItems}", 
+                        po.PurchaseOrderNumber, processedItems);
+
+                    return true;
+                }
+                catch (Exception transactionEx)
+                {
+                    _logger.LogError(transactionEx, "Error occurred during purchase order receipt transaction. PO ID: {PurchaseOrderId}", 
+                        request.PurchaseOrderId);
+                    throw; // Re-throw to trigger transaction rollback
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to receive purchase order. PO ID: {PurchaseOrderId}, User: {UserId}", 
+                request.PurchaseOrderId, userId);
+            throw; // Re-throw with original exception details
+        }
     }
 
-    private async Task UpdateInventoryForReceivedItem(PurchaseOrderItem poItem, ReceivePurchaseOrderItemDto receivedItem, int branchId, string userId)
+    private async Task<(Inventory inventory, InventoryMovement movement)> PrepareInventoryUpdatesForReceivedItem(
+        PurchaseOrderItem poItem, ReceivePurchaseOrderItemDto receivedItem, int branchId, string userId)
     {
-        _logger.LogInformation("Updating inventory for received item. ProductId: {ProductId}, BranchId: {BranchId}, Quantity: {Quantity}, Weight: {Weight}", 
+        _logger.LogInformation("Preparing inventory updates for received item. ProductId: {ProductId}, BranchId: {BranchId}, Quantity: {Quantity}, Weight: {Weight}", 
             poItem.ProductId, branchId, receivedItem.QuantityReceived, receivedItem.WeightReceived);
             
         // Get or create inventory record
@@ -200,6 +337,7 @@ public class PurchaseOrderService : IPurchaseOrderService
             };
             
             await _uow.Inventory.AddAsync(inventory);
+            _logger.LogInformation("Prepared new inventory record for product {ProductId}", poItem.ProductId);
         }
         else
         {
@@ -207,12 +345,15 @@ public class PurchaseOrderService : IPurchaseOrderService
             inventory.QuantityOnHand += receivedItem.QuantityReceived;
             inventory.WeightOnHand += receivedItem.WeightReceived;
             _uow.Inventory.Update(inventory);
+            
+            _logger.LogInformation("Updated existing inventory for product {ProductId}. New quantity: {Quantity}, New weight: {Weight}", 
+                poItem.ProductId, inventory.QuantityOnHand, inventory.WeightOnHand);
         }
 
-        // Create inventory movement record
+        // Prepare inventory movement record
         var movement = new InventoryMovement
         {
-            InventoryId = inventory.Id,
+            Inventory = inventory, // Use navigation property instead of ID
             MovementType = "Purchase Order Receipt",
             QuantityChange = receivedItem.QuantityReceived,
             WeightChange = receivedItem.WeightReceived,
@@ -227,33 +368,21 @@ public class PurchaseOrderService : IPurchaseOrderService
 
         await _uow.InventoryMovements.AddAsync(movement);
         
-        _logger.LogInformation("Successfully updated inventory for product {ProductId}. New quantity: {Quantity}, New weight: {Weight}", 
-            poItem.ProductId, inventory.QuantityOnHand, inventory.WeightOnHand);
+        _logger.LogInformation("Prepared inventory movement record. Movement type: {MovementType}, Reference: {ReferenceNumber}", 
+            movement.MovementType, movement.ReferenceNumber);
+        
+        return (inventory, movement);
     }
 
-    private async Task CreateOwnershipRestrictionForReceivedItem(PurchaseOrderItem poItem, ReceivePurchaseOrderItemDto receivedItem, PurchaseOrder po, string userId)
+    private async Task<ProductOwnership> PrepareOwnershipRestrictionForReceivedItem(
+        PurchaseOrderItem poItem, ReceivePurchaseOrderItemDto receivedItem, PurchaseOrder po, string userId)
     {
-        _logger.LogInformation("Creating ownership restriction for received item. ProductId: {ProductId}, BranchId: {BranchId}, PO: {POId}", 
+        _logger.LogInformation("Preparing ownership restriction for received item. ProductId: {ProductId}, BranchId: {BranchId}, PO: {POId}", 
             poItem.ProductId, po.BranchId, po.Id);
             
         // Calculate the total cost for the received quantity
         var receivedCost = (receivedItem.QuantityReceived / poItem.QuantityOrdered) * poItem.LineTotal;
         
-        // Create ownership restriction with no payment recorded
-        var ownershipRequest = new ProductOwnershipRequest
-        {
-            ProductId = poItem.ProductId,
-            BranchId = po.BranchId,
-            SupplierId = po.SupplierId,
-            PurchaseOrderId = po.Id,
-            TotalQuantity = receivedItem.QuantityReceived,
-            TotalWeight = receivedItem.WeightReceived,
-            OwnedQuantity = 0, // No ownership until payment is made
-            OwnedWeight = 0,   // No ownership until payment is made
-            TotalCost = receivedCost,
-            AmountPaid = 0     // No payment recorded
-        };
-
         // Check if ownership record already exists for this PO item
         var existingOwnerships = await _uow.ProductOwnership.GetByProductAndBranchAsync(poItem.ProductId, po.BranchId);
         var existingOwnership = existingOwnerships.FirstOrDefault(o => 
@@ -274,6 +403,11 @@ public class PurchaseOrderService : IPurchaseOrderService
             existingOwnership.ModifiedBy = userId;
             
             _uow.ProductOwnership.Update(existingOwnership);
+            
+            _logger.LogInformation("Updated existing ownership restriction for product {ProductId}. Total cost: {TotalCost}", 
+                poItem.ProductId, existingOwnership.TotalCost);
+            
+            return existingOwnership;
         }
         else
         {
@@ -298,10 +432,46 @@ public class PurchaseOrderService : IPurchaseOrderService
             };
             
             await _uow.ProductOwnership.AddAsync(ownership);
+            
+            _logger.LogInformation("Prepared new ownership restriction for product {ProductId}. Total cost: {TotalCost}", 
+                poItem.ProductId, receivedCost);
+            
+            return ownership;
         }
+    }
+
+    private async Task<ProductOwnership> PrepareSystemSupplierOwnership(
+        PurchaseOrderItem poItem, ReceivePurchaseOrderItemDto receivedItem, PurchaseOrder po, string userId)
+    {
+        _logger.LogInformation("Preparing system supplier ownership. ProductId: {ProductId}, BranchId: {BranchId}", 
+            poItem.ProductId, po.BranchId);
+            
+        // For system supplier, create full ownership immediately
+        var ownership = new ProductOwnership
+        {
+            ProductId = poItem.ProductId,
+            BranchId = po.BranchId,
+            SupplierId = po.SupplierId,
+            PurchaseOrderId = po.Id,
+            TotalQuantity = receivedItem.QuantityReceived,
+            TotalWeight = receivedItem.WeightReceived,
+            OwnedQuantity = receivedItem.QuantityReceived, // Full ownership immediately
+            OwnedWeight = receivedItem.WeightReceived,     // Full ownership immediately
+            TotalCost = poItem.UnitCost * receivedItem.QuantityReceived,
+            AmountPaid = poItem.UnitCost * receivedItem.QuantityReceived, // Fully paid immediately
+            OutstandingAmount = 0, // No outstanding amount for system supplier
+            OwnershipPercentage = 100, // 100% ownership
+            IsActive = true,
+            CreatedBy = userId,
+            ModifiedBy = userId,
+            Notes = "System supplier purchase - full ownership granted immediately"
+        };
         
-        _logger.LogInformation("Successfully created ownership restriction for product {ProductId}. Total cost: {TotalCost}, Outstanding: {Outstanding}", 
-            poItem.ProductId, receivedCost, receivedCost);
+        await _uow.ProductOwnership.AddAsync(ownership);
+        
+        _logger.LogInformation("Prepared full ownership record for system supplier product {ProductId}", poItem.ProductId);
+        
+        return ownership;
     }
 
     public async Task<PurchaseOrderDto> UpdateAsync(int id, UpdatePurchaseOrderRequestDto request, string userId)
@@ -490,6 +660,13 @@ public class PurchaseOrderService : IPurchaseOrderService
             var po = await _uow.PurchaseOrders.GetWithItemsAsync(request.PurchaseOrderId);
             if (po == null)
                 return new PurchaseOrderPaymentResult { IsSuccess = false, ErrorMessage = "Purchase order not found" };
+
+            // Check if this is a system supplier
+            var supplier = await _uow.Suppliers.GetByIdAsync(po.SupplierId);
+            if (supplier?.IsSystemSupplier == true)
+            {
+                return new PurchaseOrderPaymentResult { IsSuccess = false, ErrorMessage = "Cannot process payments for system supplier. System supplier purchases are automatically fully owned." };
+            }
 
             if (request.PaymentAmount <= 0)
                 return new PurchaseOrderPaymentResult { IsSuccess = false, ErrorMessage = "Payment amount must be greater than zero" };
@@ -692,5 +869,3 @@ public class PurchaseOrderService : IPurchaseOrderService
         };
     }
 }
-
-

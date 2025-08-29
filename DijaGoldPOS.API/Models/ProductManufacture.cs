@@ -1,4 +1,3 @@
-
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
@@ -12,8 +11,12 @@ public class ProductManufacture : BaseEntity
     /// <summary>
     /// The finished product that was manufactured
     /// </summary>
-
     public int ProductId { get; set; }
+    
+    /// <summary>
+    /// Number of pieces produced in this manufacturing batch
+    /// </summary>
+    public int QuantityProduced { get; set; } = 1;
 
     /// <summary>
     /// Branch where the manufacturing is performed
@@ -28,13 +31,13 @@ public class ProductManufacture : BaseEntity
     public int TechnicianId { get; set; }
     
     /// <summary>
-    /// The purchase order item (raw gold) that was used to manufacture this product
+    /// The raw gold purchase order item that was used to manufacture this product
     /// </summary>
 
-    public int SourcePurchaseOrderItemId { get; set; }
+    public int SourceRawGoldPurchaseOrderItemId { get; set; }
 
     /// <summary>
-    /// Additional purchase order item reference (nullable)
+    /// Additional purchase order item reference (nullable) - for regular purchase orders
     /// </summary>
     public int? PurchaseOrderItemId { get; set; }
     
@@ -181,13 +184,13 @@ public class ProductManufacture : BaseEntity
     public virtual Product Product { get; set; } = null!;
     
     /// <summary>
-    /// Navigation property to the source purchase order item (raw gold)
+    /// Navigation property to the source raw gold purchase order item
     /// </summary>
     [JsonIgnore]
-    public virtual PurchaseOrderItem SourcePurchaseOrderItem { get; set; } = null!;
+    public virtual RawGoldPurchaseOrderItem SourceRawGoldPurchaseOrderItem { get; set; } = null!;
 
     /// <summary>
-    /// Navigation property to the additional purchase order item reference
+    /// Navigation property to the additional purchase order item reference (for regular purchase orders)
     /// </summary>
     [JsonIgnore]
     public virtual PurchaseOrderItem? PurchaseOrderItem { get; set; }
@@ -203,4 +206,10 @@ public class ProductManufacture : BaseEntity
     /// </summary>
     [JsonIgnore]
     public virtual Technician Technician { get; set; } = null!;
+
+    /// <summary>
+    /// Navigation property to raw materials used in this manufacturing operation
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<ProductManufactureRawMaterial> RawMaterials { get; set; } = new List<ProductManufactureRawMaterial>();
 }

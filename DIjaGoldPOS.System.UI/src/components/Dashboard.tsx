@@ -129,6 +129,13 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     return 'sale';
   };
 
+  // Fetch gold rates immediately when component mounts
+  React.useEffect(() => {
+    fetchRates().catch(error => {
+      console.error('Failed to fetch gold rates on dashboard mount:', error);
+    });
+  }, [fetchRates]);
+
   // Fetch dashboard data on component mount
   React.useEffect(() => {
     const fetchDashboardData = async () => {
@@ -144,9 +151,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         
         // Fetch transaction types lookup data
         await fetchTransactionTypes();
-        
-        // Fetch gold rates
-        await fetchRates();
         
         // Fetch daily sales summary
         const dailySales = await fetchDailySalesSummary(branchId, today);

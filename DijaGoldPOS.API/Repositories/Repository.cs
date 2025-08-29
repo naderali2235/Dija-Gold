@@ -225,6 +225,15 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     }
 
     /// <summary>
+    /// Update entity asynchronously
+    /// </summary>
+    public async Task<T> UpdateAsync(T entity)
+    {
+        _dbSet.Update(entity);
+        return await Task.FromResult(entity);
+    }
+
+    /// <summary>
     /// Update multiple entities
     /// </summary>
     public void UpdateRange(IEnumerable<T> entities)

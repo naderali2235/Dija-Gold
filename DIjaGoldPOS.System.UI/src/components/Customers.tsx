@@ -909,11 +909,11 @@ export default function Customers() {
                     onClick={() => fetchCustomerTransactions(selectedCustomer.id)}
                     disabled={ordersLoading}
                   >
-                                         {ordersLoading ? (
-                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                     ) : (
-                       <Calendar className="mr-2 h-4 w-4" />
-                     )}
+                    {ordersLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Calendar className="mr-2 h-4 w-4" />
+                    )}
                     Refresh Orders
                   </Button>
                 </div>
@@ -924,9 +924,10 @@ export default function Customers() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Order #</TableHead>
-                        <TableHead>Items</TableHead>
+                        <TableHead>Order Type</TableHead>
                         <TableHead>Total Amount</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Branch</TableHead>
+                        <TableHead>Cashier</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -934,15 +935,16 @@ export default function Customers() {
                         <TableRow key={order.orderId}>
                           <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
                           <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                          <TableCell>{order.items?.length || 0} items</TableCell>
+                          <TableCell>
+                            <Badge variant="default" className="bg-blue-100 text-blue-800">
+                              {order.orderType || 'Sale'}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="font-semibold">
                             {formatCurrency(order.totalAmount)}
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="bg-green-100 text-green-800">
-                              {order.status || 'Completed'}
-                            </Badge>
-                          </TableCell>
+                          <TableCell>{order.branchName || 'N/A'}</TableCell>
+                          <TableCell>{order.cashierName || 'N/A'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

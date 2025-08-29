@@ -5,6 +5,16 @@
 
 import { API_CONFIG, STORAGE_KEYS } from '../config/environment';
 import { EnumLookupDto } from '../types/lookups';
+import {
+  ConsolidationResult,
+  ConsolidationOpportunity,
+  WeightedAverageCost,
+  WeightedAverageCostResult,
+  ProductManufactureRawMaterial,
+  ProductCostAnalysis,
+  FifoCostResult,
+  LifoCostResult
+} from '../types/ownership';
 
 // Base API configuration
 const API_BASE_URL = `${API_CONFIG.BASE_URL}/api`;
@@ -39,7 +49,7 @@ export interface ApiResponse<T = any> {
 // Test API connectivity
 export const testApiConnection = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await fetch(`${API_BASE_URL}/health/simple`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -209,6 +219,151 @@ export const authApi = {
     }
     
     throw new Error(response.message || 'Failed to get debug user information');
+  }
+};
+
+// Customer Purchase API
+export const customerPurchaseApi = {
+  async createPurchase(request: CreateCustomerPurchaseRequest): Promise<CustomerPurchaseDto> {
+    const response = await apiRequest<CustomerPurchaseDto>('/customerpurchase', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to create customer purchase');
+  },
+
+  async getPurchase(id: number): Promise<CustomerPurchaseDto> {
+    const response = await apiRequest<CustomerPurchaseDto>(`/customerpurchase/${id}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch customer purchase');
+  },
+
+  async getPurchaseByNumber(purchaseNumber: string): Promise<CustomerPurchaseDto> {
+    const response = await apiRequest<CustomerPurchaseDto>(`/customerpurchase/by-number/${purchaseNumber}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch customer purchase');
+  },
+
+  async searchPurchases(params: CustomerPurchaseSearchRequest = {}): Promise<{
+    items: CustomerPurchaseDto[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+
+    const response = await apiRequest<{
+      items: CustomerPurchaseDto[];
+      totalCount: number;
+      pageNumber: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/customerpurchase?${queryString}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to search customer purchases');
+  },
+
+  async getPurchasesByCustomer(customerId: number): Promise<CustomerPurchaseDto[]> {
+    const response = await apiRequest<CustomerPurchaseDto[]>(`/customerpurchase/by-customer/${customerId}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch customer purchases');
+  },
+
+  async getPurchasesByBranch(branchId: number): Promise<CustomerPurchaseDto[]> {
+    const response = await apiRequest<CustomerPurchaseDto[]>(`/customerpurchase/by-branch/${branchId}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch branch purchases');
+  },
+
+  async getPurchasesByDateRange(fromDate: string, toDate: string): Promise<CustomerPurchaseDto[]> {
+    const queryString = new URLSearchParams({
+      fromDate,
+      toDate
+    }).toString();
+
+    const response = await apiRequest<CustomerPurchaseDto[]>(`/customerpurchase/by-date-range?${queryString}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch purchases by date range');
+  },
+
+  async updatePaymentStatus(purchaseId: number, amountPaid: number): Promise<CustomerPurchaseDto> {
+    const response = await apiRequest<CustomerPurchaseDto>(`/customerpurchase/${purchaseId}/payment`, {
+      method: 'PUT',
+      body: JSON.stringify({ amountPaid }),
+    });
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to update payment status');
+  },
+
+  async cancelPurchase(purchaseId: number): Promise<boolean> {
+    const response = await apiRequest<boolean>(`/customerpurchase/${purchaseId}`, {
+      method: 'DELETE',
+    });
+
+    if (response.success) {
+      return true;
+    }
+
+    throw new Error(response.message || 'Failed to cancel purchase');
+  },
+
+  async getPurchaseSummary(fromDate: string, toDate: string, branchId?: number): Promise<CustomerPurchaseSummaryDto> {
+    const params: Record<string, string> = {
+      fromDate,
+      toDate
+    };
+
+    if (branchId) {
+      params.branchId = branchId.toString();
+    }
+
+    const queryString = new URLSearchParams(params).toString();
+
+    const response = await apiRequest<CustomerPurchaseSummaryDto>(`/customerpurchase/summary?${queryString}`);
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to fetch purchase summary');
   }
 };
 
@@ -595,20 +750,20 @@ export const pricingApi = {
 
 // User Management API interfaces
 export interface UserDto {
-  Id: string;
-  UserName: string;
-  FullName: string;
-  Email: string;
-  EmployeeCode?: string;
-  Roles: string[];
-  BranchId?: number;
-  BranchName?: string;
-  IsActive: boolean;
-  CreatedAt: string;
-  LastLoginAt?: string;
-  EmailConfirmed: boolean;
-  LockoutEnabled: boolean;
-  LockoutEnd?: string;
+  id: string;
+  userName: string;
+  fullName: string;
+  email: string;
+  employeeCode?: string;
+  roles: string[];
+  branchId?: number;
+  branchName?: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+  emailConfirmed: boolean;
+  lockoutEnabled: boolean;
+  lockoutEnd?: string;
 }
 
 export interface CreateUserRequest {
@@ -1601,6 +1756,42 @@ export const purchaseOrdersApi = {
     if (!response.success) {
       throw new Error(response.message || 'Failed to receive purchase order');
     }
+  },
+
+  async updatePurchaseOrder(id: number, request: UpdatePurchaseOrderRequest): Promise<PurchaseOrderDto> {
+    const response = await apiRequest<PurchaseOrderDto>(`/purchaseorders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update purchase order');
+  },
+
+  async updatePurchaseOrderStatus(id: number, request: UpdatePurchaseOrderStatusRequest): Promise<PurchaseOrderDto> {
+    const response = await apiRequest<PurchaseOrderDto>(`/purchaseorders/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update purchase order status');
+  },
+
+  async getStatusTransitions(id: number): Promise<PurchaseOrderStatusTransitionDto> {
+    const response = await apiRequest<PurchaseOrderStatusTransitionDto>(`/purchaseorders/${id}/status-transitions`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get status transitions');
   }
 };
 
@@ -2161,6 +2352,7 @@ export interface PurchaseOrderDto {
   terms?: string;
   notes?: string;
   items: PurchaseOrderItemDto[];
+  availableStatuses: string[]; // Available status transitions
 }
 
 export interface PurchaseOrderItemDto {
@@ -2176,6 +2368,8 @@ export interface PurchaseOrderItemDto {
   lineTotal: number;
   status: string;
   notes?: string;
+  isReceived: boolean; // Helper property for frontend
+  canEdit: boolean; // Helper property to determine if item can be edited
 }
 
 export interface CreatePurchaseOrderRequest {
@@ -2215,6 +2409,35 @@ export interface PurchaseOrderSearchRequest {
   toDate?: string;
   pageNumber?: number;
   pageSize?: number;
+}
+
+export interface UpdatePurchaseOrderRequest {
+  supplierId: number;
+  branchId: number;
+  expectedDeliveryDate?: string;
+  terms?: string;
+  notes?: string;
+  items: UpdatePurchaseOrderItemRequest[];
+}
+
+export interface UpdatePurchaseOrderItemRequest {
+  id?: number; // null for new items, existing ID for updates
+  productId: number;
+  quantityOrdered: number;
+  weightOrdered: number;
+  unitCost: number;
+  notes?: string;
+}
+
+export interface UpdatePurchaseOrderStatusRequest {
+  newStatus: string;
+  statusNotes?: string;
+}
+
+export interface PurchaseOrderStatusTransitionDto {
+  currentStatus: string;
+  availableTransitions: string[];
+  validationMessage?: string;
 }
 
 // Labels/Printing Management API interfaces
@@ -3276,6 +3499,79 @@ export interface TechnicianSearchRequestDto {
 
 
 
+// Customer Purchase API interfaces
+export interface CustomerPurchaseDto {
+  id: number;
+  purchaseNumber: string;
+  customerId: number;
+  customerName: string;
+  branchId: number;
+  branchName: string;
+  purchaseDate: string;
+  totalAmount: number;
+  amountPaid: number;
+  paymentMethodId: number;
+  paymentMethodName: string;
+  notes?: string;
+  createdByUserId: string;
+  createdAt: string;
+  items: CustomerPurchaseItemDto[];
+}
+
+export interface CustomerPurchaseItemDto {
+  id: number;
+  customerPurchaseId: number;
+  karatTypeId: number;
+  karatTypeName: string;
+  weight: number;
+  unitPrice: number;
+  totalAmount: number;
+  notes?: string;
+}
+
+export interface CreateCustomerPurchaseRequest {
+  customerId: number;
+  branchId: number;
+  totalAmount: number;
+  amountPaid: number;
+  paymentMethodId: number;
+  notes?: string;
+  items: CreateCustomerPurchaseItemRequest[];
+}
+
+export interface CreateCustomerPurchaseItemRequest {
+  karatTypeId: number;
+  weight: number;
+  unitPrice: number;
+  totalAmount: number;
+  notes?: string;
+}
+
+export interface CustomerPurchaseSearchRequest {
+  purchaseNumber?: string;
+  customerId?: number;
+  branchId?: number;
+  fromDate?: string;
+  toDate?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface CustomerPurchaseSummaryDto {
+  totalPurchases: number;
+  totalCustomers: number;
+  totalWeight: number;
+  totalAmount: number;
+  totalAmountPaid: number;
+  totalOutstanding: number;
+  fromDate: string;
+  toDate: string;
+}
+
+export interface UpdatePaymentRequest {
+  amountPaid: number;
+}
+
 // Customers API
 export const customersApi = {
   async getCustomers(params: CustomerSearchRequest = {}): Promise<PagedResult<Customer>> {
@@ -4035,6 +4331,743 @@ export const mapStatusStringToId = (status: string): number => {
   }
 };
 
+// Product Manufacturing DTOs
+export interface ProductManufactureDto {
+  id: number;
+  productId: number;
+  productName: string;
+  productCode: string;
+  sourceRawGoldPurchaseOrderItemId: number;
+  purchaseOrderNumber: string;
+  supplierName: string;
+  consumedWeight: number;
+  wastageWeight: number;
+  manufacturingCostPerGram: number;
+  totalManufacturingCost: number;
+  batchNumber: string;
+  manufacturingNotes: string;
+  status: string;
+  workflowStep: string;
+  priority: string;
+  qualityCheckStatus?: string;
+  qualityCheckedByUserId?: string;
+  qualityCheckDate?: string;
+  qualityCheckNotes?: string;
+  finalApprovalStatus?: string;
+  finalApprovedByUserId?: string;
+  finalApprovalDate?: string;
+  finalApprovalNotes?: string;
+  rejectionReason?: string;
+  estimatedCompletionDate?: string;
+  actualCompletionDate?: string;
+  efficiencyRating?: number;
+  branchId: number;
+  branchName: string;
+  technicianId: number;
+  technicianName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateProductManufactureDto {
+  ProductId: number;
+  QuantityToProduce: number;
+  SourceRawGoldPurchaseOrderItemId: number;
+  ConsumedWeight: number;
+  WastageWeight: number;
+  ManufacturingCostPerGram: number;
+  TotalManufacturingCost: number;
+  BatchNumber: string;
+  ManufacturingNotes: string;
+  Status: string;
+  BranchId: number;
+  TechnicianId?: number;
+  Priority: string;
+  EstimatedCompletionDate?: string;
+}
+
+export interface UpdateProductManufactureDto {
+  manufacturingCost?: number;
+  laborCost?: number;
+  overheadCost?: number;
+  batchNumber?: string;
+  notes?: string;
+}
+
+export interface WorkflowTransitionDto {
+  TargetStatus: string;
+  Notes?: string;
+}
+
+export interface QualityCheckDto {
+  Passed: boolean;
+  Notes?: string;
+}
+
+export interface FinalApprovalDto {
+  Approved: boolean;
+  Notes?: string;
+}
+
+export interface ProductManufactureSummaryDto {
+  productId: number;
+  productName: string;
+  totalRecords: number;
+  totalCost: number;
+  averageCost: number;
+  completedRecords: number;
+  inProgressRecords: number;
+}
+
+export interface ManufacturingWorkflowHistory {
+  id: number;
+  productManufactureId: number;
+  fromStatus: string;
+  toStatus: string;
+  notes?: string;
+  changedBy: string;
+  changedAt: string;
+}
+
+// Manufacturing Reports DTOs
+export interface ManufacturingDashboardDto {
+  Summary: {
+    TotalRawGoldPurchased: number;
+    TotalRawGoldConsumed: number;
+    TotalWastage: number;
+    TotalProductsManufactured: number;
+    RawGoldUtilizationRate: number;
+    OverallCompletionRate: number;
+    TotalManufacturingCost: number;
+    TotalRawGoldCost: number;
+    AverageCostPerGram: number;
+    ApprovalRate: number;
+    QualityPassRate: number;
+  };
+  RawGoldUtilization: RawGoldUtilizationReportDto;
+  Efficiency: EfficiencyReportDto;
+  CostAnalysis: CostAnalysisReportDto;
+  WorkflowPerformance: WorkflowPerformanceReportDto;
+}
+
+export interface RawGoldUtilizationReportDto {
+  TotalRawGoldPurchased: number;
+  TotalRawGoldConsumed: number;
+  TotalWastage: number;
+  RawGoldUtilizationRate: number;
+  TotalProductsManufactured: number;
+  SupplierBreakdown: {
+    SupplierName: string;
+    TotalWeight: number;
+    ConsumedWeight: number;
+    Wastage: number;
+  }[];
+}
+
+export interface EfficiencyReportDto {
+  OverallCompletionRate: number;
+  AverageCompletionTime: number;
+  TechnicianPerformance: {
+    TechnicianName: string;
+    CompletedItems: number;
+    AverageTime: number;
+    Efficiency: number;
+  }[];
+  MonthlyTrend: {
+    Month: string;
+    CompletionRate: number;
+  }[];
+}
+
+export interface CostAnalysisReportDto {
+  TotalManufacturingCost: number;
+  TotalRawGoldCost: number;
+  AverageCostPerGram: number;
+  CostBreakdown: {
+    Category: string;
+    Amount: number;
+    Percentage: number;
+  }[];
+  ProductCostAnalysis: {
+    ProductName: string;
+    Units: number;
+    TotalCost: number;
+    CostPerUnit: number;
+  }[];
+}
+
+export interface WorkflowPerformanceReportDto {
+  ApprovalRate: number;
+  QualityPassRate: number;
+  AverageProcessingTime: number;
+  WorkflowStages: {
+    Stage: string;
+    Count: number;
+    AverageTime: number;
+  }[];
+  Bottlenecks: {
+    Stage: string;
+    Delay: number;
+    Impact: string;
+  }[];
+}
+
+// Product Manufacturing API
+const productManufactureApi = {
+  async getAllManufacturingRecords(): Promise<ProductManufactureDto[]> {
+    const response = await apiRequest<ProductManufactureDto[]>('/ProductManufacture');
+    
+    // The API returns the array directly, not wrapped in a response object
+    if (Array.isArray(response)) {
+      return response;
+    }
+    
+    throw new Error('Failed to fetch manufacturing records');
+  },
+
+  async getManufacturingRecord(id: number): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>(`/ProductManufacture/${id}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch manufacturing record');
+  },
+
+  async createManufacturingRecord(data: CreateProductManufactureDto): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>('/ProductManufacture', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    
+    // The API returns the object directly, not wrapped in a response object
+    return response as unknown as ProductManufactureDto;
+  },
+
+  async updateManufacturingRecord(id: number, data: UpdateProductManufactureDto): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>(`/ProductManufacture/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update manufacturing record');
+  },
+
+  async deleteManufacturingRecord(id: number): Promise<boolean> {
+    const response = await apiRequest<void>(`/ProductManufacture/${id}`, {
+      method: 'DELETE',
+    });
+    
+    return response.success;
+  },
+
+  async getManufacturingRecordsByProduct(productId: number): Promise<ProductManufactureDto[]> {
+    const response = await apiRequest<ProductManufactureDto[]>(`/ProductManufacture/product/${productId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch manufacturing records for product');
+  },
+
+  async getManufacturingSummary(productId: number): Promise<ProductManufactureSummaryDto> {
+    const response = await apiRequest<ProductManufactureSummaryDto>(`/ProductManufacture/product/${productId}/summary`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch manufacturing summary');
+  },
+
+  async getManufacturingRecordsByBatch(batchNumber: string): Promise<ProductManufactureDto[]> {
+    const response = await apiRequest<ProductManufactureDto[]>(`/ProductManufacture/batch/${encodeURIComponent(batchNumber)}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch manufacturing records for batch');
+  },
+
+  async getAvailableRawGoldItems(): Promise<any[]> {
+    const response = await apiRequest<any[]>('/ProductManufacture/available-raw-gold');
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch available raw gold items');
+  },
+
+  async getRemainingWeight(purchaseOrderItemId: number): Promise<number> {
+    const response = await apiRequest<number>(`/ProductManufacture/purchase-order-item/${purchaseOrderItemId}/remaining-weight`);
+    
+    if (response.success && response.data !== undefined) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch remaining weight');
+  },
+
+  async checkSufficientWeight(purchaseOrderItemId: number, requiredWeight: number): Promise<boolean> {
+    const response = await apiRequest<boolean>(`/ProductManufacture/purchase-order-item/${purchaseOrderItemId}/check-weight?requiredWeight=${requiredWeight}`);
+    
+    if (response.success && response.data !== undefined) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to check sufficient weight');
+  },
+
+  async transitionWorkflow(id: number, data: WorkflowTransitionDto): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>(`/ProductManufacture/${id}/transition`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to transition workflow');
+  },
+
+  async performQualityCheck(id: number, data: QualityCheckDto): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>(`/ProductManufacture/${id}/quality-check`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to perform quality check');
+  },
+
+  async performFinalApproval(id: number, data: FinalApprovalDto): Promise<ProductManufactureDto> {
+    const response = await apiRequest<ProductManufactureDto>(`/ProductManufacture/${id}/final-approval`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to perform final approval');
+  },
+
+  async getWorkflowHistory(id: number): Promise<ManufacturingWorkflowHistory[]> {
+    const response = await apiRequest<ManufacturingWorkflowHistory[]>(`/ProductManufacture/${id}/workflow-history`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch workflow history');
+  },
+
+  async getAvailableTransitions(id: number): Promise<string[]> {
+    const response = await apiRequest<string[]>(`/ProductManufacture/${id}/available-transitions`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch available transitions');
+  },
+
+  // Manufacturing Reports API endpoints
+  async getManufacturingDashboard(startDate?: string, endDate?: string): Promise<ManufacturingDashboardDto> {
+    let url = '/ManufacturingReports/dashboard';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiRequest<ManufacturingDashboardDto>(url);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch manufacturing dashboard');
+  },
+
+  async getRawGoldUtilizationReport(startDate?: string, endDate?: string): Promise<RawGoldUtilizationReportDto> {
+    let url = '/ManufacturingReports/raw-gold-utilization';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiRequest<RawGoldUtilizationReportDto>(url);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch raw gold utilization report');
+  },
+
+  async getEfficiencyReport(startDate?: string, endDate?: string): Promise<EfficiencyReportDto> {
+    let url = '/ManufacturingReports/efficiency';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiRequest<EfficiencyReportDto>(url);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch efficiency report');
+  },
+
+  async getCostAnalysisReport(startDate?: string, endDate?: string): Promise<CostAnalysisReportDto> {
+    let url = '/ManufacturingReports/cost-analysis';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiRequest<CostAnalysisReportDto>(url);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch cost analysis report');
+  },
+
+  async getWorkflowPerformanceReport(startDate?: string, endDate?: string): Promise<WorkflowPerformanceReportDto> {
+    let url = '/ManufacturingReports/workflow-performance';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiRequest<WorkflowPerformanceReportDto>(url);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch workflow performance report');
+  }
+};
+
+// Ownership Consolidation API
+export const ownershipConsolidationApi = {
+  async consolidateOwnership(data: { productId: number; supplierId: number; branchId: number }): Promise<ConsolidationResult> {
+    const response = await apiRequest<ConsolidationResult>('/ownershipconsolidation/consolidate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to consolidate ownership');
+  },
+
+  async consolidateSupplierOwnership(supplierId: number, branchId: number): Promise<ConsolidationResult[]> {
+    const response = await apiRequest<ConsolidationResult[]>(`/ownershipconsolidation/consolidate-supplier/${supplierId}?branchId=${branchId}`, {
+      method: 'POST',
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to consolidate supplier ownership');
+  },
+
+  async getConsolidationOpportunities(branchId: number): Promise<ConsolidationOpportunity[]> {
+    const response = await apiRequest<ConsolidationOpportunity[]>(`/ownershipconsolidation/opportunities?branchId=${branchId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch consolidation opportunities');
+  },
+
+  async calculateWeightedAverageCost(ownershipIds: number[]): Promise<WeightedAverageCost> {
+    const response = await apiRequest<WeightedAverageCost>('/ownershipconsolidation/weighted-average-cost', {
+      method: 'POST',
+      body: JSON.stringify(ownershipIds),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to calculate weighted average cost');
+  }
+};
+
+// Raw Gold Purchase Orders API
+export const rawGoldPurchaseOrdersApi = {
+  async createRawGoldPurchaseOrder(request: any): Promise<any> {
+    const response = await apiRequest<any>('/RawGoldPurchaseOrders', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    // Handle both wrapped and direct responses
+    if (response.success && response.data) {
+      return response.data;
+    } else if (response && typeof response === 'object' && !response.success) {
+      return response;
+    }
+    
+    throw new Error(response.message || 'Failed to create raw gold purchase order');
+  },
+
+  async getRawGoldPurchaseOrders(params: any = {}): Promise<any> {
+    const queryString = new URLSearchParams(
+      Object.entries(params)
+        .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+        .map(([key, value]) => [key, String(value)])
+    ).toString();
+    
+    const url = `/RawGoldPurchaseOrders${queryString ? `?${queryString}` : ''}`;
+    const response = await apiRequest<any>(url);
+    
+    // Handle both wrapped and direct responses
+    if (response.success && response.data) {
+      return response.data;
+    } else if (Array.isArray(response)) {
+      return response;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch raw gold purchase orders');
+  },
+
+  async getRawGoldPurchaseOrderById(id: number): Promise<any> {
+    const response = await apiRequest<any>(`/RawGoldPurchaseOrders/${id}`);
+    
+    // Handle both wrapped and direct responses
+    if (response.success && response.data) {
+      return response.data;
+    } else if (response && typeof response === 'object' && !response.success) {
+      return response;
+    }
+    
+    throw new Error(response.message || 'Failed to fetch raw gold purchase order');
+  },
+
+  async updateRawGoldPurchaseOrder(id: number, request: any): Promise<any> {
+    const response = await apiRequest<any>(`/RawGoldPurchaseOrders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.success) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to update raw gold purchase order');
+  },
+
+  async updateRawGoldPurchaseOrderStatus(id: number, request: any): Promise<any> {
+    const response = await apiRequest<any>(`/RawGoldPurchaseOrders/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update raw gold purchase order status');
+  },
+
+  async receiveRawGoldPurchaseOrder(id: number, request: any): Promise<any> {
+    const response = await apiRequest<any>(`/RawGoldPurchaseOrders/${id}/receive`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to receive raw gold purchase order');
+  }
+};
+
+// Weighted Average Costing API
+export const weightedAverageCostingApi = {
+  async calculateProductWeightedAverageCost(productId: number, branchId: number): Promise<WeightedAverageCostResult> {
+    const response = await apiRequest<WeightedAverageCostResult>(`/weightedaveragecosting/product/${productId}/weighted-average?branchId=${branchId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to calculate product weighted average cost');
+  },
+
+  async calculateManufacturingWeightedCost(rawMaterials: ProductManufactureRawMaterial[]): Promise<WeightedAverageCostResult> {
+    const response = await apiRequest<WeightedAverageCostResult>('/weightedaveragecosting/manufacturing/weighted-cost', {
+      method: 'POST',
+      body: JSON.stringify(rawMaterials),
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to calculate manufacturing weighted cost');
+  },
+
+  async updateProductCostWithWeightedAverage(productId: number, branchId: number): Promise<{ success: boolean; message: string }> {
+    const response = await apiRequest<{ success: boolean; message: string }>(`/weightedaveragecosting/product/${productId}/update-cost?branchId=${branchId}`, {
+      method: 'PUT',
+    });
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to update product cost');
+  },
+
+  async getProductCostAnalysis(productId: number, branchId: number): Promise<ProductCostAnalysis> {
+    const response = await apiRequest<ProductCostAnalysis>(`/weightedaveragecosting/product/${productId}/cost-analysis?branchId=${branchId}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to get product cost analysis');
+  },
+
+  async calculateFifoCost(productId: number, branchId: number, requestedQuantity: number = 1): Promise<FifoCostResult> {
+    const response = await apiRequest<FifoCostResult>(`/weightedaveragecosting/product/${productId}/fifo-cost?branchId=${branchId}&requestedQuantity=${requestedQuantity}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to calculate FIFO cost');
+  },
+
+  async calculateLifoCost(productId: number, branchId: number, requestedQuantity: number = 1): Promise<LifoCostResult> {
+    const response = await apiRequest<LifoCostResult>(`/weightedaveragecosting/product/${productId}/lifo-cost?branchId=${branchId}&requestedQuantity=${requestedQuantity}`);
+    
+    if (response.success && response.data) {
+      return response.data;
+    }
+    
+    throw new Error(response.message || 'Failed to calculate LIFO cost');
+  }
+};
+
+// Manufacturing Reports API
+const manufacturingReportsApi = {
+  // Manufacturing Reports API endpoints
+  async getManufacturingDashboard(startDate?: string, endDate?: string): Promise<ManufacturingDashboardDto> {
+    let url = '/ManufacturingReports/dashboard';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const response = await apiRequest<ManufacturingDashboardDto>(url);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to fetch manufacturing dashboard');
+  },
+
+  async getRawGoldUtilizationReport(startDate?: string, endDate?: string): Promise<RawGoldUtilizationReportDto> {
+    let url = '/ManufacturingReports/raw-gold-utilization';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const response = await apiRequest<RawGoldUtilizationReportDto>(url);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to fetch raw gold utilization report');
+  },
+
+  async getEfficiencyReport(startDate?: string, endDate?: string): Promise<EfficiencyReportDto> {
+    let url = '/ManufacturingReports/efficiency';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const response = await apiRequest<EfficiencyReportDto>(url);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to fetch efficiency report');
+  },
+
+  async getCostAnalysisReport(startDate?: string, endDate?: string): Promise<CostAnalysisReportDto> {
+    let url = '/ManufacturingReports/cost-analysis';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const response = await apiRequest<CostAnalysisReportDto>(url);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to fetch cost analysis report');
+  },
+
+  async getWorkflowPerformanceReport(startDate?: string, endDate?: string): Promise<WorkflowPerformanceReportDto> {
+    let url = '/ManufacturingReports/workflow-performance';
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const response = await apiRequest<WorkflowPerformanceReportDto>(url);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Failed to fetch workflow performance report');
+  },
+};
+
 export default {
   auth: authApi,
   products: productsApi,
@@ -4045,8 +5078,10 @@ export default {
   inventory: inventoryApi,
   reports: reportsApi,
   purchaseOrders: purchaseOrdersApi,
+  rawGoldPurchaseOrders: rawGoldPurchaseOrdersApi,
   labels: labelsApi,
   customers: customersApi,
+  customerPurchase: customerPurchaseApi,
   lookups: lookupsApi,
   repairJobs: repairJobsApi,
   technicians: techniciansApi,
@@ -4054,4 +5089,8 @@ export default {
   financialTransactions: financialTransactionsApi,
   productOwnership: productOwnershipApi,
   cashDrawer: cashDrawerApi,
+  productManufacture: productManufactureApi,
+  manufacturingReports: manufacturingReportsApi,
+  ownershipConsolidation: ownershipConsolidationApi,
+  weightedAverageCosting: weightedAverageCostingApi,
 };

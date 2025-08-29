@@ -31,6 +31,8 @@ import {
   Bell,
   Wallet,
   Shield,
+  Coins,
+  Merge,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import DijaLogo, { DijaLogoWithText } from './DijaLogo';
@@ -92,6 +94,19 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       badge: null,
       managerOnly: true,
     },
+    {
+      title: 'Ownership Consolidation',
+      icon: Merge,
+      id: 'ownership-consolidation',
+      badge: null,
+      managerOnly: true,
+    },
+    {
+      title: 'Product Manufacture',
+      icon: Wrench,
+      id: 'product-manufacture',
+      badge: null,
+    },
   ];
 
   const managementItems = [
@@ -99,6 +114,12 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       title: 'Customers',
       icon: Users,
       id: 'customers',
+      badge: null,
+    },
+    {
+      title: 'Customer Purchases',
+      icon: Coins,
+      id: 'customer-purchases',
       badge: null,
     },
     {
@@ -127,6 +148,12 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       title: 'Reports',
       icon: FileText,
       id: 'reports',
+      managerOnly: true,
+    },
+    {
+      title: 'Manufacturing Reports',
+      icon: BarChart3,
+      id: 'manufacturing-reports',
       managerOnly: true,
     },
     {

@@ -92,6 +92,11 @@ public class Supplier : BaseEntity
     public DateTime? LastTransactionDate { get; set; }
     
     /// <summary>
+    /// Indicates if this is a system supplier that cannot be deleted (e.g., DijaGold itself)
+    /// </summary>
+    public bool IsSystemSupplier { get; set; } = false;
+    
+    /// <summary>
     /// Alias for ContactPersonName for compatibility
     /// </summary>
     public string? ContactPerson => ContactPersonName;
@@ -124,4 +129,10 @@ public class Supplier : BaseEntity
     /// </summary>
     [JsonIgnore]
     public virtual ICollection<ProductOwnership> ProductOwnerships { get; set; } = new List<ProductOwnership>();
+
+    /// <summary>
+    /// Navigation property to raw gold purchase orders from this supplier
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<RawGoldPurchaseOrder> RawGoldPurchaseOrders { get; set; } = new List<RawGoldPurchaseOrder>();
 }

@@ -114,6 +114,12 @@ public class Product : BaseEntity
     public decimal? UnitPrice { get; set; }
 
     /// <summary>
+    /// Cost price of the product (for weighted average costing)
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal CostPrice { get; set; }
+
+    /// <summary>
     /// Supplier ID (if purchased from supplier)
     /// </summary>
     public int? SupplierId { get; set; }

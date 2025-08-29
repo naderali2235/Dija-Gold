@@ -10,7 +10,11 @@ import Technicians from './components/Technicians';
 import Products from './components/Products';
 import Inventory from './components/Inventory';
 import ProductOwnership from './components/ProductOwnership';
+import OwnershipConsolidation from './components/OwnershipConsolidation';
+import ProductManufacture from './components/ProductManufacture';
+import ManufacturingReports from './components/ManufacturingReports';
 import Customers from './components/Customers';
+import CustomerPurchase from './components/CustomerPurchase';
 import Suppliers from './components/Suppliers';
 import PurchaseOrders from './components/PurchaseOrders';
 import Reports from './components/Reports';
@@ -64,14 +68,22 @@ function AppContent() {
         return <Inventory />;
       case 'product-ownership':
         return <ProductOwnership />;
+      case 'ownership-consolidation':
+        return <OwnershipConsolidation />;
+      case 'product-manufacture':
+        return <ProductManufacture />;
       case 'customers':
         return <Customers />;
+      case 'customer-purchases':
+        return <CustomerPurchase />;
       case 'suppliers':
         return <Suppliers />;
       case 'purchase-orders':
         return <PurchaseOrders />;
       case 'reports':
         return <Reports />;
+      case 'manufacturing-reports':
+        return <ManufacturingReports />;
       case 'cash-drawer':
         return <CashDrawer />;
       case 'users':

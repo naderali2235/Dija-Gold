@@ -26,6 +26,14 @@ import api, {
 } from '../services/api';
 import { EnumLookupDto } from '../types/lookups';
 
+// Customer Purchase types
+import {
+  CustomerPurchaseDto,
+  CustomerPurchaseSearchRequest,
+  CustomerPurchaseSummaryDto,
+  CreateCustomerPurchaseRequest
+} from '../services/api';
+
 // Generic hook for API state management
 export interface ApiState<T> {
   data: T | null;
@@ -344,7 +352,27 @@ export function usePaginatedApi<T>(
     totalPages: number;
   }>,
   initialParams: any = {}
-) {
+): {
+  data: {
+    items: T[];
+    totalCount: number;
+    pageNumber: number;
+    pageSize: number;
+    totalPages: number;
+    hasNextPage?: boolean;
+    hasPrevPage?: boolean;
+  } | null;
+  loading: boolean;
+  error: string | null;
+  params: any;
+  fetchData: (newParams?: any) => Promise<any>;
+  updateParams: (newParams: any) => void;
+  nextPage: () => void;
+  prevPage: () => void;
+  setPage: (page: number) => void;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+} {
   const [state, { setData, setLoading, setError }] = useApiState<{
     items: T[];
     totalCount: number;
@@ -457,6 +485,72 @@ export function usePaginatedCustomers(initialParams: any = {}) {
     pageNumber: 1,
     pageSize: 20,
     isActive: true,
+    ...initialParams
+  });
+}
+
+// Customer Purchase hooks
+export function useCreateCustomerPurchase() {
+  return useApiCall<CustomerPurchaseDto, [CreateCustomerPurchaseRequest]>(api.customerPurchase.createPurchase);
+}
+
+export function useCustomerPurchase() {
+  return useApiCall<CustomerPurchaseDto, [number]>(api.customerPurchase.getPurchase);
+}
+
+export function useCustomerPurchaseByNumber() {
+  return useApiCall<CustomerPurchaseDto, [string]>(api.customerPurchase.getPurchaseByNumber);
+}
+
+export function useUpdateCustomerPurchasePayment() {
+  return useApiCall<CustomerPurchaseDto, [number, number]>((purchaseId: number, amountPaid: number) =>
+    api.customerPurchase.updatePaymentStatus(purchaseId, amountPaid));
+}
+
+export function useCancelCustomerPurchase() {
+  return useApiCall<boolean, [number]>(api.customerPurchase.cancelPurchase);
+}
+
+export function useCustomerPurchaseSummary() {
+  const [cache, setCache] = useState<{[key: string]: CustomerPurchaseSummaryDto}>({});
+
+  const apiFunction = useCallback(async (fromDate: string, toDate: string, branchId?: number) => {
+    const cacheKey = `${fromDate}-${toDate}-${branchId || 'all'}`;
+
+    // Check cache first
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
+    }
+
+    const result = await api.customerPurchase.getPurchaseSummary(fromDate, toDate, branchId);
+
+    // Cache the result
+    setCache(prev => ({ ...prev, [cacheKey]: result }));
+
+    return result;
+  }, [cache]);
+
+  return useApiCall<CustomerPurchaseSummaryDto, [string, string, number?]>(apiFunction);
+}
+
+export function useCustomerPurchases() {
+  return useApiCall<CustomerPurchaseDto[], [number]>(api.customerPurchase.getPurchasesByCustomer);
+}
+
+export function useBranchPurchases() {
+  return useApiCall<CustomerPurchaseDto[], [number]>(api.customerPurchase.getPurchasesByBranch);
+}
+
+export function usePurchasesByDateRange() {
+  return useApiCall<CustomerPurchaseDto[], [string, string]>((fromDate: string, toDate: string) =>
+    api.customerPurchase.getPurchasesByDateRange(fromDate, toDate));
+}
+
+// Specialized Customer Purchase hook with pagination
+export function usePaginatedCustomerPurchases(initialParams: CustomerPurchaseSearchRequest = {}) {
+  return usePaginatedApi(api.customerPurchase.searchPurchases, {
+    pageNumber: 1,
+    pageSize: 20,
     ...initialParams
   });
 }
@@ -838,6 +932,31 @@ export function useReceivePurchaseOrder() {
   return useApiCall(api.purchaseOrders.receivePurchaseOrder);
 }
 
+export function useUpdatePurchaseOrderStatus() {
+  return useApiCall(api.purchaseOrders.updatePurchaseOrderStatus);
+}
+
+// Raw Gold Purchase Orders hooks
+export function useCreateRawGoldPurchaseOrder() {
+  return useApiCall(api.rawGoldPurchaseOrders.createRawGoldPurchaseOrder);
+}
+
+export function useRawGoldPurchaseOrders() {
+  return useApiCall(api.rawGoldPurchaseOrders.getRawGoldPurchaseOrders);
+}
+
+export function useRawGoldPurchaseOrder() {
+  return useApiCall(api.rawGoldPurchaseOrders.getRawGoldPurchaseOrderById);
+}
+
+export function useUpdateRawGoldPurchaseOrderStatus() {
+  return useApiCall(api.rawGoldPurchaseOrders.updateRawGoldPurchaseOrderStatus);
+}
+
+export function useReceiveRawGoldPurchaseOrder() {
+  return useApiCall(api.rawGoldPurchaseOrders.receiveRawGoldPurchaseOrder);
+}
+
 // Orders hooks (new architecture)
 export function useCreateSaleOrder() {
   return useApiCall(api.orders.createSaleOrder);
@@ -853,6 +972,26 @@ export function useOrder() {
 
 export function useSearchOrders() {
   return useApiCall(api.orders.searchOrders);
+}
+
+// Specialized Orders hook with pagination
+export function usePaginatedOrders(initialParams: any = {}) {
+  const wrapperFunction = async (params: any) => {
+    const result = await api.orders.searchOrders(params);
+    return {
+      items: result.items,
+      totalCount: result.totalCount,
+      pageNumber: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
+    };
+  };
+  
+  return usePaginatedApi(wrapperFunction, {
+    pageNumber: 1,
+    pageSize: 20,
+    ...initialParams
+  });
 }
 
 export function useOrderSummary() {
@@ -892,6 +1031,92 @@ export function useGenerateBrowserReceipt() {
   return useApiCall(api.financialTransactions.generateBrowserReceipt);
 }
 
+// Product Manufacturing hooks
+export function useProductManufacturingRecords() {
+  return useApiCall(api.productManufacture.getAllManufacturingRecords);
+}
+
+export function useProductManufacturingRecord() {
+  return useApiCall(api.productManufacture.getManufacturingRecord);
+}
+
+export function useCreateProductManufacturingRecord() {
+  return useApiCall(api.productManufacture.createManufacturingRecord);
+}
+
+export function useUpdateProductManufacturingRecord() {
+  return useApiCall(api.productManufacture.updateManufacturingRecord);
+}
+
+export function useDeleteProductManufacturingRecord() {
+  return useApiCall(api.productManufacture.deleteManufacturingRecord);
+}
+
+export function useProductManufacturingRecordsByProduct() {
+  return useApiCall(api.productManufacture.getManufacturingRecordsByProduct);
+}
+
+export function useProductManufacturingSummary() {
+  return useApiCall(api.productManufacture.getManufacturingSummary);
+}
+
+export function useProductManufacturingRecordsByBatch() {
+  return useApiCall(api.productManufacture.getManufacturingRecordsByBatch);
+}
+
+export function useAvailableRawGoldItems() {
+  return useApiCall(api.productManufacture.getAvailableRawGoldItems);
+}
+
+export function useRemainingWeight() {
+  return useApiCall(api.productManufacture.getRemainingWeight);
+}
+
+export function useCheckSufficientWeight() {
+  return useApiCall(api.productManufacture.checkSufficientWeight);
+}
+
+export function useTransitionWorkflow() {
+  return useApiCall(api.productManufacture.transitionWorkflow);
+}
+
+export function usePerformQualityCheck() {
+  return useApiCall(api.productManufacture.performQualityCheck);
+}
+
+export function usePerformFinalApproval() {
+  return useApiCall(api.productManufacture.performFinalApproval);
+}
+
+export function useWorkflowHistory() {
+  return useApiCall(api.productManufacture.getWorkflowHistory);
+}
+
+export function useAvailableTransitions() {
+  return useApiCall(api.productManufacture.getAvailableTransitions);
+}
+
+// Manufacturing Reports Hooks
+export function useManufacturingDashboard() {
+  return useApiCall(api.productManufacture.getManufacturingDashboard);
+}
+
+export function useRawGoldUtilizationReport() {
+  return useApiCall(api.productManufacture.getRawGoldUtilizationReport);
+}
+
+export function useEfficiencyReport() {
+  return useApiCall(api.productManufacture.getEfficiencyReport);
+}
+
+export function useCostAnalysisReport() {
+  return useApiCall(api.productManufacture.getCostAnalysisReport);
+}
+
+export function useWorkflowPerformanceReport() {
+  return useApiCall(api.productManufacture.getWorkflowPerformanceReport);
+}
+
 export default {
   useApiState,
   useApiCall,
@@ -913,6 +1138,7 @@ export default {
   useCustomerOrders,
   useCashierOrders,
   useUpdateOrder,
+  usePaginatedOrders,
   useFinancialTransaction,
   useSearchFinancialTransactions,
   useVoidFinancialTransaction,
@@ -932,6 +1158,17 @@ export default {
   useUpdateCustomerLoyalty,
   useSearchCustomers,
   usePaginatedCustomers,
+  // Customer Purchase hooks
+  useCreateCustomerPurchase,
+  useCustomerPurchase,
+  useCustomerPurchaseByNumber,
+  useUpdateCustomerPurchasePayment,
+  useCancelCustomerPurchase,
+  useCustomerPurchaseSummary,
+  useCustomerPurchases,
+  useBranchPurchases,
+  usePurchasesByDateRange,
+  usePaginatedCustomerPurchases,
   useUsers,
   useUser,
   useCreateUser,
@@ -1014,6 +1251,29 @@ export default {
   // Technicians hooks
   useActiveTechnicians,
   useTechnician,
+  // Product Manufacturing hooks
+  useProductManufacturingRecords,
+  useProductManufacturingRecord,
+  useCreateProductManufacturingRecord,
+  useUpdateProductManufacturingRecord,
+  useDeleteProductManufacturingRecord,
+  useProductManufacturingRecordsByProduct,
+  useProductManufacturingSummary,
+  useProductManufacturingRecordsByBatch,
+  useAvailableRawGoldItems,
+  useRemainingWeight,
+  useCheckSufficientWeight,
+  useTransitionWorkflow,
+  usePerformQualityCheck,
+  usePerformFinalApproval,
+  useWorkflowHistory,
+  useAvailableTransitions,
+  // Manufacturing Reports hooks
+  useManufacturingDashboard,
+  useRawGoldUtilizationReport,
+  useEfficiencyReport,
+  useCostAnalysisReport,
+  useWorkflowPerformanceReport,
   useCreateTechnician,
   useUpdateTechnician,
   useDeleteTechnician,

@@ -7,6 +7,7 @@ import { Badge } from '../ui/badge';
 import { DollarSign, TrendingUp, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../utils/currency';
 import { useGoldRates, useMakingCharges, useTaxConfigurations, useProductCategoryTypes, useChargeTypes } from '../../hooks/useApi';
+import { lookupsApi } from '../../services/api';
 import { GoldRate, MakingCharges, TaxConfigurationDto } from '../../services/api';
 import { LookupHelper } from '../../types/lookups';
 import { GoldRatesDisplay, transformGoldRates, GoldRatesMap } from '../shared/GoldRatesDisplay';
@@ -67,30 +68,45 @@ export function PricingSettings({
   // Making charges form state
   const [isMakingChargesDialogOpen, setIsMakingChargesDialogOpen] = React.useState(false);
   const [editingCharge, setEditingCharge] = React.useState<MakingCharges | null>(null);
+  
+  // Subcategory state
+  const [subCategoriesData, setSubCategoriesData] = React.useState<any[]>([]);
+  const [subCategoriesLoading, setSubCategoriesLoading] = React.useState(false);
+  
+  // Function to fetch subcategories based on category
+  const fetchSubCategories = React.useCallback(async (categoryId: number) => {
+    try {
+      setSubCategoriesLoading(true);
+      const subcategories = await lookupsApi.getSubCategories(categoryId);
+      setSubCategoriesData(subcategories);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubCategoriesData([]);
+    } finally {
+      setSubCategoriesLoading(false);
+    }
+  }, []);
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateLocal = (date: Date) => {
-    return date.getFullYear() + '-' + 
-      String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(date.getDate()).padStart(2, '0');
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
   };
 
   const [makingChargesForm, setMakingChargesForm] = React.useState({
     name: '',
-    productCategory: 1, // GoldJewelry default
-    subCategory: '',
-    chargeType: 1, // Percentage default
+    productCategory: 1,
+    subCategoryId: '',
+    chargeType: 1,
     chargeValue: '',
     effectiveFrom: formatDateLocal(new Date()),
   });
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  
-  // Tax configuration form state
+
   const [isTaxConfigDialogOpen, setIsTaxConfigDialogOpen] = React.useState(false);
   const [editingTaxConfig, setEditingTaxConfig] = React.useState<TaxConfigurationDto | null>(null);
   const [taxConfigForm, setTaxConfigForm] = React.useState({
     taxName: '',
     taxCode: '',
-    taxType: 1, // Percentage default
+    taxType: 1,
     taxRate: '',
     isMandatory: true,
     effectiveFrom: formatDateLocal(new Date()),
@@ -98,45 +114,43 @@ export function PricingSettings({
   });
   const [isTaxSubmitting, setIsTaxSubmitting] = React.useState(false);
   
-  // Sync API data with local state when API data changes
+  // Fetch subcategories when category changes
+  React.useEffect(() => {
+    if (makingChargesForm.productCategory) {
+      fetchSubCategories(makingChargesForm.productCategory);
+    }
+  }, [makingChargesForm.productCategory, fetchSubCategories]);
+
   React.useEffect(() => {
     if (goldRatesData && goldRatesData.length > 0) {
       const transformedRates = transformGoldRates(goldRatesData);
-      // Only update rates that haven't been manually edited by the user
       Object.entries(transformedRates).forEach(([karat, rate]) => {
         if (!manuallyEditedRates.has(karat)) {
           onGoldRateChange(karat, rate);
         }
       });
     }
-  }, [goldRatesData, manuallyEditedRates]); // Removed karatTypesData dependency since we use fixed headers
+  }, [goldRatesData, manuallyEditedRates]);
 
-  // Track the reset trigger value to avoid dependency on function reference
   const resetTriggerValue = onResetManuallyEdited ? onResetManuallyEdited() : 0;
-  
-  // Refresh rates from database when requested (after save)
+
   React.useEffect(() => {
     if (resetTriggerValue > 0) {
-      // Clear manually edited state to allow fresh data from API
       setManuallyEditedRates(new Set());
-      // Fetch fresh data from API
       fetchRates();
     }
   }, [resetTriggerValue, fetchRates]);
 
-  // Handle gold rate changes
   const handleGoldRateChange = (karat: string, value: string) => {
-    // Mark this rate as manually edited by the user
     setManuallyEditedRates(prev => new Set(prev).add(karat));
     onGoldRateChange(karat, value);
   };
 
-  // Making charges form handlers
   const resetMakingChargesForm = () => {
     setMakingChargesForm({
       name: '',
       productCategory: 1,
-      subCategory: '',
+      subCategoryId: '',
       chargeType: 1,
       chargeValue: '',
       effectiveFrom: formatDateLocal(new Date()),
@@ -150,7 +164,7 @@ export function PricingSettings({
       setMakingChargesForm({
         name: charge.name,
         productCategory: charge.productCategory,
-        subCategory: charge.subCategory || '',
+        subCategoryId: charge.subCategory || '',
         chargeType: charge.chargeType,
         chargeValue: charge.chargeValue.toString(),
         effectiveFrom: formatDateLocal(new Date()),
@@ -163,7 +177,7 @@ export function PricingSettings({
 
   const handleMakingChargesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!makingChargesForm.name || !makingChargesForm.chargeValue) {
       alert('Please fill in all required fields');
       return;
@@ -171,18 +185,17 @@ export function PricingSettings({
 
     try {
       setIsSubmitting(true);
-      
+
       await updateCharges({
         id: editingCharge?.id,
         name: makingChargesForm.name,
         productCategory: makingChargesForm.productCategory,
-        subCategory: makingChargesForm.subCategory || undefined,
+        subCategory: makingChargesForm.subCategoryId || undefined,
         chargeType: makingChargesForm.chargeType,
         chargeValue: parseFloat(makingChargesForm.chargeValue),
         effectiveFrom: makingChargesForm.effectiveFrom,
       });
 
-      // Refresh charges data after update
       await fetchCharges();
 
       setIsMakingChargesDialogOpen(false);
@@ -195,7 +208,6 @@ export function PricingSettings({
     }
   };
 
-  // Tax configuration form handlers
   const resetTaxConfigForm = () => {
     setTaxConfigForm({
       taxName: '',
@@ -229,7 +241,7 @@ export function PricingSettings({
 
   const handleTaxConfigSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!taxConfigForm.taxName || !taxConfigForm.taxCode || !taxConfigForm.taxRate) {
       alert('Please fill in all required fields');
       return;
@@ -237,7 +249,7 @@ export function PricingSettings({
 
     try {
       setIsTaxSubmitting(true);
-      
+
       await updateTaxConfiguration({
         id: editingTaxConfig?.id,
         taxName: taxConfigForm.taxName,
@@ -249,7 +261,6 @@ export function PricingSettings({
         displayOrder: taxConfigForm.displayOrder,
       });
 
-      // Refresh tax configurations data after update
       await fetchTaxConfigurations();
 
       setIsTaxConfigDialogOpen(false);
@@ -262,7 +273,6 @@ export function PricingSettings({
     }
   };
 
-  // Convert goldRates to the format expected by GoldRatesDisplay
   const goldRatesForDisplay: GoldRatesMap = React.useMemo(() => {
     const rates: GoldRatesMap = {};
     Object.entries(goldRates).forEach(([karat, rate]) => {
@@ -275,7 +285,6 @@ export function PricingSettings({
 
   return (
     <div className="space-y-6">
-      {/* Gold Rates */}
       <GoldRatesDisplay
         goldRates={goldRatesForDisplay}
         title="Gold Rates (per gram)"
@@ -289,7 +298,6 @@ export function PricingSettings({
         disabled={false}
       />
 
-      {/* Making Charges */}
       <Card className="pos-card">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -336,7 +344,7 @@ export function PricingSettings({
                       required
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="productCategory">Product Category *</Label>
                     <Select 
@@ -367,13 +375,24 @@ export function PricingSettings({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="subCategory">Subcategory (Optional)</Label>
-                    <Input
-                      id="subCategory"
-                      value={makingChargesForm.subCategory}
-                      onChange={(e) => setMakingChargesForm({...makingChargesForm, subCategory: e.target.value})}
-                      placeholder="e.g., rings, necklaces"
-                    />
+                    <Label htmlFor="subCategoryId">Subcategory (Optional)</Label>
+                    <Select 
+                      value={makingChargesForm.subCategoryId} 
+                      onValueChange={(value) => setMakingChargesForm({...makingChargesForm, subCategoryId: value})}
+                      disabled={subCategoriesLoading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={subCategoriesLoading ? "Loading subcategories..." : "Select subcategory"} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        <SelectItem value="" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">None</SelectItem>
+                        {subCategoriesData.map((subcat: any) => (
+                          <SelectItem key={subcat.id} value={subcat.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
+                            {subcat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">

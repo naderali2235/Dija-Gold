@@ -45,3 +45,8 @@ DijaGoldPOS.API/Properties/launchSettings.json
 *.crt
 *.csr
 ssl-certs/
+
+
+#  node_modules
+
+DIjaGoldPOS.System.UI/node_modules/

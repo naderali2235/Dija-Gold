@@ -121,6 +121,13 @@ public interface IRepository<T> where T : BaseEntity
     void Update(T entity);
 
     /// <summary>
+    /// Update entity asynchronously
+    /// </summary>
+    /// <param name="entity">Entity to update</param>
+    /// <returns>Updated entity</returns>
+    Task<T> UpdateAsync(T entity);
+
+    /// <summary>
     /// Update multiple entities
     /// </summary>
     /// <param name="entities">Entities to update</param>

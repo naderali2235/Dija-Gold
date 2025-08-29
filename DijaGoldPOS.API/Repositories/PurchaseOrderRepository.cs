@@ -13,6 +13,7 @@ public class PurchaseOrderRepository : Repository<PurchaseOrder>, IPurchaseOrder
     {
         return await _context.PurchaseOrders
             .Include(po => po.PurchaseOrderItems)
+                .ThenInclude(item => item.Product)
             .Include(po => po.Supplier)
             .Include(po => po.Branch)
             .FirstOrDefaultAsync(po => po.Id == id);
@@ -23,6 +24,7 @@ public class PurchaseOrderRepository : Repository<PurchaseOrder>, IPurchaseOrder
         return await _context.PurchaseOrders
             .AsNoTracking()
             .Include(po => po.PurchaseOrderItems)
+                .ThenInclude(item => item.Product)
             .Include(po => po.Supplier)
             .Include(po => po.Branch)
             .FirstOrDefaultAsync(po => po.Id == id);
@@ -34,5 +36,3 @@ public class PurchaseOrderRepository : Repository<PurchaseOrder>, IPurchaseOrder
             .FirstOrDefaultAsync(po => po.PurchaseOrderNumber == purchaseOrderNumber);
     }
 }
-
-

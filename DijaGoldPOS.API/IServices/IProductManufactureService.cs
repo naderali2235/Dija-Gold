@@ -66,17 +66,17 @@ public interface IProductManufactureService
     /// <summary>
     /// Get available raw gold purchase order items for manufacturing
     /// </summary>
-    Task<IEnumerable<object>> GetAvailableRawGoldItemsAsync();
+    Task<IEnumerable<RawGoldPurchaseOrderItemDto>> GetAvailableRawGoldItemsAsync(int? branchId = null);
 
     /// <summary>
-    /// Get remaining weight for a specific purchase order item
+    /// Get remaining weight for a specific raw gold purchase order item
     /// </summary>
-    Task<decimal> GetRemainingWeightAsync(int purchaseOrderItemId);
+    Task<decimal> GetRemainingWeightAsync(int rawGoldPurchaseOrderItemId);
 
     /// <summary>
-    /// Check if a purchase order item has sufficient weight for manufacturing
+    /// Check if a raw gold purchase order item has sufficient weight for manufacturing
     /// </summary>
-    Task<bool> CheckSufficientWeightAsync(int purchaseOrderItemId, decimal requiredWeight);
+    Task<bool> CheckSufficientWeightAsync(int rawGoldPurchaseOrderItemId, decimal requiredWeight);
     
     /// <summary>
     /// Validate manufacturing request

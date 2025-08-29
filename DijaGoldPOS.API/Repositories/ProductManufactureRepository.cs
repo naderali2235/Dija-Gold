@@ -19,9 +19,11 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
     {
         return await _context.ProductManufactures
             .Include(pm => pm.Product)
-            .Include(pm => pm.SourcePurchaseOrderItem)
-                .ThenInclude(poi => poi.PurchaseOrder)
-                    .ThenInclude(po => po.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                    .ThenInclude(rgpo => rgpo.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.KaratType)
             .Where(pm => pm.ProductId == productId)
             .OrderByDescending(pm => pm.ManufactureDate)
             .ToListAsync();
@@ -31,10 +33,12 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
     {
         return await _context.ProductManufactures
             .Include(pm => pm.Product)
-            .Include(pm => pm.SourcePurchaseOrderItem)
-                .ThenInclude(poi => poi.PurchaseOrder)
-                    .ThenInclude(po => po.Supplier)
-            .Where(pm => pm.SourcePurchaseOrderItemId == purchaseOrderItemId)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                    .ThenInclude(rgpo => rgpo.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.KaratType)
+            .Where(pm => pm.SourceRawGoldPurchaseOrderItemId == purchaseOrderItemId)
             .OrderByDescending(pm => pm.ManufactureDate)
             .ToListAsync();
     }
@@ -43,22 +47,24 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
     {
         return await _context.ProductManufactures
             .Include(pm => pm.Product)
-            .Include(pm => pm.SourcePurchaseOrderItem)
-                .ThenInclude(poi => poi.PurchaseOrder)
-                    .ThenInclude(po => po.Supplier)
-            .Where(pm => pm.SourcePurchaseOrderItem.PurchaseOrderId == purchaseOrderId)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                    .ThenInclude(rgpo => rgpo.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.KaratType)
+            .Where(pm => pm.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrderId == purchaseOrderId)
             .OrderByDescending(pm => pm.ManufactureDate)
             .ToListAsync();
     }
 
     public async Task<ManufacturingSummaryByPurchaseOrderDto?> GetManufacturingSummaryByPurchaseOrderAsync(int purchaseOrderId)
     {
-        var purchaseOrder = await _context.PurchaseOrders
-            .Include(po => po.Supplier)
-            .Include(po => po.PurchaseOrderItems)
-            .FirstOrDefaultAsync(po => po.Id == purchaseOrderId);
+        var rawGoldPurchaseOrder = await _context.RawGoldPurchaseOrders
+            .Include(rgpo => rgpo.Supplier)
+            .Include(rgpo => rgpo.RawGoldPurchaseOrderItems)
+            .FirstOrDefaultAsync(rgpo => rgpo.Id == purchaseOrderId);
 
-        if (purchaseOrder == null)
+        if (rawGoldPurchaseOrder == null)
             return null;
 
         var manufacturingRecords = await GetByPurchaseOrderIdAsync(purchaseOrderId);
@@ -66,13 +72,11 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
 
         var summary = new ManufacturingSummaryByPurchaseOrderDto
         {
-            PurchaseOrderId = purchaseOrder.Id,
-            PurchaseOrderNumber = purchaseOrder.PurchaseOrderNumber,
-            SupplierName = purchaseOrder.Supplier.CompanyName,
-            OrderDate = purchaseOrder.OrderDate,
-            TotalRawGoldWeight = purchaseOrder.PurchaseOrderItems
-                .Where(poi => poi.IsRawGold)
-                .Sum(poi => poi.WeightReceived),
+            PurchaseOrderId = rawGoldPurchaseOrder.Id,
+            PurchaseOrderNumber = rawGoldPurchaseOrder.PurchaseOrderNumber,
+            SupplierName = rawGoldPurchaseOrder.Supplier.CompanyName,
+            OrderDate = rawGoldPurchaseOrder.OrderDate,
+            TotalRawGoldWeight = rawGoldPurchaseOrder.RawGoldPurchaseOrderItems.Sum(i => i.WeightReceived),
             TotalConsumedWeight = recordsList.Sum(r => r.ConsumedWeight),
             TotalWastageWeight = recordsList.Sum(r => r.WastageWeight),
             TotalProductsManufactured = recordsList.Count,
@@ -83,9 +87,9 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
                 ProductId = r.ProductId,
                 ProductName = r.Product.Name,
                 ProductCode = r.Product.ProductCode,
-                SourcePurchaseOrderItemId = r.SourcePurchaseOrderItemId,
-                PurchaseOrderNumber = r.SourcePurchaseOrderItem.PurchaseOrder.PurchaseOrderNumber,
-                SupplierName = r.SourcePurchaseOrderItem.PurchaseOrder.Supplier.CompanyName,
+                SourceRawGoldPurchaseOrderItemId = r.SourceRawGoldPurchaseOrderItemId,
+                PurchaseOrderNumber = r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.PurchaseOrderNumber,
+                SupplierName = r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.Supplier.CompanyName,
                 ConsumedWeight = r.ConsumedWeight,
                 WastageWeight = r.WastageWeight,
                 ManufactureDate = r.ManufactureDate,
@@ -130,9 +134,9 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
                 ProductId = r.ProductId,
                 ProductName = r.Product.Name,
                 ProductCode = r.Product.ProductCode,
-                SourcePurchaseOrderItemId = r.SourcePurchaseOrderItemId,
-                PurchaseOrderNumber = r.SourcePurchaseOrderItem.PurchaseOrder.PurchaseOrderNumber,
-                SupplierName = r.SourcePurchaseOrderItem.PurchaseOrder.Supplier.CompanyName,
+                SourceRawGoldPurchaseOrderItemId = r.SourceRawGoldPurchaseOrderItemId,
+                PurchaseOrderNumber = r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.PurchaseOrderNumber,
+                SupplierName = r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.Supplier.CompanyName,
                 ConsumedWeight = r.ConsumedWeight,
                 WastageWeight = r.WastageWeight,
                 ManufactureDate = r.ManufactureDate,
@@ -153,9 +157,11 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
     {
         return await _context.ProductManufactures
             .Include(pm => pm.Product)
-            .Include(pm => pm.SourcePurchaseOrderItem)
-                .ThenInclude(poi => poi.PurchaseOrder)
-                    .ThenInclude(po => po.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                    .ThenInclude(rgpo => rgpo.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.KaratType)
             .Where(pm => pm.BatchNumber == batchNumber)
             .OrderByDescending(pm => pm.ManufactureDate)
             .ToListAsync();
@@ -165,39 +171,48 @@ public class ProductManufactureRepository : Repository<ProductManufacture>, IPro
     {
         return await _context.ProductManufactures
             .Include(pm => pm.Product)
-            .Include(pm => pm.SourcePurchaseOrderItem)
-                .ThenInclude(poi => poi.PurchaseOrder)
-                    .ThenInclude(po => po.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                    .ThenInclude(rgpo => rgpo.Supplier)
+            .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                .ThenInclude(rgpoi => rgpoi.KaratType)
             .Where(pm => pm.ManufactureDate >= startDate && pm.ManufactureDate <= endDate)
             .OrderByDescending(pm => pm.ManufactureDate)
             .ToListAsync();
     }
 
-    public async Task<decimal> GetRemainingRawGoldWeightAsync(int purchaseOrderItemId)
+    public async Task<decimal> GetRemainingRawGoldWeightAsync(int rawGoldPurchaseOrderItemId)
     {
-        var purchaseOrderItem = await _context.PurchaseOrderItems
-            .FirstOrDefaultAsync(poi => poi.Id == purchaseOrderItemId);
+        var rawGoldItem = await _context.RawGoldPurchaseOrderItems
+            .FirstOrDefaultAsync(rgpoi => rgpoi.Id == rawGoldPurchaseOrderItemId);
 
-        if (purchaseOrderItem == null || !purchaseOrderItem.IsRawGold)
+        if (rawGoldItem == null)
             return 0;
 
         var consumedWeight = await _context.ProductManufactures
-            .Where(pm => pm.SourcePurchaseOrderItemId == purchaseOrderItemId)
+            .Where(pm => pm.SourceRawGoldPurchaseOrderItemId == rawGoldPurchaseOrderItemId)
             .SumAsync(pm => pm.ConsumedWeight + pm.WastageWeight);
 
-        return purchaseOrderItem.WeightReceived - consumedWeight;
+        return rawGoldItem.WeightReceived - consumedWeight;
     }
 
-    public async Task<bool> IsSufficientRawGoldAvailableAsync(int purchaseOrderItemId, decimal requiredWeight)
+    public async Task<bool> IsSufficientRawGoldAvailableAsync(int rawGoldPurchaseOrderItemId, decimal requiredWeight)
     {
-        var remainingWeight = await GetRemainingRawGoldWeightAsync(purchaseOrderItemId);
+        var remainingWeight = await GetRemainingRawGoldWeightAsync(rawGoldPurchaseOrderItemId);
         return remainingWeight >= requiredWeight;
     }
 
     public async Task<decimal> GetTotalConsumedWeightByPurchaseOrderItemAsync(int purchaseOrderItemId)
     {
         return await _context.ProductManufactures
-            .Where(pm => pm.SourcePurchaseOrderItemId == purchaseOrderItemId)
+            .Where(pm => pm.SourceRawGoldPurchaseOrderItemId == purchaseOrderItemId)
+            .SumAsync(pm => pm.ConsumedWeight + pm.WastageWeight);
+    }
+
+    public async Task<decimal> GetTotalConsumedWeightByRawGoldItemAsync(int rawGoldPurchaseOrderItemId)
+    {
+        return await _context.ProductManufactures
+            .Where(pm => pm.SourceRawGoldPurchaseOrderItemId == rawGoldPurchaseOrderItemId)
             .SumAsync(pm => pm.ConsumedWeight + pm.WastageWeight);
     }
 }

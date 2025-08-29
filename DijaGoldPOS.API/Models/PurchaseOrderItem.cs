@@ -23,16 +23,6 @@ public class PurchaseOrderItem : BaseEntity
     public int ProductId { get; set; } = 1;
 
     /// <summary>
-    /// If purchase is raw gold
-    /// </summary>
-    public bool IsRawGold { get; set; } = false;
-
-    /// <summary>
-    /// Karat type of the raw gold (only applicable when IsRawGold = true)
-    /// </summary>
-    public int? RawGoldKaratTypeId { get; set; }
-
-    /// <summary>
     /// Quantity ordered
     /// </summary>
     [Column(TypeName = "decimal(10,3)")]
@@ -55,18 +45,6 @@ public class PurchaseOrderItem : BaseEntity
     /// </summary>
     [Column(TypeName = "decimal(10,3)")]
     public decimal WeightReceived { get; set; } = 0;
-
-    /// <summary>
-    /// Weight consumed in manufacturing (only for raw gold items)
-    /// </summary>
-    [Column(TypeName = "decimal(10,3)")]
-    public decimal WeightConsumedInManufacturing { get; set; } = 0;
-
-    /// <summary>
-    /// Available weight for manufacturing (WeightReceived - WeightConsumedInManufacturing)
-    /// </summary>
-    [Column(TypeName = "decimal(10,3)")]
-    public decimal AvailableWeightForManufacturing => WeightReceived - WeightConsumedInManufacturing;
     
     /// <summary>
     /// Unit cost per gram or per piece
@@ -105,19 +83,7 @@ public class PurchaseOrderItem : BaseEntity
     /// Navigation property to product
     /// </summary>
     public virtual Product Product { get; set; } = null!;
-
-    /// <summary>
-    /// Navigation property to raw gold karat type (only for raw gold items)
-    /// </summary>
-    [JsonIgnore]
-    public virtual KaratTypeLookup? RawGoldKaratType { get; set; }
     
-    /// <summary>
-    /// Navigation property to manufacturing records where this raw gold was used as source material
-    /// </summary>
-    [JsonIgnore]
-    public virtual ICollection<ProductManufacture> SourceManufacturingRecords { get; set; } = new List<ProductManufacture>();
-
     /// <summary>
     /// Navigation property to manufacturing records where this item was referenced as additional material
     /// </summary>

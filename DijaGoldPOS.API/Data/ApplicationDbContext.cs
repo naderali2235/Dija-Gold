@@ -45,6 +45,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     public DbSet<SupplierTransaction> SupplierTransactions { get; set; }
 
+    // Raw gold purchasing system
+    public DbSet<RawGoldPurchaseOrder> RawGoldPurchaseOrders { get; set; }
+    public DbSet<RawGoldPurchaseOrderItem> RawGoldPurchaseOrderItems { get; set; }
+    public DbSet<RawGoldInventory> RawGoldInventories { get; set; }
+    public DbSet<RawGoldInventoryMovement> RawGoldInventoryMovements { get; set; }
+
     // Product ownership tracking
     public DbSet<ProductOwnership> ProductOwnerships { get; set; }
     public DbSet<OwnershipMovement> OwnershipMovements { get; set; }
@@ -61,6 +67,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     // Manufacturing
     public DbSet<ProductManufacture> ProductManufactures { get; set; }
+    public DbSet<ProductManufactureRawMaterial> ProductManufactureRawMaterials { get; set; }
     public DbSet<ManufacturingWorkflowHistory> ManufacturingWorkflowHistories { get; set; }
 
     // Audit trail
@@ -103,6 +110,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         // Configure purchasing system
         ConfigurePurchasingSystem(builder);
+
+        // Configure raw gold purchasing system
+        ConfigureRawGoldPurchasingSystem(builder);
 
 
 
@@ -436,9 +446,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany()
                   .HasForeignKey(poi => poi.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(poi => poi.Status).HasMaxLength(50);
         });
-
-
 
         // Configure CashDrawerBalance
         builder.Entity<CashDrawerBalance>(entity =>
@@ -735,10 +745,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(po => po.PurchaseOrderId)
                   .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(po => po.CustomerPurchase)
-                  .WithMany(cp => cp.ProductOwnerships)
-                  .HasForeignKey(po => po.CustomerPurchaseId)
-                  .OnDelete(DeleteBehavior.SetNull);
+            // Note: CustomerPurchase relationship removed as customer purchases now represent gold amounts, not specific products
         });
 
         // Configure OwnershipMovement
@@ -798,17 +805,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(cp => cp.PaymentMethodId)
                   .OnDelete(DeleteBehavior.Restrict);
 
-            // Product ownerships relationship
-            entity.HasMany(cp => cp.ProductOwnerships)
-                  .WithOne(po => po.CustomerPurchase)
-                  .HasForeignKey(po => po.CustomerPurchaseId)
-                  .OnDelete(DeleteBehavior.SetNull);
+            // Customer purchase items relationship
+            entity.HasMany(cp => cp.CustomerPurchaseItems)
+                  .WithOne(cpi => cpi.CustomerPurchase)
+                  .HasForeignKey(cpi => cpi.CustomerPurchaseId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Configure CustomerPurchaseItem
         builder.Entity<CustomerPurchaseItem>(entity =>
         {
-            entity.Property(cpi => cpi.Quantity).HasColumnType("decimal(10,3)");
             entity.Property(cpi => cpi.Weight).HasColumnType("decimal(10,3)");
             entity.Property(cpi => cpi.UnitPrice).HasColumnType("decimal(18,2)");
             entity.Property(cpi => cpi.TotalAmount).HasColumnType("decimal(18,2)");
@@ -820,9 +826,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(cpi => cpi.CustomerPurchaseId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(cpi => cpi.Product)
+            entity.HasOne(cpi => cpi.KaratType)
                   .WithMany()
-                  .HasForeignKey(cpi => cpi.ProductId)
+                  .HasForeignKey(cpi => cpi.KaratTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -934,21 +940,32 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // Configure ProductManufacture entity
         builder.Entity<ProductManufacture>(entity =>
         {
+            // Explicitly configure primary key
+            entity.HasKey(pm => pm.Id);
+
+            // Ignore automatic relationship discovery to prevent shadow properties
+            entity.Ignore("PurchaseOrderItemId1");
+
             // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(pm => pm.Product)
                   .WithMany(p => p.ManufacturingRecords)
                   .HasForeignKey(pm => pm.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(pm => pm.SourcePurchaseOrderItem)
-                  .WithMany(poi => poi.SourceManufacturingRecords)
-                  .HasForeignKey(pm => pm.SourcePurchaseOrderItemId)
+            // Primary relationship: Raw gold purchase order item as source material
+            entity.HasOne(pm => pm.SourceRawGoldPurchaseOrderItem)
+                  .WithMany(rgpoi => rgpoi.SourceManufacturingRecords)
+                  .HasForeignKey(pm => pm.SourceRawGoldPurchaseOrderItemId)
+                  .HasConstraintName("FK_ProductManufacture_RawGoldPurchaseOrderItem")
                   .OnDelete(DeleteBehavior.Restrict);
 
+            // Optional relationship: Regular purchase order item as additional material
             entity.HasOne(pm => pm.PurchaseOrderItem)
                   .WithMany(poi => poi.AdditionalManufacturingRecords)
                   .HasForeignKey(pm => pm.PurchaseOrderItemId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .HasConstraintName("FK_ProductManufacture_PurchaseOrderItem_Additional")
+                  .OnDelete(DeleteBehavior.SetNull)
+                  .IsRequired(false);
 
             entity.HasOne(pm => pm.Branch)
                   .WithMany()
@@ -962,7 +979,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             // Indexes
             entity.HasIndex(pm => pm.ProductId);
-            entity.HasIndex(pm => pm.SourcePurchaseOrderItemId);
+            entity.HasIndex(pm => pm.SourceRawGoldPurchaseOrderItemId);
             entity.HasIndex(pm => pm.PurchaseOrderItemId);
             entity.HasIndex(pm => pm.BatchNumber);
             entity.HasIndex(pm => pm.ManufactureDate);
@@ -970,13 +987,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(pm => pm.TechnicianId);
 
             // Properties
-            entity.Property(pm => pm.ConsumedWeight).HasColumnType("decimal(10,3)");
-            entity.Property(pm => pm.WastageWeight).HasColumnType("decimal(10,3)");
-            entity.Property(pm => pm.ManufacturingCostPerGram).HasColumnType("decimal(18,2)");
-            entity.Property(pm => pm.TotalManufacturingCost).HasColumnType("decimal(18,2)");
+            entity.Property(pm => pm.QuantityProduced).IsRequired().HasDefaultValueSql("0");
+            entity.Property(pm => pm.ConsumedWeight).HasColumnType("decimal(10,3)").HasDefaultValueSql("0");
+            entity.Property(pm => pm.WastageWeight).HasColumnType("decimal(10,3)").HasDefaultValueSql("0");
+            entity.Property(pm => pm.ManufacturingCostPerGram).HasColumnType("decimal(18,2)").HasDefaultValueSql("0");
+            entity.Property(pm => pm.TotalManufacturingCost).HasColumnType("decimal(18,2)").HasDefaultValueSql("0");
             entity.Property(pm => pm.BatchNumber).HasMaxLength(50);
             entity.Property(pm => pm.ManufacturingNotes).HasMaxLength(1000);
             entity.Property(pm => pm.Status).HasMaxLength(20);
+            
+            // Explicitly configure foreign key properties to prevent shadow properties
+            entity.Property(pm => pm.SourceRawGoldPurchaseOrderItemId).IsRequired();
+            entity.Property(pm => pm.PurchaseOrderItemId).IsRequired(false);
         });
 
         // Configure ManufacturingWorkflowHistory entity
@@ -1015,6 +1037,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<InventoryMovement>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrder>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrderItem>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<RawGoldPurchaseOrder>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<RawGoldPurchaseOrderItem>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<RawGoldInventory>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<RawGoldInventoryMovement>().HasQueryFilter(e => e.IsActive);
         builder.Entity<CashDrawerBalance>().HasQueryFilter(e => e.IsActive);
         builder.Entity<RepairJob>().HasQueryFilter(e => e.IsActive);
         builder.Entity<Technician>().HasQueryFilter(e => e.IsActive);
@@ -1043,6 +1069,126 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<TransactionStatusLookup>().HasQueryFilter(e => e.IsActive);
         builder.Entity<ChargeTypeLookup>().HasQueryFilter(e => e.IsActive);
         builder.Entity<SubCategoryLookup>().HasQueryFilter(e => e.IsActive);
+    }
+
+    /// <summary>
+    /// Configure raw gold purchasing system
+    /// </summary>
+    private static void ConfigureRawGoldPurchasingSystem(ModelBuilder builder)
+    {
+        // Configure RawGoldPurchaseOrder
+        builder.Entity<RawGoldPurchaseOrder>(entity =>
+        {
+            entity.HasIndex(rgpo => rgpo.PurchaseOrderNumber).IsUnique();
+            entity.Property(rgpo => rgpo.PurchaseOrderNumber).IsRequired().HasMaxLength(50);
+            
+            entity.Property(rgpo => rgpo.TotalAmount).HasColumnType("decimal(18,2)");
+            entity.Property(rgpo => rgpo.AmountPaid).HasColumnType("decimal(18,2)");
+            entity.Property(rgpo => rgpo.OutstandingBalance).HasColumnType("decimal(18,2)");
+            entity.Property(rgpo => rgpo.Notes).HasMaxLength(1000);
+
+            entity.HasOne(rgpo => rgpo.Supplier)
+                  .WithMany(s => s.RawGoldPurchaseOrders)
+                  .HasForeignKey(rgpo => rgpo.SupplierId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgpo => rgpo.Branch)
+                  .WithMany()
+                  .HasForeignKey(rgpo => rgpo.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure RawGoldPurchaseOrderItem
+        builder.Entity<RawGoldPurchaseOrderItem>(entity =>
+        {
+            entity.Property(rgpoi => rgpoi.WeightOrdered).HasColumnType("decimal(10,3)");
+            entity.Property(rgpoi => rgpoi.WeightReceived).HasColumnType("decimal(10,3)");
+            entity.Property(rgpoi => rgpoi.UnitCostPerGram).HasColumnType("decimal(18,2)");
+            entity.Property(rgpoi => rgpoi.LineTotal).HasColumnType("decimal(18,2)");
+            entity.Property(rgpoi => rgpoi.WeightConsumedInManufacturing).HasColumnType("decimal(10,3)");
+            entity.Property(rgpoi => rgpoi.AvailableWeightForManufacturing).HasColumnType("decimal(10,3)");
+            entity.Property(rgpoi => rgpoi.Description).HasMaxLength(500);
+            entity.Property(rgpoi => rgpoi.Notes).HasMaxLength(1000);
+            entity.Property(rgpoi => rgpoi.Status).HasMaxLength(50);
+
+            entity.HasOne(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                  .WithMany(rgpo => rgpo.RawGoldPurchaseOrderItems)
+                  .HasForeignKey(rgpoi => rgpoi.RawGoldPurchaseOrderId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rgpoi => rgpoi.KaratType)
+                  .WithMany()
+                  .HasForeignKey(rgpoi => rgpoi.KaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure ProductManufactureRawMaterial
+        builder.Entity<ProductManufactureRawMaterial>(entity =>
+        {
+            entity.Property(pmrm => pmrm.ConsumedWeight).HasColumnType("decimal(10,3)");
+            entity.Property(pmrm => pmrm.WastageWeight).HasColumnType("decimal(10,3)");
+            entity.Property(pmrm => pmrm.CostPerGram).HasColumnType("decimal(18,2)");
+            entity.Property(pmrm => pmrm.TotalRawMaterialCost).HasColumnType("decimal(18,2)");
+            entity.Property(pmrm => pmrm.ContributionPercentage).HasColumnType("decimal(5,4)");
+            entity.Property(pmrm => pmrm.Notes).HasMaxLength(1000);
+
+            entity.HasOne(pmrm => pmrm.ProductManufacture)
+                  .WithMany(pm => pm.RawMaterials)
+                  .HasForeignKey(pmrm => pmrm.ProductManufactureId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(pmrm => pmrm.RawGoldPurchaseOrderItem)
+                  .WithMany()
+                  .HasForeignKey(pmrm => pmrm.RawGoldPurchaseOrderItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure RawGoldInventory
+        builder.Entity<RawGoldInventory>(entity =>
+        {
+            entity.HasIndex(rgi => new { rgi.KaratTypeId, rgi.BranchId }).IsUnique();
+
+            entity.Property(rgi => rgi.WeightOnHand).HasColumnType("decimal(10,3)");
+            entity.Property(rgi => rgi.WeightReserved).HasColumnType("decimal(10,3)");
+            entity.Property(rgi => rgi.WeightAvailable).HasColumnType("decimal(10,3)");
+            entity.Property(rgi => rgi.AverageCostPerGram).HasColumnType("decimal(18,2)");
+            entity.Property(rgi => rgi.TotalValue).HasColumnType("decimal(18,2)");
+            entity.Property(rgi => rgi.MinimumStockLevel).HasColumnType("decimal(10,3)");
+            entity.Property(rgi => rgi.ReorderPoint).HasColumnType("decimal(10,3)");
+            entity.Property(rgi => rgi.Notes).HasMaxLength(1000);
+
+            entity.HasOne(rgi => rgi.KaratType)
+                  .WithMany()
+                  .HasForeignKey(rgi => rgi.KaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgi => rgi.Branch)
+                  .WithMany()
+                  .HasForeignKey(rgi => rgi.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure RawGoldInventoryMovement
+        builder.Entity<RawGoldInventoryMovement>(entity =>
+        {
+            entity.Property(rgim => rgim.WeightChange).HasColumnType("decimal(10,3)");
+            entity.Property(rgim => rgim.WeightBalance).HasColumnType("decimal(10,3)");
+            entity.Property(rgim => rgim.UnitCostPerGram).HasColumnType("decimal(18,2)");
+            entity.Property(rgim => rgim.TotalCost).HasColumnType("decimal(18,2)");
+            entity.Property(rgim => rgim.MovementType).IsRequired().HasMaxLength(50);
+            entity.Property(rgim => rgim.ReferenceNumber).HasMaxLength(100);
+            entity.Property(rgim => rgim.Notes).HasMaxLength(500);
+
+            entity.HasOne(rgim => rgim.RawGoldInventory)
+                  .WithMany(rgi => rgi.RawGoldInventoryMovements)
+                  .HasForeignKey(rgim => rgim.RawGoldInventoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgim => rgim.RawGoldPurchaseOrderItem)
+                  .WithMany()
+                  .HasForeignKey(rgim => rgim.RawGoldPurchaseOrderItemId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
     }
 
     /// <summary>

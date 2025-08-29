@@ -31,16 +31,16 @@ public class ManufacturingReportsService : IManufacturingReportsService
         try
         {
             var query = _unitOfWork.Repository<ProductManufacture>().GetQueryable()
-                .Include(pm => pm.SourcePurchaseOrderItem)
-                    .ThenInclude(poi => poi.PurchaseOrder)
-                        .ThenInclude(po => po.Supplier)
+                .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                    .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
+                        .ThenInclude(rgpo => rgpo.Supplier)
                 .Include(pm => pm.Product)
                 .Where(pm => pm.ManufactureDate >= startDate && pm.ManufactureDate <= endDate)
                 .AsQueryable();
 
             if (supplierId.HasValue)
             {
-                query = query.Where(pm => pm.SourcePurchaseOrderItem.PurchaseOrder.SupplierId == supplierId.Value);
+                query = query.Where(pm => pm.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.SupplierId == supplierId.Value);
             }
 
             var records = await query.ToListAsync();
@@ -48,7 +48,7 @@ public class ManufacturingReportsService : IManufacturingReportsService
             var report = new RawGoldUtilizationReportDto
             {
                 ReportPeriod = new DateRangeDto { StartDate = startDate, EndDate = endDate },
-                TotalRawGoldPurchased = records.Sum(r => r.SourcePurchaseOrderItem.WeightReceived),
+                TotalRawGoldPurchased = records.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived),
                 TotalRawGoldConsumed = records.Sum(r => r.ConsumedWeight),
                 TotalWastage = records.Sum(r => r.WastageWeight),
                 RawGoldUtilizationRate = 0,
@@ -68,16 +68,16 @@ public class ManufacturingReportsService : IManufacturingReportsService
 
             // Group by supplier
             report.BySupplier = records
-                .GroupBy(r => new { r.SourcePurchaseOrderItem.PurchaseOrder.SupplierId, r.SourcePurchaseOrderItem.PurchaseOrder.Supplier.CompanyName })
+                .GroupBy(r => new { r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.SupplierId, r.SourceRawGoldPurchaseOrderItem.RawGoldPurchaseOrder.Supplier.CompanyName })
                 .Select(g => new SupplierRawGoldUtilizationDto
                 {
                     SupplierId = g.Key.SupplierId,
                     SupplierName = g.Key.CompanyName,
-                    RawGoldPurchased = g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived),
+                    RawGoldPurchased = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived),
                     RawGoldConsumed = g.Sum(r => r.ConsumedWeight),
                     Wastage = g.Sum(r => r.WastageWeight),
-                    UtilizationRate = g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived) > 0
-                        ? (g.Sum(r => r.ConsumedWeight) / g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived)) * 100
+                    UtilizationRate = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived) > 0
+                        ? (g.Sum(r => r.ConsumedWeight) / g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived)) * 100
                         : 0
                 })
                 .OrderByDescending(s => s.RawGoldPurchased)
@@ -85,15 +85,15 @@ public class ManufacturingReportsService : IManufacturingReportsService
 
             // Group by karat type
             report.ByKaratType = records
-                .GroupBy(r => r.SourcePurchaseOrderItem.RawGoldKaratType?.Name ?? "Unknown")
+                .GroupBy(r => "Unknown") // Raw gold karat types now handled by separate raw gold system
                 .Select(g => new KaratTypeUtilizationDto
                 {
                     KaratType = g.Key,
-                    RawGoldPurchased = g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived),
+                    RawGoldPurchased = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived),
                     RawGoldConsumed = g.Sum(r => r.ConsumedWeight),
                     Wastage = g.Sum(r => r.WastageWeight),
-                    UtilizationRate = g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived) > 0
-                        ? (g.Sum(r => r.ConsumedWeight) / g.Sum(r => r.SourcePurchaseOrderItem.WeightReceived)) * 100
+                    UtilizationRate = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived) > 0
+                        ? (g.Sum(r => r.ConsumedWeight) / g.Sum(r => r.SourceRawGoldPurchaseOrderItem.WeightReceived)) * 100
                         : 0
                 })
                 .OrderByDescending(k => k.RawGoldPurchased)
@@ -269,8 +269,8 @@ public class ManufacturingReportsService : IManufacturingReportsService
         try
         {
             var records = await _unitOfWork.Repository<ProductManufacture>().GetQueryable()
-                .Include(pm => pm.SourcePurchaseOrderItem)
-                    .ThenInclude(poi => poi.PurchaseOrder)
+                .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
+                    .ThenInclude(rgpoi => rgpoi.RawGoldPurchaseOrder)
                 .Include(pm => pm.Product)
                 .Where(pm => pm.ManufactureDate >= startDate && pm.ManufactureDate <= endDate)
                 .ToListAsync();
@@ -278,9 +278,9 @@ public class ManufacturingReportsService : IManufacturingReportsService
             var report = new CostAnalysisReportDto
             {
                 ReportPeriod = new DateRangeDto { StartDate = startDate, EndDate = endDate },
-                TotalRawGoldCost = records.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight),
+                TotalRawGoldCost = records.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight),
                 TotalManufacturingCost = records.Sum(r => r.TotalManufacturingCost),
-                TotalWastageCost = records.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.WastageWeight),
+                TotalWastageCost = records.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.WastageWeight),
                 AverageCostPerGram = 0,
                 CostBreakdownByProductType = new List<ProductTypeCostDto>(),
                 CostTrend = new List<MonthlyCostDto>(),
@@ -300,11 +300,11 @@ public class ManufacturingReportsService : IManufacturingReportsService
                 .Select(g => new ProductTypeCostDto
                 {
                     ProductType = g.Key,
-                    RawGoldCost = g.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight),
+                    RawGoldCost = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight),
                     ManufacturingCost = g.Sum(r => r.TotalManufacturingCost),
-                    TotalCost = g.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight + r.TotalManufacturingCost),
+                    TotalCost = g.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight + r.TotalManufacturingCost),
                     ProductsManufactured = g.Count(),
-                    AverageCostPerProduct = g.Count() > 0 ? g.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight + r.TotalManufacturingCost) / g.Count() : 0
+                    AverageCostPerProduct = g.Count() > 0 ? g.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight + r.TotalManufacturingCost) / g.Count() : 0
                 })
                 .OrderByDescending(p => p.TotalCost)
                 .ToList();
@@ -470,16 +470,16 @@ public class ManufacturingReportsService : IManufacturingReportsService
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
             var records = await _unitOfWork.Repository<ProductManufacture>().GetQueryable()
-                .Include(pm => pm.SourcePurchaseOrderItem)
+                .Include(pm => pm.SourceRawGoldPurchaseOrderItem)
                 .Where(pm => pm.ManufactureDate >= monthStart && pm.ManufactureDate <= monthEnd)
                 .ToListAsync();
 
             trend.Add(new MonthlyCostDto
             {
                 Month = monthStart,
-                RawGoldCost = records.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight),
+                RawGoldCost = records.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight),
                 ManufacturingCost = records.Sum(r => r.TotalManufacturingCost),
-                TotalCost = records.Sum(r => r.SourcePurchaseOrderItem.UnitCost * r.ConsumedWeight + r.TotalManufacturingCost),
+                TotalCost = records.Sum(r => r.SourceRawGoldPurchaseOrderItem.UnitCostPerGram * r.ConsumedWeight + r.TotalManufacturingCost),
                 ProductsManufactured = records.Count
             });
         }

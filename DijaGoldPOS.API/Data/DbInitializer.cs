@@ -45,22 +45,25 @@ public static class DbInitializer
 
         try
         {
-            // Seed all data in proper order
+            // Seed essential data only - lookup tables, roles, branches, users, and system supplier
             await LookupTableSeeder.SeedLookupTablesAsync(context);
 
             await SeedRolesAsync(roleManager);
             await SeedBranchesAsync(context);
             await SeedUsersAsync(userManager, context);
-            await SeedTaxConfigurationsAsync(context);
-            await SeedGoldRatesAsync(context);
-            await SeedMakingChargesAsync(context);
-            await SeedProductsAsync(context);
-            await SeedCustomersAsync(context);
-            await SeedSuppliersAsync(context);
-            await SeedTechniciansAsync(context);
-            await SeedPurchaseOrdersAsync(context);
-            await SeedOrdersAndTransactionsAsync(context);
-            await SeedRepairJobsAsync(context);
+            await SeedSystemSupplierAsync(context);
+
+            // Commented out old seeding methods - uncomment if needed for development/testing
+             await SeedTaxConfigurationsAsync(context);
+             await SeedGoldRatesAsync(context);
+             await SeedMakingChargesAsync(context);
+            // await SeedProductsAsync(context);
+            // await SeedCustomersAsync(context);
+            // await SeedSuppliersAsync(context);
+            // await SeedTechniciansAsync(context);
+            // await SeedPurchaseOrdersAsync(context);
+            // await SeedOrdersAndTransactionsAsync(context);
+            // await SeedRepairJobsAsync(context);
 
             // Mark initialization as completed
             await MarkInitializationCompletedAsync(context);
@@ -587,6 +590,39 @@ public static class DbInitializer
     }
 
     /// <summary>
+    /// Seed only the system supplier
+    /// </summary>
+    private static async Task SeedSystemSupplierAsync(ApplicationDbContext context)
+    {
+        if (!await context.Suppliers.AnyAsync(s => s.IsSystemSupplier == true))
+        {
+            var systemSupplier = new Supplier
+            {
+                CompanyName = "DijaGold POS System",
+                ContactPersonName = "System Administrator",
+                Phone = "+20100000000",
+                Email = "system@dijagold.com",
+                Address = "DijaGold Headquarters, Cairo, Egypt",
+                TaxRegistrationNumber = "SYSTEM-001",
+                CommercialRegistrationNumber = "CR-SYSTEM-001",
+                CreditLimit = 0.00m,
+                CurrentBalance = 0.00m,
+                PaymentTermsDays = 0,
+                CreditLimitEnforced = false,
+                PaymentTerms = "System supplier for raw gold purchases",
+                Notes = "DijaGold system supplier - handles raw gold purchases that go directly to company balance. Cannot be deleted.",
+                LastTransactionDate = DateTime.UtcNow,
+                IsSystemSupplier = true,
+                CreatedBy = "system",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await context.Suppliers.AddAsync(systemSupplier);
+            await context.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
     /// Seed sample suppliers
     /// </summary>
     private static async Task SeedSuppliersAsync(ApplicationDbContext context)
@@ -595,6 +631,26 @@ public static class DbInitializer
         {
             var suppliers = new List<Supplier>
             {
+                new Supplier
+                {
+                    CompanyName = "DijaGold POS System",
+                    ContactPersonName = "System Administrator",
+                    Phone = "+20100000000",
+                    Email = "system@dijagold.com",
+                    Address = "DijaGold Headquarters, Cairo, Egypt",
+                    TaxRegistrationNumber = "SYSTEM-001",
+                    CommercialRegistrationNumber = "CR-SYSTEM-001",
+                    CreditLimit = 0.00m,
+                    CurrentBalance = 0.00m,
+                    PaymentTermsDays = 0,
+                    CreditLimitEnforced = false,
+                    PaymentTerms = "System supplier for raw gold purchases",
+                    Notes = "DijaGold system supplier - handles raw gold purchases that go directly to company balance. Cannot be deleted.",
+                    LastTransactionDate = DateTime.UtcNow,
+                    IsSystemSupplier = true,
+                    CreatedBy = "system",
+                    CreatedAt = DateTime.UtcNow
+                },
                 new Supplier
                 {
                     CompanyName = "Egyptian Gold Refinery Co.",

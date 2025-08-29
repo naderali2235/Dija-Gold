@@ -25,6 +25,7 @@ public class UnitOfWork : IUnitOfWork
     private IBranchRepository? _branches;
     private ISupplierRepository? _suppliers;
     private IPurchaseOrderRepository? _purchaseOrders;
+    private ICustomerPurchaseRepository? _customerPurchases;
 
     public UnitOfWork(ApplicationDbContext context)
     {
@@ -61,6 +62,9 @@ public class UnitOfWork : IUnitOfWork
 
     public IPurchaseOrderRepository PurchaseOrders =>
         _purchaseOrders ??= new PurchaseOrderRepository(_context);
+
+    public ICustomerPurchaseRepository CustomerPurchases =>
+        _customerPurchases ??= new CustomerPurchaseRepository(_context);
 
     /// <summary>
     /// Get a generic repository for the specified entity type

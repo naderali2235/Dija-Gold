@@ -237,7 +237,8 @@ public class SuppliersController : ControllerBase
                 Notes = supplier.Notes,
                 LastTransactionDate = supplier.LastTransactionDate,
                 CreatedAt = supplier.CreatedAt,
-                IsActive = supplier.IsActive
+                IsActive = supplier.IsActive,
+                IsSystemSupplier = supplier.IsSystemSupplier
             };
 
             return CreatedAtAction(nameof(GetSupplier), new { id = supplier.Id }, 
@@ -337,7 +338,8 @@ public class SuppliersController : ControllerBase
                 Notes = supplier.Notes,
                 LastTransactionDate = supplier.LastTransactionDate,
                 CreatedAt = supplier.CreatedAt,
-                IsActive = supplier.IsActive
+                IsActive = supplier.IsActive,
+                IsSystemSupplier = supplier.IsSystemSupplier
             };
 
             return Ok(ApiResponse<SupplierDto>.SuccessResponse(supplierDto));
@@ -366,6 +368,12 @@ public class SuppliersController : ControllerBase
             if (supplier == null)
             {
                 return NotFound(ApiResponse.ErrorResponse("Supplier not found"));
+            }
+
+            // Check if this is a system supplier that cannot be deleted
+            if (supplier.IsSystemSupplier)
+            {
+                return BadRequest(ApiResponse.ErrorResponse("Cannot delete system supplier. This supplier is protected and cannot be removed."));
             }
 
             // Check if supplier has products

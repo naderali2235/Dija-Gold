@@ -1,5 +1,3 @@
-
-
 namespace DijaGoldPOS.API.DTOs;
 
 public class PurchaseOrderDto
@@ -64,19 +62,10 @@ public class CreatePurchaseOrderRequestDto
 
 public class CreatePurchaseOrderItemRequestDto
 {
-
     public int ProductId { get; set; }
-    
-
     public decimal QuantityOrdered { get; set; }
-
-
     public decimal WeightOrdered { get; set; }
-
-
     public decimal UnitCost { get; set; }
-
-
     public string? Notes { get; set; }
 }
 
@@ -106,8 +95,6 @@ public class UpdatePurchaseOrderItemRequestDto
 
 
     public int ProductId { get; set; }
-    
-
     public decimal QuantityOrdered { get; set; }
 
 
@@ -188,5 +175,3 @@ public class PurchaseOrderPaymentResult
     public decimal OutstandingAmount { get; set; }
     public string TransactionNumber { get; set; } = string.Empty;
 }
-
-

@@ -25,16 +25,14 @@ public class CustomerPurchaseDto
 }
 
 /// <summary>
-/// Customer purchase item DTO
+/// Customer purchase item DTO (gold amounts)
 /// </summary>
 public class CustomerPurchaseItemDto
 {
     public int Id { get; set; }
     public int CustomerPurchaseId { get; set; }
-    public int ProductId { get; set; }
-    public string ProductName { get; set; } = string.Empty;
-    public string ProductCode { get; set; } = string.Empty;
-    public decimal Quantity { get; set; }
+    public int KaratTypeId { get; set; }
+    public string KaratTypeName { get; set; } = string.Empty;
     public decimal Weight { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal TotalAmount { get; set; }
@@ -69,25 +67,22 @@ public class CreateCustomerPurchaseRequest
 }
 
 /// <summary>
-/// Create customer purchase item request DTO
+/// Create customer purchase item request DTO (gold amounts)
 /// </summary>
 public class CreateCustomerPurchaseItemRequest
 {
 
-    public int ProductId { get; set; }
-    
+    public int KaratTypeId { get; set; }
 
-    public decimal Quantity { get; set; }
-    
 
     public decimal Weight { get; set; }
-    
+
 
     public decimal UnitPrice { get; set; }
-    
+
 
     public decimal TotalAmount { get; set; }
-    
+
 
     public string? Notes { get; set; }
 }

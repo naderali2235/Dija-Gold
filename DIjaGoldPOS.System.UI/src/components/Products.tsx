@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -49,6 +49,7 @@ import {
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes, useSuppliers, useGoldRates, useMakingCharges } from '../hooks/useApi';
+import { lookupsApi } from '../services/api';
 import { Product, SupplierDto } from '../services/api';
 import { LookupHelper } from '../types/lookups';
 import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
@@ -120,6 +121,24 @@ export default function Products() {
   // Pricing data hooks
   const { data: goldRatesData, loading: goldRatesLoading, fetchRates } = useGoldRates();
   const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
+  
+  // Subcategory state
+  const [subCategoriesData, setSubCategoriesData] = useState<any[]>([]);
+  const [subCategoriesLoading, setSubCategoriesLoading] = useState(false);
+  
+  // Function to fetch subcategories based on category
+  const fetchSubCategories = useCallback(async (categoryId: number) => {
+    try {
+      setSubCategoriesLoading(true);
+      const subcategories = await lookupsApi.getSubCategories(categoryId);
+      setSubCategoriesData(subcategories);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubCategoriesData([]);
+    } finally {
+      setSubCategoriesLoading(false);
+    }
+  }, []);
 
   // Form state for new/edit product
   const [productForm, setProductForm] = useState<{
@@ -130,7 +149,7 @@ export default function Products() {
     weight: string;
     brand: string;
     designStyle: string;
-    subCategory: string;
+    subCategoryId: string;
     shape: string;
     purityCertificateNumber: string;
     countryOfOrigin: string;
@@ -148,7 +167,7 @@ export default function Products() {
     weight: '',
     brand: '',
     designStyle: '',
-    subCategory: '',
+    subCategoryId: '',
     shape: '',
     purityCertificateNumber: '',
     countryOfOrigin: '',
@@ -168,6 +187,16 @@ export default function Products() {
     fetchRates();
     fetchCharges();
   }, [fetchKaratTypes, fetchCategoryTypes, fetchSuppliers, fetchRates, fetchCharges]);
+  
+  // Fetch subcategories when category changes
+  useEffect(() => {
+    if (productForm.categoryType && categoryTypesData) {
+      const categoryId = LookupHelper.getValue(categoryTypesData, productForm.categoryType);
+      if (categoryId) {
+        fetchSubCategories(categoryId);
+      }
+    }
+  }, [productForm.categoryType, categoryTypesData, fetchSubCategories]);
 
   // Fetch products on mount and when filters change
   useEffect(() => {
@@ -208,7 +237,7 @@ export default function Products() {
       weight: '',
       brand: '',
       designStyle: '',
-      subCategory: '',
+      subCategoryId: 'none',
       shape: '',
       purityCertificateNumber: '',
       countryOfOrigin: '',
@@ -233,7 +262,7 @@ export default function Products() {
       weight: product.weight.toString(),
       brand: product.brand || '',
       designStyle: product.designStyle || '',
-      subCategory: typeof product.subCategory === 'string' ? product.subCategory : product.subCategory?.name || '',
+      subCategoryId: product.subCategoryId?.toString() || 'none',
       shape: product.shape || '',
       purityCertificateNumber: product.purityCertificateNumber || '',
       countryOfOrigin: product.countryOfOrigin || '',
@@ -295,7 +324,7 @@ export default function Products() {
         weight: weight,
         brand: productForm.brand?.trim() || undefined,
         designStyle: productForm.designStyle?.trim() || undefined,
-        subCategoryId: productForm.subCategory?.trim() ? undefined : undefined, // TODO: Handle subCategory properly
+        subCategoryId: productForm.subCategoryId && productForm.subCategoryId !== '' && productForm.subCategoryId !== 'none' ? parseInt(productForm.subCategoryId) : undefined,
         shape: productForm.shape?.trim() || undefined,
         purityCertificateNumber: productForm.purityCertificateNumber?.trim() || undefined,
         countryOfOrigin: productForm.countryOfOrigin?.trim() || undefined,
@@ -447,13 +476,24 @@ export default function Products() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="subCategory">Subcategory</Label>
-                    <Input
-                      id="subCategory"
-                      value={productForm.subCategory}
-                      onChange={(e) => setProductForm({...productForm, subCategory: e.target.value})}
-                      placeholder="Wedding, Designer, Traditional"
-                    />
+                    <Label htmlFor="subCategoryId">Subcategory (Optional)</Label>
+                    <Select 
+                      value={productForm.subCategoryId} 
+                      onValueChange={(value) => setProductForm({...productForm, subCategoryId: value})}
+                      disabled={subCategoriesLoading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={subCategoriesLoading ? "Loading subcategories..." : "Select subcategory"} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-gray-200 shadow-lg">
+                        <SelectItem value="none" className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">None</SelectItem>
+                        {subCategoriesData.map((subcat: any) => (
+                          <SelectItem key={subcat.id} value={subcat.id.toString()} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">
+                            {subcat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="karatType">Karat</Label>
