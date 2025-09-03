@@ -1,547 +1,748 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Badge } from './ui/badge';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from './ui/tabs';
-import {
-  BarChart3,
-  TrendingUp,
-  DollarSign,
-  Scale,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  Download,
-  Calendar,
-  Filter,
-  RefreshCw,
-  Loader2,
-} from 'lucide-react';
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import api from '../services/api';
 
 const ManufacturingReports: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [dateRange, setDateRange] = useState({
-    startDate: '',
-    endDate: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [reportsData, setReportsData] = useState<any>(null);
+  const [tab, setTab] = React.useState<string>('dashboard');
+  const [startDate, setStartDate] = React.useState<string>('');
+  const [endDate, setEndDate] = React.useState<string>('');
+  const [branchId, setBranchId] = React.useState<number | ''>('');
+  const [technicianId, setTechnicianId] = React.useState<number | ''>('');
 
+  const [branches, setBranches] = React.useState<Array<{ id: number; name: string }>>([]);
+  const [technicians, setTechnicians] = React.useState<Array<{ id: number; fullName: string }>>([]);
 
-  // Initialize with current month
-  useEffect(() => {
-    const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const [loading, setLoading] = React.useState<boolean>(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-    setDateRange({
-      startDate: firstDayOfMonth.toISOString().split('T')[0],
-      endDate: lastDayOfMonth.toISOString().split('T')[0]
-    });
+  const [dashboard, setDashboard] = React.useState<any>(null);
+  const [rawGold, setRawGold] = React.useState<any>(null);
+  const [efficiency, setEfficiency] = React.useState<any>(null);
+  const [cost, setCost] = React.useState<any>(null);
+  const [workflow, setWorkflow] = React.useState<any>(null);
+
+  const sd = startDate || undefined;
+  const ed = endDate || undefined;
+  const bId = branchId === '' ? undefined : Number(branchId);
+  const tId = technicianId === '' ? undefined : Number(technicianId);
+
+  // Load branches once
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.branches.getBranches({ pageNumber: 1, pageSize: 200 });
+        if (!cancelled) {
+          const items = (data.items || []).map((b: any) => ({ id: b.id, name: b.name }));
+          setBranches(items);
+        }
+      } catch {
+        // ignore silently for filters
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
+  // Load technicians when branch changes
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const techs = await api.technicians.getActiveTechnicians(bId);
+        if (!cancelled) {
+          setTechnicians(techs.map((t: any) => ({ id: t.id, fullName: t.fullName })));
+        }
+      } catch {
+        // ignore silently for filters
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [bId]);
 
-  // Load reports data
-  const loadReports = async () => {
-    setLoading(true);
-    try {
-      const startDateStr = dateRange.startDate || undefined;
-      const endDateStr = dateRange.endDate || undefined;
+  // Simple CSV export utility
+  function exportToCsv(filename: string, headers: string[], rows: any[]) {
+    const escape = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const s = String(val).replace(/"/g, '""');
+      if (/[",\n]/.test(s)) return `"${s}"`;
+      return s;
+    };
+    const csv = [headers.join(',')]
+      .concat(rows.map(r => headers.map(h => escape(r[h])).join(',')))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
-      // Load all reports in parallel
-      const [dashboardData, rawGoldData, efficiencyData, costData, workflowData] = await Promise.all([
-        api.manufacturingReports.getManufacturingDashboard(startDateStr, endDateStr),
-        api.manufacturingReports.getRawGoldUtilizationReport(startDateStr, endDateStr),
-        api.manufacturingReports.getEfficiencyReport(startDateStr, endDateStr),
-        api.manufacturingReports.getCostAnalysisReport(startDateStr, endDateStr),
-        api.manufacturingReports.getWorkflowPerformanceReport(startDateStr, endDateStr),
-      ]);
-
-      // Debug: Log the API responses
-      console.log('API Responses:', {
-        dashboardData,
-        rawGoldData,
-        efficiencyData,
-        costData,
-        workflowData
-      });
-
-      // Structure the data to match the expected format
-      setReportsData({
-        dashboard: dashboardData,
-        rawGoldUtilization: rawGoldData,
-        efficiency: efficiencyData,
-        costAnalysis: costData,
-        workflowPerformance: workflowData
-      });
-    } catch (error) {
-      console.error('Error loading reports:', error);
-      // Set empty data structure on error
-      setReportsData({
-        dashboard: null,
-        rawGoldUtilization: null,
-        efficiency: null,
-        costAnalysis: null,
-        workflowPerformance: null
-      });
-    } finally {
-      setLoading(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        if (tab === 'dashboard') {
+          const data = await api.manufacturingReports.getManufacturingDashboard(sd, ed, bId, tId);
+          if (!cancelled) setDashboard(data);
+        } else if (tab === 'raw-gold') {
+          const data = await api.manufacturingReports.getRawGoldUtilizationReport(sd, ed, bId, tId);
+          if (!cancelled) setRawGold(data);
+        } else if (tab === 'efficiency') {
+          const data = await api.manufacturingReports.getEfficiencyReport(sd, ed, bId, tId);
+          if (!cancelled) setEfficiency(data);
+        } else if (tab === 'cost') {
+          const data = await api.manufacturingReports.getCostAnalysisReport(sd, ed, bId, tId);
+          if (!cancelled) setCost(data);
+        } else if (tab === 'workflow') {
+          const data = await api.manufacturingReports.getWorkflowPerformanceReport(sd, ed, bId, tId);
+          if (!cancelled) setWorkflow(data);
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Failed to load report');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  };
-
-  useEffect(() => {
-    if (dateRange.startDate && dateRange.endDate) {
-      loadReports();
-    }
-  }, [dateRange]);
-
-  // Handle export
-  const handleExport = async (format: 'excel' | 'pdf') => {
-    try {
-      // In real app, this would call the export API
-      console.log(`Exporting to ${format}:`, reportsData);
-      alert(`Export to ${format.toUpperCase()} - Feature coming soon!`);
-    } catch (error) {
-      console.error('Error exporting:', error);
-      alert('Failed to export report');
-    }
-  };
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  // Format percentage
-  const formatPercentage = (value: number) => {
-    return `${value.toFixed(1)}%`;
-  };
-
-  // Format weight
-  const formatWeight = (weight: number) => {
-    return `${weight.toFixed(2)}g`;
-  };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, sd, ed, bId, tId]);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Manufacturing Reports</h1>
-          <p className="text-muted-foreground">
-            Comprehensive analytics and insights for manufacturing operations
-          </p>
+          <p className="text-muted-foreground">Rebuilt, modular reports powered by backend analytics.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => loadReports()} disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Refresh
-          </Button>
-          <Button variant="outline" onClick={() => handleExport('excel')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export Excel
-          </Button>
-          <Button variant="outline" onClick={() => handleExport('pdf')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </Button>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">From</label>
+            <input
+              type="date"
+              className="h-9 rounded-md border px-2 text-sm"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">To</label>
+            <input
+              type="date"
+              className="h-9 rounded-md border px-2 text-sm"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Branch</label>
+            <select
+              className="h-9 rounded-md border px-2 text-sm min-w-[160px]"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">All</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Technician</label>
+            <select
+              className="h-9 rounded-md border px-2 text-sm min-w-[160px]"
+              value={technicianId}
+              onChange={(e) => setTechnicianId(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">All</option>
+              {technicians.map((t) => (
+                <option key={t.id} value={t.id}>{t.fullName}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Date Range Filter */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Report Period</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={dateRange.startDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={dateRange.endDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={loadReports} disabled={loading}>
-                <Filter className="w-4 h-4 mr-2" />
-                Apply Filter
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Debug: Show current data structure */}
-      {reportsData && (
-        <div className="mb-4 p-4 bg-gray-100 rounded">
-          <h3 className="font-bold">Debug - Data Structure:</h3>
-          <pre className="text-xs overflow-auto max-h-32">
-            {JSON.stringify(reportsData, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      {reportsData?.dashboard?.Summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Raw Gold Utilized</CardTitle>
-              <Scale className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatPercentage(reportsData.dashboard.Summary.RawGoldUtilizationRate)}</div>
-              <p className="text-xs text-muted-foreground">
-                {formatWeight(reportsData.dashboard.Summary.TotalRawGoldConsumed)} consumed
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatPercentage(reportsData.dashboard.Summary.OverallCompletionRate)}</div>
-              <p className="text-xs text-muted-foreground">
-                {reportsData.dashboard.Summary.TotalProductsManufactured} products
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(reportsData.dashboard.Summary.TotalManufacturingCost)}</div>
-              <p className="text-xs text-muted-foreground">
-                Avg: {formatCurrency(reportsData.dashboard.Summary.AverageCostPerGram)}/g
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Quality Pass Rate</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatPercentage(reportsData.dashboard.Summary.QualityPassRate)}</div>
-              <p className="text-xs text-muted-foreground">
-                Approval: {formatPercentage(reportsData.dashboard.Summary.ApprovalRate)}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="raw-gold">Raw Gold Utilization</TabsTrigger>
+          <TabsTrigger value="raw-gold">Raw Gold</TabsTrigger>
           <TabsTrigger value="efficiency">Efficiency</TabsTrigger>
-          <TabsTrigger value="cost-analysis">Cost Analysis</TabsTrigger>
-          <TabsTrigger value="workflow">Workflow Performance</TabsTrigger>
+          <TabsTrigger value="cost">Cost Analysis</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="dashboard" className="space-y-4">
-          {/* Manufacturing Dashboard */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Raw Gold Summary</CardTitle>
-                <CardDescription>
-                  Raw gold utilization and efficiency metrics
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {reportsData?.rawGoldUtilization && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Total Purchased:</span>
-                      <span className="font-medium">{formatWeight(reportsData.rawGoldUtilization.totalRawGoldPurchased)}</span>
+        <TabsContent value="dashboard">
+          <Card>
+            <CardHeader>
+              <CardTitle>Dashboard Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {!loading && !error && (
+                dashboard ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Raw Gold Purchased</div>
+                      <div className="text-xl font-semibold">{dashboard?.Summary?.TotalRawGoldPurchased ?? 0}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Total Consumed:</span>
-                      <span className="font-medium">{formatWeight(reportsData.rawGoldUtilization.totalRawGoldConsumed)}</span>
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Raw Gold Consumed</div>
+                      <div className="text-xl font-semibold">{dashboard?.Summary?.TotalRawGoldConsumed ?? 0}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Total Wastage:</span>
-                      <span className="font-medium text-red-600">{formatWeight(reportsData.rawGoldUtilization.totalWastage)}</span>
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Utilization Rate</div>
+                      <div className="text-xl font-semibold">{(dashboard?.Summary?.RawGoldUtilizationRate ?? 0).toFixed(2)}%</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Utilization Rate:</span>
-                      <span className="font-medium">{formatPercentage(reportsData.rawGoldUtilization.rawGoldUtilizationRate)}</span>
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Products Manufactured</div>
+                      <div className="text-xl font-semibold">{dashboard?.Summary?.TotalProductsManufactured ?? 0}</div>
                     </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Cost Breakdown</CardTitle>
-                <CardDescription>
-                  Manufacturing cost distribution
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {reportsData?.costAnalysis?.costBreakdownByProductType.map((item: any, index: number) => (
-                  <div key={index} className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">{item.productType}:</span>
-                    <span className="font-medium">{formatCurrency(item.totalCost)}</span>
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Overall Completion</div>
+                      <div className="text-xl font-semibold">{(dashboard?.Summary?.OverallCompletionRate ?? 0).toFixed(2)}%</div>
+                    </div>
+                    <div className="rounded border p-3">
+                      <div className="text-xs text-muted-foreground">Total Manufacturing Cost</div>
+                      <div className="text-xl font-semibold">{dashboard?.Summary?.TotalManufacturingCost ?? 0}</div>
+                    </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No data for the selected period. Filters: {startDate || '—'} to {endDate || '—'}.
+                  </p>
+                )
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Technician Performance</CardTitle>
-                <CardDescription>
-                  Top performing technicians this period
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {reportsData?.efficiency?.byTechnician.slice(0, 3).map((tech: any, index: number) => (
-                    <div key={index} className="flex justify-between items-center">
-                      <div>
-                        <p className="text-sm font-medium">{tech.technicianName}</p>
-                        <p className="text-xs text-muted-foreground">{tech.completedRecords} items completed</p>
-                      </div>
-                      <Badge variant="outline">{formatPercentage(tech.completionRate)}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Workflow Status</CardTitle>
-                <CardDescription>
-                  Current workflow performance metrics
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {reportsData?.workflowPerformance && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Approval Rate:</span>
-                      <span className="font-medium">{formatPercentage(reportsData.workflowPerformance.approvalRate)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Quality Pass Rate:</span>
-                      <span className="font-medium">{formatPercentage(reportsData.workflowPerformance.qualityPassRate)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Avg Processing Time:</span>
-                      <span className="font-medium">{reportsData.workflowPerformance.averageTimeInProgress} hours</span>
-                    </div>
-                  </>
+        <TabsContent value="raw-gold">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Raw Gold Utilization</CardTitle>
+                {rawGold && (
+                  <div className="flex gap-2">
+                    {Array.isArray(rawGold.BySupplier) && rawGold.BySupplier.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['SupplierName','TotalPurchased','TotalConsumed','UtilizationRate'];
+                          exportToCsv('raw-gold-by-supplier.csv', headers, rawGold.BySupplier);
+                        }}
+                      >Export Suppliers</button>
+                    )}
+                    {Array.isArray(rawGold.ByKaratType) && rawGold.ByKaratType.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['KaratTypeName','TotalPurchased','TotalConsumed','UtilizationRate'];
+                          exportToCsv('raw-gold-by-karat.csv', headers, rawGold.ByKaratType);
+                        }}
+                      >Export Karats</button>
+                    )}
+                    {Array.isArray(rawGold.ByProductType) && rawGold.ByProductType.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['ProductTypeName','TotalPurchased','TotalConsumed','UtilizationRate'];
+                          exportToCsv('raw-gold-by-product-type.csv', headers, rawGold.ByProductType);
+                        }}
+                      >Export Product Types</button>
+                    )}
+                  </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="raw-gold" className="space-y-4">
-          {/* Raw Gold Utilization Report */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Raw Gold Utilization Report</CardTitle>
-              <CardDescription>
-                Detailed breakdown of raw gold usage by supplier
-              </CardDescription>
+              </div>
             </CardHeader>
             <CardContent>
-              {reportsData?.rawGoldUtilization?.bySupplier && (
-                <div className="space-y-4">
-                  {reportsData.rawGoldUtilization.bySupplier.map((supplier: any, index: number) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">{supplier.supplierName}</h4>
-                        <Badge variant="outline">
-                          {formatPercentage(supplier.utilizationRate)}
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Total:</span>
-                          <span className="ml-2 font-medium">{formatWeight(supplier.rawGoldPurchased)}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Consumed:</span>
-                          <span className="ml-2 font-medium">{formatWeight(supplier.rawGoldConsumed)}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Wastage:</span>
-                          <span className="ml-2 font-medium text-red-600">{formatWeight(supplier.wastage)}</span>
-                        </div>
-                      </div>
+              {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {!loading && !error && (
+                rawGold ? (
+                  <div className="space-y-4 text-sm">
+                    <div className="space-y-2">
+                      <div>Total Purchased: {rawGold.TotalRawGoldPurchased}</div>
+                      <div>Total Consumed: {rawGold.TotalRawGoldConsumed}</div>
+                      <div>Utilization Rate: {(rawGold.RawGoldUtilizationRate ?? 0).toFixed(2)}%</div>
                     </div>
-                  ))}
-                </div>
+
+                    {Array.isArray(rawGold.BySupplier) && rawGold.BySupplier.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">By Supplier</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Supplier</th>
+                                <th className="p-2 border">Purchased</th>
+                                <th className="p-2 border">Consumed</th>
+                                <th className="p-2 border">Utilization %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rawGold.BySupplier.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.SupplierName}</td>
+                                  <td className="p-2 border">{row.TotalPurchased}</td>
+                                  <td className="p-2 border">{row.TotalConsumed}</td>
+                                  <td className="p-2 border">{(row.UtilizationRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(rawGold.ByKaratType) && rawGold.ByKaratType.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">By Karat Type</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Karat</th>
+                                <th className="p-2 border">Purchased</th>
+                                <th className="p-2 border">Consumed</th>
+                                <th className="p-2 border">Utilization %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rawGold.ByKaratType.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.KaratTypeName}</td>
+                                  <td className="p-2 border">{row.TotalPurchased}</td>
+                                  <td className="p-2 border">{row.TotalConsumed}</td>
+                                  <td className="p-2 border">{(row.UtilizationRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(rawGold.ByProductType) && rawGold.ByProductType.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">By Product Type</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Product Type</th>
+                                <th className="p-2 border">Purchased</th>
+                                <th className="p-2 border">Consumed</th>
+                                <th className="p-2 border">Utilization %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rawGold.ByProductType.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.ProductTypeName}</td>
+                                  <td className="p-2 border">{row.TotalPurchased}</td>
+                                  <td className="p-2 border">{row.TotalConsumed}</td>
+                                  <td className="p-2 border">{(row.UtilizationRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data for selected period.</p>
+                )
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="efficiency" className="space-y-4">
-          {/* Manufacturing Efficiency Report */}
+        <TabsContent value="efficiency">
           <Card>
             <CardHeader>
-              <CardTitle>Technician Performance</CardTitle>
-              <CardDescription>
-                Individual technician efficiency metrics
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle>Efficiency Report</CardTitle>
+                {efficiency && (
+                  <div className="flex gap-2">
+                    {Array.isArray(efficiency.ByTechnician) && efficiency.ByTechnician.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['TechnicianName','TotalRecords','CompletedRecords','CompletionRate'];
+                          exportToCsv('efficiency-by-technician.csv', headers, efficiency.ByTechnician);
+                        }}
+                      >Export Technicians</button>
+                    )}
+                    {Array.isArray(efficiency.ByBranch) && efficiency.ByBranch.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['BranchName','TotalRecords','CompletedRecords','CompletionRate'];
+                          exportToCsv('efficiency-by-branch.csv', headers, efficiency.ByBranch);
+                        }}
+                      >Export Branches</button>
+                    )}
+                    {Array.isArray(efficiency.EfficiencyTrend) && efficiency.EfficiencyTrend.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['Month','CompletionRate','AverageEfficiency'];
+                          exportToCsv('efficiency-trend.csv', headers, efficiency.EfficiencyTrend);
+                        }}
+                      >Export Trend</button>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              {reportsData?.efficiency?.byTechnician && (
-                <div className="space-y-4">
-                  {reportsData.efficiency.byTechnician.map((tech: any, index: number) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">{tech.technicianName}</h4>
-                        <Badge variant={tech.completionRate >= 90 ? "default" : "secondary"}>
-                          {formatPercentage(tech.completionRate)}
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Completed Items:</span>
-                          <span className="ml-2 font-medium">{tech.completedRecords}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Avg Time:</span>
-                          <span className="ml-2 font-medium">{tech.averageEfficiencyRating}%</span>
-                        </div>
-                      </div>
+              {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {!loading && !error && (
+                efficiency ? (
+                  <div className="space-y-4 text-sm">
+                    <div className="space-y-2">
+                      <div>Total Records: {efficiency.TotalManufacturingRecords}</div>
+                      <div>Completed: {efficiency.CompletedRecords}</div>
+                      <div>Completion Rate: {(efficiency.OverallCompletionRate ?? 0).toFixed(2)}%</div>
+                      <div>Avg Efficiency Rating: {(efficiency.AverageEfficiencyRating ?? 0).toFixed(2)}</div>
                     </div>
-                  ))}
-                </div>
+
+                    {Array.isArray(efficiency.ByTechnician) && efficiency.ByTechnician.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">By Technician</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Technician</th>
+                                <th className="p-2 border">Total</th>
+                                <th className="p-2 border">Completed</th>
+                                <th className="p-2 border">Completion %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {efficiency.ByTechnician.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.TechnicianName}</td>
+                                  <td className="p-2 border">{row.TotalRecords}</td>
+                                  <td className="p-2 border">{row.CompletedRecords}</td>
+                                  <td className="p-2 border">{(row.CompletionRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(efficiency.ByBranch) && efficiency.ByBranch.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">By Branch</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Branch</th>
+                                <th className="p-2 border">Total</th>
+                                <th className="p-2 border">Completed</th>
+                                <th className="p-2 border">Completion %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {efficiency.ByBranch.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.BranchName}</td>
+                                  <td className="p-2 border">{row.TotalRecords}</td>
+                                  <td className="p-2 border">{row.CompletedRecords}</td>
+                                  <td className="p-2 border">{(row.CompletionRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(efficiency.EfficiencyTrend) && efficiency.EfficiencyTrend.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Efficiency Trend</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Month</th>
+                                <th className="p-2 border">Completion %</th>
+                                <th className="p-2 border">Avg Efficiency</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {efficiency.EfficiencyTrend.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.Month}</td>
+                                  <td className="p-2 border">{(row.CompletionRate ?? 0).toFixed(2)}%</td>
+                                  <td className="p-2 border">{(row.AverageEfficiency ?? 0).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data for selected period.</p>
+                )
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="cost-analysis" className="space-y-4">
-          {/* Cost Analysis Report */}
+        <TabsContent value="cost">
           <Card>
             <CardHeader>
-              <CardTitle>Product Cost Analysis</CardTitle>
-              <CardDescription>
-                Cost breakdown by product type
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle>Cost Analysis</CardTitle>
+                {cost && (
+                  <div className="flex gap-2">
+                    {Array.isArray(cost.CostBreakdownByProductType) && cost.CostBreakdownByProductType.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['ProductTypeName','RawGoldCost','ManufacturingCost','TotalCost'];
+                          exportToCsv('cost-by-product-type.csv', headers, cost.CostBreakdownByProductType);
+                        }}
+                      >Export Breakdown</button>
+                    )}
+                    {Array.isArray(cost.CostTrend) && cost.CostTrend.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['Month','TotalCost','AverageCostPerGram'];
+                          exportToCsv('cost-trend.csv', headers, cost.CostTrend);
+                        }}
+                      >Export Trend</button>
+                    )}
+                    {Array.isArray(cost.TopCostProducts) && cost.TopCostProducts.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['ProductName','TotalCost'];
+                          exportToCsv('top-cost-products.csv', headers, cost.TopCostProducts);
+                        }}
+                      >Export Top Products</button>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              {reportsData?.costAnalysis?.costBreakdownByProductType && (
-                <div className="space-y-4">
-                  {reportsData.costAnalysis.costBreakdownByProductType.map((product: any, index: number) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">{product.productType}</h4>
-                        <Badge variant="outline">{product.productsManufactured} units</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Total Cost:</span>
-                          <span className="ml-2 font-medium">{formatCurrency(product.totalCost)}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Cost per Unit:</span>
-                          <span className="ml-2 font-medium">{formatCurrency(product.averageCostPerProduct)}</span>
-                        </div>
-                      </div>
+              {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {!loading && !error && (
+                cost ? (
+                  <div className="space-y-4 text-sm">
+                    <div className="space-y-2">
+                      <div>Total Raw Gold Cost: {cost.TotalRawGoldCost}</div>
+                      <div>Total Manufacturing Cost: {cost.TotalManufacturingCost}</div>
+                      <div>Average Cost/Gram: {(cost.AverageCostPerGram ?? 0).toFixed(2)}</div>
                     </div>
-                  ))}
-                </div>
+
+                    {Array.isArray(cost.CostBreakdownByProductType) && cost.CostBreakdownByProductType.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Cost Breakdown by Product Type</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Product Type</th>
+                                <th className="p-2 border">Raw Gold Cost</th>
+                                <th className="p-2 border">Manufacturing Cost</th>
+                                <th className="p-2 border">Total Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cost.CostBreakdownByProductType.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.ProductTypeName}</td>
+                                  <td className="p-2 border">{row.RawGoldCost}</td>
+                                  <td className="p-2 border">{row.ManufacturingCost}</td>
+                                  <td className="p-2 border">{row.TotalCost}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(cost.CostTrend) && cost.CostTrend.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Cost Trend</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Month</th>
+                                <th className="p-2 border">Total Cost</th>
+                                <th className="p-2 border">Avg Cost/Gram</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cost.CostTrend.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.Month}</td>
+                                  <td className="p-2 border">{row.TotalCost}</td>
+                                  <td className="p-2 border">{(row.AverageCostPerGram ?? 0).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(cost.TopCostProducts) && cost.TopCostProducts.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Top Cost Products</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Product</th>
+                                <th className="p-2 border">Total Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cost.TopCostProducts.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.ProductName}</td>
+                                  <td className="p-2 border">{row.TotalCost}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data for selected period.</p>
+                )
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="workflow" className="space-y-4">
-          {/* Workflow Performance Report */}
+        <TabsContent value="workflow">
           <Card>
             <CardHeader>
-              <CardTitle>Workflow Stages Performance</CardTitle>
-              <CardDescription>
-                Performance metrics for each workflow stage
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle>Workflow Performance</CardTitle>
+                {workflow && (
+                  <div className="flex gap-2">
+                    {Array.isArray(workflow.WorkflowStepAnalysis) && workflow.WorkflowStepAnalysis.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['StepName','TotalRecords','AverageTimeInStep','CompletionRate'];
+                          exportToCsv('workflow-steps.csv', headers, workflow.WorkflowStepAnalysis);
+                        }}
+                      >Export Steps</button>
+                    )}
+                    {Array.isArray(workflow.TransitionAnalysis) && workflow.TransitionAnalysis.length > 0 && (
+                      <button
+                        className="h-8 px-2 border rounded text-xs"
+                        onClick={() => {
+                          const headers = ['FromStatus','ToStatus','TransitionCount'];
+                          exportToCsv('workflow-transitions.csv', headers, workflow.TransitionAnalysis);
+                        }}
+                      >Export Transitions</button>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              {reportsData?.workflowPerformance?.workflowStepAnalysis && (
-                <div className="space-y-4">
-                  {reportsData.workflowPerformance.workflowStepAnalysis.map((stage: any, index: number) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">{stage.stepName}</h4>
-                        <Badge variant="outline">{stage.totalRecords} items</Badge>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Average Time:</span>
-                        <span className="ml-2 font-medium">{formatPercentage(stage.completionRate)}</span>
-                      </div>
+              {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {!loading && !error && (
+                workflow ? (
+                  <div className="space-y-4 text-sm">
+                    <div className="space-y-2">
+                      <div>Approval Rate: {(workflow.ApprovalRate ?? 0).toFixed(2)}%</div>
+                      <div>Quality Pass Rate: {(workflow.QualityPassRate ?? 0).toFixed(2)}%</div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Potential Bottlenecks</CardTitle>
-              <CardDescription>
-                Workflow stages that may need attention
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {reportsData?.workflowPerformance?.transitionAnalysis && (
-                <div className="space-y-4">
-                  {reportsData.workflowPerformance.transitionAnalysis.map((transition: any, index: number) => (
-                    <div key={index} className="border rounded-lg p-4 border-yellow-200 bg-yellow-50">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium flex items-center">
-                          <AlertTriangle className="w-4 h-4 mr-2 text-yellow-600" />
-                          {transition.fromStatus} → {transition.toStatus}
-                        </h4>
-                        <Badge variant="outline" className="text-yellow-700">
-                          {formatPercentage(transition.successRate)} Success
-                        </Badge>
+                    {Array.isArray(workflow.WorkflowStepAnalysis) && workflow.WorkflowStepAnalysis.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Workflow Step Analysis</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">Step</th>
+                                <th className="p-2 border">Total Records</th>
+                                <th className="p-2 border">Avg Time (hrs)</th>
+                                <th className="p-2 border">Completion %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {workflow.WorkflowStepAnalysis.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.StepName}</td>
+                                  <td className="p-2 border">{row.TotalRecords}</td>
+                                  <td className="p-2 border">{(row.AverageTimeInStep ?? 0).toFixed(2)}</td>
+                                  <td className="p-2 border">{(row.CompletionRate ?? 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Delay:</span>
-                        <span className="ml-2 font-medium">{transition.transitionCount} transitions</span>
+                    )}
+
+                    {Array.isArray(workflow.TransitionAnalysis) && workflow.TransitionAnalysis.length > 0 && (
+                      <div>
+                        <div className="font-medium mb-2">Transition Analysis</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="p-2 border">From</th>
+                                <th className="p-2 border">To</th>
+                                <th className="p-2 border">Count</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {workflow.TransitionAnalysis.map((row: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="p-2 border">{row.FromStatus}</td>
+                                  <td className="p-2 border">{row.ToStatus}</td>
+                                  <td className="p-2 border">{row.TransitionCount}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data for selected period.</p>
+                )
               )}
             </CardContent>
           </Card>

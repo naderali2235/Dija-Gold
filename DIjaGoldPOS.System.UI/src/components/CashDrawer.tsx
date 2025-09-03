@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { useAuth } from './AuthContext';
-import { cashDrawerApi, CashDrawerBalance } from '../services/api';
+import { cashDrawerApi, CashDrawerBalance, branchesApi } from '../services/api';
 import { formatCurrency, formatDate } from './utils/currency';
 
 export default function CashDrawer() {
@@ -17,6 +17,7 @@ export default function CashDrawer() {
   
   // State management
   const [selectedBranchId, setSelectedBranchId] = useState<number>(currentUser?.branch?.id || 1);
+  const [branchDisplayName, setBranchDisplayName] = useState<string>(currentUser?.branch?.name || '');
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateLocal = (date: Date) => {
     return date.getFullYear() + '-' + 
@@ -46,8 +47,27 @@ export default function CashDrawer() {
   useEffect(() => {
     if (currentUser?.branch?.id) {
       setSelectedBranchId(currentUser.branch.id);
+      setBranchDisplayName(currentUser.branch.name);
     }
   }, [currentUser?.branch?.id]);
+
+  // If branch object is missing but we have an ID, fetch the branch name for display
+  useEffect(() => {
+    const ensureBranchName = async () => {
+      try {
+        if (!branchDisplayName && selectedBranchId) {
+          const branch = await branchesApi.getBranch(selectedBranchId);
+          if (branch?.name) {
+            setBranchDisplayName(branch.name);
+          }
+        }
+      } catch (err) {
+        // Silent fail, keep placeholder
+        console.warn('Unable to load branch name for display:', err);
+      }
+    };
+    ensureBranchName();
+  }, [branchDisplayName, selectedBranchId]);
 
   // Load current balance on component mount and date change
   useEffect(() => {
@@ -292,7 +312,7 @@ export default function CashDrawer() {
               <Label htmlFor="branch">Branch</Label>
               <Input
                 id="branch"
-                value={currentUser?.branch?.name || 'Unknown Branch'}
+                value={branchDisplayName || currentUser?.branch?.name || 'Unknown Branch'}
                 readOnly
                 className="w-full p-2 border rounded-md bg-gray-50 cursor-not-allowed"
               />

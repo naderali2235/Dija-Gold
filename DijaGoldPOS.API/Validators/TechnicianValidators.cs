@@ -13,13 +13,13 @@ public class CreateTechnicianRequestDtoValidator : AbstractValidator<CreateTechn
 
         RuleFor(x => x.PhoneNumber)
             .NotEmpty()
-            .MaximumLength(20)
-            .Matches(@"^[\+]?[1-9][\d]{0,15}$").WithMessage("Invalid phone number format");
+            .MaximumLength(20);
+        // Matches(@"^[\+]?[1-9][\d]{0,15}$").WithMessage("Invalid phone number format");
 
         RuleFor(x => x.Email)
             .EmailAddress()
             .MaximumLength(100)
-            .When(x => !string.IsNullOrWhiteSpace(x.Email));
+        .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
         RuleFor(x => x.Specialization)
             .MaximumLength(500)

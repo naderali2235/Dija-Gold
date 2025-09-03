@@ -59,6 +59,14 @@ public sealed class ExceptionHandlingMiddleware
                 statusCode: (int)HttpStatusCode.BadRequest,
                 title: "Invalid argument");
         }
+        catch (InvalidOperationException invalidOpException)
+        {
+            await HandleExceptionAsync(
+                httpContext,
+                invalidOpException,
+                statusCode: (int)HttpStatusCode.BadRequest,
+                title: "Invalid operation");
+        }
         catch (DbUpdateException dbUpdateException)
         {
             await HandleExceptionAsync(
@@ -160,7 +168,21 @@ public sealed class ExceptionHandlingMiddleware
             WriteIndented = false
         };
 
-        await httpContext.Response.WriteAsync(JsonSerializer.Serialize(problemDetails, serializerOptions));
+        try
+        {
+            var payload = JsonSerializer.Serialize(problemDetails, serializerOptions);
+            await httpContext.Response.WriteAsync(payload);
+        }
+        catch (ObjectDisposedException ode)
+        {
+            // Client disconnected or stream closed; log and swallow to avoid crashing the pipeline
+            Log.Warning(ode, "Response stream disposed while writing problem details.");
+        }
+        catch (IOException ioe)
+        {
+            // Network/connection issue while writing; log and swallow
+            Log.Warning(ioe, "I/O error while writing problem details to response.");
+        }
     }
 
     private void LogException(HttpContext httpContext, Exception exception, int statusCode, string title)

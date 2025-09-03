@@ -81,13 +81,16 @@ import {
   useCreateRepairOrder,
   useUpdateRepairJobStatus,
   useAssignTechnician,
-  useCompleteRepair
+  useCompleteRepair,
+  useIsCashDrawerOpen
 } from '../hooks/useApi';
 import { EnumLookupDto } from '../types/lookups';
 import { toast } from 'sonner';
 
 export default function Repairs() {
   const { user } = useAuth();
+  // Default branch selection to the user's branch (consistent with CashDrawer)
+  const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch?.id || 1);
   const [activeTab, setActiveTab] = useState('all');
   const [isNewRepairOpen, setIsNewRepairOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,7 +98,7 @@ export default function Repairs() {
   // Use hooks for data fetching
   const { data: customersData, loading: customersLoading } = usePaginatedCustomers({
     pageNumber: 1,
-    pageSize: 1000,
+    pageSize: 100,
     isActive: true
   });
   
@@ -110,8 +113,18 @@ export default function Repairs() {
   const { execute: updateRepairJobStatus, loading: isUpdatingStatus } = useUpdateRepairJobStatus();
   const { execute: assignTechnician, loading: isAssigningTechnician } = useAssignTechnician();
   const { execute: completeRepair, loading: isCompletingRepair } = useCompleteRepair();
+  const { execute: checkDrawerOpen, loading: isCheckingDrawer } = useIsCashDrawerOpen();
 
   const [showStatistics, setShowStatistics] = useState(false);
+
+  // Helper to format date as YYYY-MM-DD in local timezone (matches CashDrawer)
+  const formatDateLocal = (date: Date) => {
+    return (
+      date.getFullYear() +
+      '-' + String(date.getMonth() + 1).padStart(2, '0') +
+      '-' + String(date.getDate()).padStart(2, '0')
+    );
+  };
 
   // Form state for new repair
   const [newRepair, setNewRepair] = useState({
@@ -156,10 +169,17 @@ export default function Repairs() {
     fetchData();
   }, []);
 
+  // Keep selectedBranchId synced with the authenticated user's branch
+  useEffect(() => {
+    if (user?.branch?.id) {
+      setSelectedBranchId(user.branch.id);
+    }
+  }, [user?.branch?.id]);
+
   const fetchData = async () => {
     try {
       await Promise.all([
-        searchRepairJobs({ pageSize: 1000 }),
+        searchRepairJobs({ pageSize: 100 }),
         getRepairJobStatistics(),
         getActiveTechnicians(),
         getRepairStatuses(),
@@ -187,14 +207,22 @@ export default function Repairs() {
       console.log('User data for repair:', user);
       console.log('User branch:', user?.branch);
       
-      if (!user?.branch?.id) {
+      if (!selectedBranchId) {
         toast.error('Branch information not available. Please contact your administrator to assign you to a branch.');
         return;
       }
       
-      const branchId = user.branch.id; // Use user's numeric branch ID
+      const branchId = selectedBranchId; // Use user's numeric branch ID
       console.log('Using branch ID:', branchId);
-      
+
+      // Enforce cash drawer open rule for current date
+      const todayStr = formatDateLocal(new Date());
+      const drawerOpen = await checkDrawerOpen(branchId, todayStr);
+      if (!drawerOpen) {
+        toast.error('Cannot create repair job: cash drawer is closed for today. Please open the drawer in the Cash Drawer screen.');
+        return;
+      }
+
       // Get priority enum value
       const priorityLookup = repairPriorities?.find(p => p.name === newRepair.priority);
       const priorityValue = priorityLookup?.id || 2; // Default to Medium priority
@@ -635,13 +663,18 @@ export default function Repairs() {
                 <Button 
                   onClick={handleCreateRepair}
                   variant="golden" 
-                  disabled={!newRepair.itemDescription || !newRepair.repairType || isCreating}
+                  disabled={!newRepair.itemDescription || !newRepair.repairType || isCreating || isCheckingDrawer}
                   className="touch-target"
                 >
                   {isCreating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Creating...
+                    </>
+                  ) : isCheckingDrawer ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Checking drawer...
                     </>
                   ) : 'Create Job'}
                 </Button>

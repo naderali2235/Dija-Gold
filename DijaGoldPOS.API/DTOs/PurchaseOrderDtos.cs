@@ -143,6 +143,7 @@ public class PurchaseOrderSearchRequestDto
 public class UpdatePurchaseOrderStatusRequestDto
 {
 
+    public int PurchaseOrderId { get; set; }
     public string NewStatus { get; set; } = string.Empty;
     
 
@@ -154,6 +155,13 @@ public class PurchaseOrderStatusTransitionDto
     public string CurrentStatus { get; set; } = string.Empty;
     public List<string> AvailableTransitions { get; set; } = new();
     public string? ValidationMessage { get; set; }
+}
+
+public class PurchaseOrderStatusTransitionResult
+{
+    public bool IsSuccess { get; set; }
+    public string? ErrorMessage { get; set; }
+    public PurchaseOrderDto? PurchaseOrder { get; set; }
 }
 
 public class ProcessPurchaseOrderPaymentRequestDto

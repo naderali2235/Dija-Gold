@@ -69,6 +69,7 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import {
@@ -128,10 +129,10 @@ const CustomerPurchase: React.FC = () => {
   const { execute: cancelPurchase, loading: cancelLoading } = useCancelCustomerPurchase();
   const { execute: getSummary, data: summaryData } = useCustomerPurchaseSummary();
 
-  // Lookup data
-  const { data: karatTypes } = useKaratTypes();
-  const { data: paymentMethods } = usePaymentMethods();
-  const { data: customersData } = useCustomers();
+  // Lookup data (hooks require explicit fetch/execute)
+  const { data: karatTypes, fetchKaratTypes } = useKaratTypes();
+  const { data: paymentMethods, execute: fetchPaymentMethods } = usePaymentMethods();
+  const { data: customersData, execute: fetchCustomers } = useCustomers();
 
   // Load summary on component mount
   useEffect(() => {
@@ -152,6 +153,26 @@ const CustomerPurchase: React.FC = () => {
     });
   }, [user?.branch?.id]); // Remove getSummary from dependencies
 
+  // Fetch customers for search filters on mount
+  useEffect(() => {
+    // Attempt to load a reasonable page for dropdown usage
+    fetchCustomers({ pageNumber: 1, pageSize: 100, isActive: true }).catch(() => {/* ignore */});
+  }, [fetchCustomers]);
+
+  // Fetch lookup data when create dialog opens
+  useEffect(() => {
+    if (!createDialogOpen) return;
+    if (!karatTypes || karatTypes.length === 0) {
+      fetchKaratTypes().catch(() => {/* ignore */});
+    }
+    if (!paymentMethods || paymentMethods.length === 0) {
+      fetchPaymentMethods().catch(() => {/* ignore */});
+    }
+    if (!customersData || (Array.isArray((customersData as any).items) && (customersData as any).items.length === 0)) {
+      fetchCustomers({ pageNumber: 1, pageSize: 100, isActive: true }).catch(() => {/* ignore */});
+    }
+  }, [createDialogOpen, karatTypes, paymentMethods, customersData, fetchKaratTypes, fetchPaymentMethods, fetchCustomers]);
+
   // Handle search
   const handleSearch = (params: Partial<CustomerPurchaseSearchRequest>) => {
     setSearchParams(prev => ({ ...prev, ...params, pageNumber: 1 }));
@@ -166,7 +187,37 @@ const CustomerPurchase: React.FC = () => {
         return;
       }
 
-      const result = await createPurchase(createForm);
+      // Validate items and basic amounts (index-based loop for TS compatibility)
+      for (let idx = 0; idx < createForm.items.length; idx++) {
+        const item = createForm.items[idx];
+        if (!item.karatTypeId) {
+          alert(`Item #${idx + 1}: Karat type is required`);
+          return;
+        }
+        if ((item.weight ?? 0) <= 0) {
+          alert(`Item #${idx + 1}: Weight must be greater than 0`);
+          return;
+        }
+        if ((item.unitPrice ?? 0) <= 0) {
+          alert(`Item #${idx + 1}: Unit price must be greater than 0`);
+          return;
+        }
+      }
+
+      // Ensure totals are in sync
+      const normalizedItems = createForm.items.map(it => ({
+        ...it,
+        totalAmount: +(Number((it.weight || 0) * (it.unitPrice || 0)).toFixed(2))
+      }));
+      const total = normalizedItems.reduce((s, it) => s + (it.totalAmount || 0), 0);
+      const payload = {
+        ...createForm,
+        items: normalizedItems,
+        totalAmount: +total.toFixed(2),
+        amountPaid: Math.min(createForm.amountPaid ?? 0, +total.toFixed(2)),
+      } as CreateCustomerPurchaseRequest;
+
+      const result = await createPurchase(payload);
       if (result) {
         setCreateDialogOpen(false);
         resetCreateForm();
@@ -227,12 +278,17 @@ const CustomerPurchase: React.FC = () => {
 
   // Update item in create form
   const updateItemInForm = (index: number, field: string, value: any) => {
-    setCreateForm(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      )
-    }));
+    setCreateForm(prev => {
+      const items = prev.items.map((item, i) => {
+        if (i !== index) return item;
+        const updated = { ...item, [field]: value } as typeof item;
+        const weight = Number(updated.weight) || 0;
+        const unitPrice = Number(updated.unitPrice) || 0;
+        const totalAmount = +(Number(weight * unitPrice).toFixed(2));
+        return { ...updated, totalAmount };
+      });
+      return { ...prev, items };
+    });
   };
 
   // Calculate total amount when items change
@@ -406,6 +462,7 @@ const CustomerPurchase: React.FC = () => {
                       <TableHead>Total Amount</TableHead>
                       <TableHead>Paid</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Linked Raw Gold PO</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -419,6 +476,16 @@ const CustomerPurchase: React.FC = () => {
                         <TableCell>{formatCurrency(purchase.totalAmount)}</TableCell>
                         <TableCell>{formatCurrency(purchase.amountPaid)}</TableCell>
                         <TableCell>{getStatusBadge(purchase)}</TableCell>
+                        <TableCell>
+                          {purchase.linkedRawGoldPurchaseOrderNumber ? (
+                            <Badge className="bg-yellow-100 text-yellow-800">
+                              <Zap className="w-3 h-3 mr-1" />
+                              {purchase.linkedRawGoldPurchaseOrderNumber}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">None</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -766,6 +833,19 @@ const CustomerPurchase: React.FC = () => {
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Status</Label>
                   <div className="mt-1">{getStatusBadge(selectedPurchase)}</div>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Linked Raw Gold PO</Label>
+                  <div className="mt-1">
+                    {selectedPurchase.linkedRawGoldPurchaseOrderNumber ? (
+                      <Badge className="bg-yellow-100 text-yellow-800">
+                        <Zap className="w-3 h-3 mr-1" />
+                        {selectedPurchase.linkedRawGoldPurchaseOrderNumber}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">None</span>
+                    )}
+                  </div>
                 </div>
               </div>
 

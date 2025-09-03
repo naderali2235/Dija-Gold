@@ -71,6 +71,8 @@ interface CartItem {
 
 export default function Sales() {
   const { user } = useAuth();
+  // Default branch selection to the user's branch (mirrors CashDrawer behavior)
+  const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch?.id || 1);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,6 +98,10 @@ export default function Sales() {
   const [ownershipValidationErrors, setOwnershipValidationErrors] = useState<{[key: number]: string}>({});
   const [isValidatingOwnership, setIsValidatingOwnership] = useState(false);
   
+  // Products pagination state
+  const [productsPage, setProductsPage] = useState<number>(1);
+  const [productsPageSize, setProductsPageSize] = useState<number>(12);
+  
   // API hooks
   const { data: productsData, loading: productsLoading, execute: fetchProducts } = useProducts();
   const { data: searchResults, loading: customersLoading, execute: searchCustomers } = useSearchCustomers();
@@ -118,8 +124,8 @@ export default function Sales() {
     fetchProducts({ 
       searchTerm: searchQuery,
       isActive: true,
-      pageNumber: 1,
-      pageSize: 50
+      pageNumber: productsPage,
+      pageSize: productsPageSize
     });
     fetchKaratTypes();
     fetchCategoryTypes();
@@ -127,7 +133,12 @@ export default function Sales() {
     fetchTaxConfigurations();
     fetchRates();
     fetchCharges();
-  }, [searchQuery, fetchProducts, fetchKaratTypes, fetchPaymentMethods, fetchTaxConfigurations, fetchRates, fetchCharges]);
+  }, [searchQuery, productsPage, productsPageSize, fetchProducts, fetchKaratTypes, fetchPaymentMethods, fetchTaxConfigurations, fetchRates, fetchCharges]);
+
+  // Reset to first page when search query changes
+  useEffect(() => {
+    setProductsPage(1);
+  }, [searchQuery]);
 
   // Ensure all pricing data is loaded before allowing interactions
   useEffect(() => {
@@ -155,9 +166,16 @@ export default function Sales() {
     }
   }, [customerSearch, searchCustomers]);
 
-  // Fetch today's orders
+  // Keep selectedBranchId in sync with the logged-in user's branch
   useEffect(() => {
     if (user?.branch?.id) {
+      setSelectedBranchId(user.branch.id);
+    }
+  }, [user?.branch?.id]);
+
+  // Fetch today's orders
+  useEffect(() => {
+    if (selectedBranchId) {
       // Get today's date in local timezone - match the Dashboard logic exactly
       const today = new Date().getFullYear() + '-' + 
         String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
@@ -166,7 +184,7 @@ export default function Sales() {
       console.log('Fetching orders for today:', today);
       
       fetchOrders({
-        branchId: user.branch.id,
+        branchId: selectedBranchId,
         orderTypeId: 1, // Sale order type ID (assuming 1 is for sales)
         fromDate: today, // Use today only, not yesterday
         toDate: today,   // Use today only, not yesterday
@@ -174,7 +192,7 @@ export default function Sales() {
         pageSize: todayOrdersPageSize
       });
     }
-  }, [user?.branch?.id, todayOrdersPage, todayOrdersPageSize, fetchOrders]);
+  }, [selectedBranchId, todayOrdersPage, todayOrdersPageSize, fetchOrders]);
 
   // Recalculate cart pricing when customer changes
   useEffect(() => {
@@ -188,17 +206,18 @@ export default function Sales() {
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
     LookupHelper.getDisplayName(categoryTypesData || [], product.categoryTypeId).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const validateOwnership = async (productId: number, quantity: number): Promise<boolean> => {
-    if (!user?.branch?.id) return true; // Skip validation if no branch info
+    if (!selectedBranchId) return true; // Skip validation if no branch info
     
     try {
       setIsValidatingOwnership(true);
       const validation = await productOwnershipApi.validateOwnership({
         productId,
-        branchId: user.branch.id,
+        branchId: selectedBranchId,
         requestedQuantity: quantity
       });
       
@@ -578,13 +597,13 @@ export default function Sales() {
   const { subtotal, totalMakingCharges, totalDiscountAmount, totalTax, total } = billSummary;
 
   const debugCalculation = async () => {
-    if (!user?.branch?.id) {
+    if (!selectedBranchId) {
       alert('Branch information not available');
       return;
     }
 
     const saleRequest = {
-      branchId: user.branch.id,
+      branchId: selectedBranchId,
       customerId: selectedCustomer?.id,
       items: cart.map(item => ({
         productId: item.productId,
@@ -615,7 +634,7 @@ export default function Sales() {
       return;
     }
 
-    if (!user?.branch?.id) {
+    if (!selectedBranchId) {
       console.error('Branch information missing. User:', user);
       alert('Branch information not available. Please contact your administrator to assign you to a branch.');
       return;
@@ -652,7 +671,7 @@ export default function Sales() {
       setIsProcessingOrder(true);
       
       const saleRequest = {
-        branchId: user.branch.id,
+        branchId: selectedBranchId,
         customerId: selectedCustomer?.id,
         items: cart.map(item => ({
           productId: item.productId,
@@ -667,7 +686,7 @@ export default function Sales() {
       
       // Update ownership after successful sale
       try {
-        const branchId = user?.branch?.id;
+        const branchId = selectedBranchId;
         if (branchId) {
                   const ownershipUpdatePromises = cart.map(item => 
           productOwnershipApi.updateOwnershipAfterSale({
@@ -697,14 +716,14 @@ export default function Sales() {
       setOwnershipValidationErrors({}); // Clear any ownership errors
       
       // Refresh today's orders list to show the new order
-      if (user?.branch?.id) {
+      if (selectedBranchId) {
         // Get today's date in local timezone - match the refresh button logic exactly
         const today = new Date().getFullYear() + '-' + 
           String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
           String(new Date().getDate()).padStart(2, '0');
         
         fetchOrders({
-          branchId: user.branch.id,
+          branchId: selectedBranchId,
           orderTypeId: 1, // Sale order type ID
           fromDate: today, // Use today only, not yesterday
           toDate: today,   // Use today only, not yesterday
@@ -863,7 +882,7 @@ export default function Sales() {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search products..."
+                  placeholder="Search products by name, category, or code..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -958,6 +977,69 @@ export default function Sales() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {/* Pagination controls */}
+              {!productsLoading && (productsData?.totalCount || 0) > 0 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    {(() => {
+                      const pageNum = productsData?.pageNumber || productsPage;
+                      const size = productsData?.pageSize || productsPageSize;
+                      const total = productsData?.totalCount || 0;
+                      const start = total === 0 ? 0 : (pageNum - 1) * size + 1;
+                      const end = Math.min(start + (products?.length || 0) - 1, total);
+                      return `Showing ${start}-${end} of ${total}`;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setProductsPage(p => Math.max(1, p - 1))}
+                        disabled={(productsData?.pageNumber || productsPage) <= 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Prev
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const total = productsData?.totalCount || 0;
+                          const size = productsData?.pageSize || productsPageSize;
+                          const maxPage = Math.max(1, Math.ceil(total / size));
+                          setProductsPage(p => Math.min(maxPage, p + 1));
+                        }}
+                        disabled={(productsData?.pageNumber || productsPage) >= Math.max(1, Math.ceil((productsData?.totalCount || 0) / (productsData?.pageSize || productsPageSize)))}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      <Label htmlFor="page-size" className="text-sm">Per page</Label>
+                      <Select
+                        value={String(productsPageSize)}
+                        onValueChange={(v) => {
+                          const size = parseInt(v, 10);
+                          setProductsPageSize(size);
+                          setProductsPage(1);
+                        }}
+                      >
+                        <SelectTrigger id="page-size" className="h-8 w-[90px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="8">8</SelectItem>
+                          <SelectItem value="12">12</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>

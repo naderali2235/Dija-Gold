@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace DijaGoldPOS.API.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class initialMigration : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -498,6 +498,33 @@ namespace DijaGoldPOS.API.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "TreasuryAccounts",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    BranchId = table.Column<int>(type: "int", nullable: false),
+                    CurrentBalance = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    CurrencyCode = table.Column<string>(type: "nvarchar(3)", maxLength: 3, nullable: false),
+                    IsActive = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TreasuryAccounts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TreasuryAccounts_Branches_BranchId",
+                        column: x => x.BranchId,
+                        principalTable: "Branches",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "TaxConfigurations",
                 columns: table => new
                 {
@@ -973,6 +1000,34 @@ namespace DijaGoldPOS.API.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "TreasuryTransactions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TreasuryAccountId = table.Column<int>(type: "int", nullable: false),
+                    Amount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    Direction = table.Column<int>(type: "int", nullable: false),
+                    Type = table.Column<int>(type: "int", nullable: false),
+                    ReferenceType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    ReferenceId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    Notes = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    PerformedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    PerformedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TreasuryTransactions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TreasuryTransactions_TreasuryAccounts_TreasuryAccountId",
+                        column: x => x.TreasuryAccountId,
+                        principalTable: "TreasuryAccounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "CustomerPurchaseItems",
                 columns: table => new
                 {
@@ -1358,7 +1413,7 @@ namespace DijaGoldPOS.API.Migrations
                     TotalWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     OwnedQuantity = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     OwnedWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
-                    OwnershipPercentage = table.Column<decimal>(type: "decimal(5,4)", nullable: false),
+                    OwnershipPercentage = table.Column<decimal>(type: "decimal(7,4)", nullable: false),
                     TotalCost = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     AmountPaid = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     OutstandingAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
@@ -1512,8 +1567,8 @@ namespace DijaGoldPOS.API.Migrations
                     Timestamp = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()"),
                     SessionId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     IsSuccess = table.Column<bool>(type: "bit", nullable: false),
-                    ErrorMessage = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    Details = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    ErrorMessage = table.Column<string>(type: "nvarchar(max)", maxLength: 500, nullable: true),
+                    Details = table.Column<string>(type: "nvarchar(max)", maxLength: 1000, nullable: true),
                     BranchName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     ApplicationUserId = table.Column<string>(type: "nvarchar(450)", nullable: true)
                 },
@@ -1647,7 +1702,7 @@ namespace DijaGoldPOS.API.Migrations
                     OwnedQuantityAfter = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     OwnedWeightAfter = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     AmountPaidAfter = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    OwnershipPercentageAfter = table.Column<decimal>(type: "decimal(5,4)", nullable: false),
+                    OwnershipPercentageAfter = table.Column<decimal>(type: "decimal(7,4)", nullable: false),
                     Notes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
                     CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -1674,15 +1729,16 @@ namespace DijaGoldPOS.API.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     ProductId = table.Column<int>(type: "int", nullable: false),
+                    QuantityProduced = table.Column<int>(type: "int", nullable: false, defaultValueSql: "0"),
                     BranchId = table.Column<int>(type: "int", nullable: false),
                     TechnicianId = table.Column<int>(type: "int", nullable: false),
                     SourceRawGoldPurchaseOrderItemId = table.Column<int>(type: "int", nullable: false),
                     PurchaseOrderItemId = table.Column<int>(type: "int", nullable: true),
-                    ConsumedWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
-                    WastageWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
+                    ConsumedWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false, defaultValueSql: "0"),
+                    WastageWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false, defaultValueSql: "0"),
                     ManufactureDate = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    ManufacturingCostPerGram = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    TotalManufacturingCost = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    ManufacturingCostPerGram = table.Column<decimal>(type: "decimal(18,2)", nullable: false, defaultValueSql: "0"),
+                    TotalManufacturingCost = table.Column<decimal>(type: "decimal(18,2)", nullable: false, defaultValueSql: "0"),
                     BatchNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
                     ManufacturingNotes = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
                     Status = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
@@ -1778,14 +1834,14 @@ namespace DijaGoldPOS.API.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     ProductManufactureId = table.Column<int>(type: "int", nullable: false),
-                    PurchaseOrderItemId = table.Column<int>(type: "int", nullable: false),
+                    RawGoldPurchaseOrderItemId = table.Column<int>(type: "int", nullable: false),
                     ConsumedWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     WastageWeight = table.Column<decimal>(type: "decimal(10,3)", nullable: false),
                     CostPerGram = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     TotalRawMaterialCost = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     ContributionPercentage = table.Column<decimal>(type: "decimal(5,4)", nullable: false),
                     SequenceOrder = table.Column<int>(type: "int", nullable: false),
-                    Notes = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Notes = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     ModifiedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
@@ -1802,11 +1858,11 @@ namespace DijaGoldPOS.API.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_ProductManufactureRawMaterials_PurchaseOrderItems_PurchaseOrderItemId",
-                        column: x => x.PurchaseOrderItemId,
-                        principalTable: "PurchaseOrderItems",
+                        name: "FK_ProductManufactureRawMaterials_RawGoldPurchaseOrderItems_RawGoldPurchaseOrderItemId",
+                        column: x => x.RawGoldPurchaseOrderItemId,
+                        principalTable: "RawGoldPurchaseOrderItems",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateIndex(
@@ -2236,9 +2292,9 @@ namespace DijaGoldPOS.API.Migrations
                 column: "ProductManufactureId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ProductManufactureRawMaterials_PurchaseOrderItemId",
+                name: "IX_ProductManufactureRawMaterials_RawGoldPurchaseOrderItemId",
                 table: "ProductManufactureRawMaterials",
-                column: "PurchaseOrderItemId");
+                column: "RawGoldPurchaseOrderItemId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProductManufactures_BatchNumber",
@@ -2520,6 +2576,22 @@ namespace DijaGoldPOS.API.Migrations
                 column: "Name",
                 unique: true,
                 filter: "[IsActive] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TreasuryAccounts_BranchId",
+                table: "TreasuryAccounts",
+                column: "BranchId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TreasuryTransactions_PerformedAt",
+                table: "TreasuryTransactions",
+                column: "PerformedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TreasuryTransactions_TreasuryAccountId",
+                table: "TreasuryTransactions",
+                column: "TreasuryAccountId");
         }
 
         /// <inheritdoc />
@@ -2583,6 +2655,9 @@ namespace DijaGoldPOS.API.Migrations
                 name: "TransactionTypeLookups");
 
             migrationBuilder.DropTable(
+                name: "TreasuryTransactions");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
@@ -2608,6 +2683,9 @@ namespace DijaGoldPOS.API.Migrations
 
             migrationBuilder.DropTable(
                 name: "RepairStatusLookups");
+
+            migrationBuilder.DropTable(
+                name: "TreasuryAccounts");
 
             migrationBuilder.DropTable(
                 name: "ChargeTypeLookups");

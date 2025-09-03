@@ -1722,12 +1722,9 @@ export default function Reports() {
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Total Outstanding</p>
+                        <p className="text-sm font-medium text-muted-foreground">Total Outstanding (Current Balance)</p>
                         <p className="text-3xl font-bold text-red-600">
-                          {formatCurrency(supplierBalanceReport.supplierBalances?.reduce((sum: number, supplier: any) => {
-                            const outstanding = supplier?.currentBalance || 0;
-                            return sum + outstanding;
-                          }, 0) || 0)}
+                          {formatCurrency(supplierBalanceReport.supplierBalances?.reduce((sum: number, supplier: any) => sum + (supplier?.currentBalance || 0), 0) || 0)}
                         </p>
                       </div>
                       <DollarSign className="h-8 w-8 text-red-500" />
@@ -1739,7 +1736,7 @@ export default function Reports() {
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Total Purchases</p>
+                        <p className="text-sm font-medium text-muted-foreground">Total Payables</p>
                         <p className="text-3xl font-bold text-green-600">
                           {formatCurrency(supplierBalanceReport.totalPayables || 0)}
                         </p>
@@ -1755,52 +1752,38 @@ export default function Reports() {
                 <CardHeader>
                   <CardTitle>Supplier Balance Details</CardTitle>
                   <CardDescription>
-                    Current outstanding balances and purchase history for all suppliers
+                    Current balances and overdue status for all suppliers
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Supplier Name</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Total Purchases</TableHead>
-                        <TableHead>Total Payments</TableHead>
-                        <TableHead>Outstanding Balance</TableHead>
-                        <TableHead>Last Purchase</TableHead>
+                        <TableHead>Supplier ID</TableHead>
+                        <TableHead>Current Balance</TableHead>
+                        <TableHead>Overdue Amount</TableHead>
+                        <TableHead>Days Overdue</TableHead>
+                        <TableHead>Last Payment Date</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {supplierBalanceReport.supplierBalances?.map((supplier: any) => (
                         <TableRow key={supplier?.supplierId || Math.random()}>
-                          <TableCell className="font-medium">
-                            <div>
-                              <div>{supplier?.companyName || 'Unknown Supplier'}</div>
-                              <div className="text-sm text-muted-foreground">ID: {supplier?.supplierId || 'N/A'}</div>
-                            </div>
+                          <TableCell className="font-medium">{supplier?.supplierId ?? 'N/A'}</TableCell>
+                          <TableCell className={`font-semibold ${(supplier?.currentBalance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(supplier?.currentBalance || 0)}
+                          </TableCell>
+                          <TableCell className={`${(supplier?.overdueAmount || 0) > 0 ? 'text-orange-600' : ''} font-semibold`}>
+                            {formatCurrency(supplier?.overdueAmount || 0)}
+                          </TableCell>
+                          <TableCell>{supplier?.daysOverdue ?? 0}</TableCell>
+                          <TableCell>
+                            {supplier?.lastPaymentDate ? formatDate(supplier.lastPaymentDate) : 'N/A'}
                           </TableCell>
                           <TableCell>
-                            <div>
-                              <div>{supplier?.contactPerson || 'N/A'}</div>
-                              <div className="text-sm text-muted-foreground">{supplier?.phoneNumber || 'N/A'}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-green-600 font-semibold">
-                            {formatCurrency(supplier?.totalPurchases || 0)}
-                          </TableCell>
-                          <TableCell className="text-blue-600 font-semibold">
-                            {formatCurrency(supplier?.totalPayments || 0)}
-                          </TableCell>
-                          <TableCell className={`font-semibold ${(supplier?.outstandingBalance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(supplier?.outstandingBalance || 0)}
-                          </TableCell>
-                          <TableCell>
-                            {supplier?.lastPurchaseDate ? formatDate(supplier.lastPurchaseDate) : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={(supplier?.outstandingBalance || 0) > 0 ? "destructive" : "default"}>
-                              {(supplier?.outstandingBalance || 0) > 0 ? 'Outstanding' : 'Paid Up'}
+                            <Badge variant={(supplier?.overdueAmount || 0) > 0 ? 'destructive' : 'default'}>
+                              {(supplier?.overdueAmount || 0) > 0 ? 'Overdue' : 'Current'}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -1827,7 +1810,7 @@ export default function Reports() {
                         <BarChart data={supplierBalanceReport.supplierBalances
                           .filter((supplier: any) => (supplier?.currentBalance || 0) > 0)
                           .map((supplier: any, index: number) => ({
-                            name: supplier?.companyName || 'Unknown',
+                            name: `Supplier ${supplier?.supplierId ?? ''}`.trim(),
                             outstanding: supplier?.currentBalance || 0,
                             fill: COLORS[index % COLORS.length]
                           }))}>
@@ -1843,7 +1826,7 @@ export default function Reports() {
 
                   <Card className="pos-card">
                     <CardHeader>
-                      <CardTitle>Purchase vs Payment Distribution</CardTitle>
+                      <CardTitle>Current vs Overdue Distribution</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={300}>
@@ -1851,18 +1834,13 @@ export default function Reports() {
                           <Pie
                             data={[
                               {
-                                name: 'Total Purchases',
+                                name: 'Current Balance',
                                 value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.currentBalance || 0), 0),
                                 fill: '#10B981'
                               },
                               {
-                                name: 'Total Payments',
+                                name: 'Overdue Amount',
                                 value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.overdueAmount || 0), 0),
-                                fill: '#3B82F6'
-                              },
-                              {
-                                name: 'Outstanding',
-                                value: supplierBalanceReport.supplierBalances.reduce((sum: number, supplier: any) => sum + (supplier?.currentBalance || 0), 0),
                                 fill: '#EF4444'
                               }
                             ]}

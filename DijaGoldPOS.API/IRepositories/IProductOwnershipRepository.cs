@@ -36,7 +36,7 @@ public interface IProductOwnershipRepository : IRepository<ProductOwnership>
     /// <summary>
     /// Get products with low ownership percentage
     /// </summary>
-    Task<List<ProductOwnership>> GetLowOwnershipProductsAsync(decimal threshold = 0.5m);
+    Task<List<ProductOwnership>> GetLowOwnershipProductsAsync(decimal threshold = 50m);
     
     /// <summary>
     /// Get products with outstanding payments

@@ -87,7 +87,7 @@ public class RawGoldInventory : BaseEntity
     /// <summary>
     /// Last count date for physical inventory
     /// </summary>
-    public DateTime? LastCountDate { get; set; }
+    public DateTime? LastCountDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// Last movement date

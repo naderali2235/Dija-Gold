@@ -109,11 +109,13 @@ public class AuditLog
     /// <summary>
     /// Error message if action failed
     /// </summary>
+    [Column(TypeName = "nvarchar(max)")]
     public string? ErrorMessage { get; set; }
 
     /// <summary>
     /// Additional details about the action
     /// </summary>
+    [Column(TypeName = "nvarchar(max)")]
     public string? Details { get; set; }
 
     /// <summary>

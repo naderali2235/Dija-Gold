@@ -34,6 +34,13 @@ import {
   CreateCustomerPurchaseRequest
 } from '../services/api';
 
+import type { 
+  ProcessPurchaseOrderPaymentRequest, 
+  PurchaseOrderPaymentResult, 
+  ProcessRawGoldPurchaseOrderPaymentRequest, 
+  RawGoldPurchaseOrderPaymentResult 
+} from '../services/api';
+
 // Generic hook for API state management
 export interface ApiState<T> {
   data: T | null;
@@ -701,6 +708,40 @@ export function usePaginatedSuppliers(initialParams: any = {}) {
   });
 }
 
+// Paginated Supplier Transactions hook
+export function usePaginatedSupplierTransactions(initialParams: any = {}) {
+  const wrapperFunction = async (params: any) => {
+    const pageNumber = params.pageNumber || 1;
+    const pageSize = params.pageSize || 20;
+
+    if (!params.supplierId) {
+      return {
+        items: [],
+        totalCount: 0,
+        pageNumber,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+
+    const result = await api.suppliers.getSupplierTransactions(params.supplierId, {
+      fromDate: params.fromDate,
+      toDate: params.toDate,
+      transactionType: params.transactionType,
+      pageNumber,
+      pageSize,
+    });
+    // result already matches PagedResult shape
+    return result;
+  };
+
+  return usePaginatedApi(wrapperFunction, {
+    pageNumber: 1,
+    pageSize: 20,
+    ...initialParams,
+  });
+}
+
 // Inventory Management hooks
 export function useInventory() {
   return useApiCall(api.inventory.getInventory);
@@ -936,6 +977,13 @@ export function useUpdatePurchaseOrderStatus() {
   return useApiCall(api.purchaseOrders.updatePurchaseOrderStatus);
 }
 
+// Purchase Order Payments hooks
+
+export function useProcessPurchaseOrderPayment() {
+  return useApiCall<PurchaseOrderPaymentResult, [number, ProcessPurchaseOrderPaymentRequest]>((id, request) =>
+    api.purchaseOrders.processPayment(id, request));
+}
+
 // Raw Gold Purchase Orders hooks
 export function useCreateRawGoldPurchaseOrder() {
   return useApiCall(api.rawGoldPurchaseOrders.createRawGoldPurchaseOrder);
@@ -955,6 +1003,11 @@ export function useUpdateRawGoldPurchaseOrderStatus() {
 
 export function useReceiveRawGoldPurchaseOrder() {
   return useApiCall(api.rawGoldPurchaseOrders.receiveRawGoldPurchaseOrder);
+}
+
+export function useProcessRawGoldPurchaseOrderPayment() {
+  return useApiCall<RawGoldPurchaseOrderPaymentResult, [number, ProcessRawGoldPurchaseOrderPaymentRequest]>((id, request) =>
+    api.rawGoldPurchaseOrders.processPayment(id, request));
 }
 
 // Orders hooks (new architecture)
@@ -1098,23 +1151,23 @@ export function useAvailableTransitions() {
 
 // Manufacturing Reports Hooks
 export function useManufacturingDashboard() {
-  return useApiCall(api.productManufacture.getManufacturingDashboard);
+  return useApiCall(api.manufacturingReports.getManufacturingDashboard);
 }
 
 export function useRawGoldUtilizationReport() {
-  return useApiCall(api.productManufacture.getRawGoldUtilizationReport);
+  return useApiCall(api.manufacturingReports.getRawGoldUtilizationReport);
 }
 
 export function useEfficiencyReport() {
-  return useApiCall(api.productManufacture.getEfficiencyReport);
+  return useApiCall(api.manufacturingReports.getEfficiencyReport);
 }
 
 export function useCostAnalysisReport() {
-  return useApiCall(api.productManufacture.getCostAnalysisReport);
+  return useApiCall(api.manufacturingReports.getCostAnalysisReport);
 }
 
 export function useWorkflowPerformanceReport() {
-  return useApiCall(api.productManufacture.getWorkflowPerformanceReport);
+  return useApiCall(api.manufacturingReports.getWorkflowPerformanceReport);
 }
 
 export default {
@@ -1431,14 +1484,37 @@ export function useGetProductsWithOutstandingPayments() {
 
 // Specialized ProductOwnership hook with pagination
 export function usePaginatedProductOwnership(branchId: number, initialParams: any = {}) {
-  return usePaginatedApi(
-    (params) => api.productOwnership.getProductOwnershipList(branchId, params),
-    {
-      pageNumber: 1,
-      pageSize: 20,
-      ...initialParams
+  // Wrap API call to avoid hitting backend with branchId=0/undefined on initial render
+  const wrapperFunction = async (params: any) => {
+    if (!branchId || branchId <= 0) {
+      // Return an empty paginated shape until a valid branch is available
+      const pageSize = params?.pageSize ?? initialParams?.pageSize ?? 20;
+      const pageNumber = params?.pageNumber ?? initialParams?.pageNumber ?? 1;
+      return {
+        items: [],
+        totalCount: 0,
+        pageNumber,
+        pageSize,
+        totalPages: 0,
+      };
     }
-  );
+    return api.productOwnership.getProductOwnershipList(branchId, params);
+  };
+
+  const paginated = usePaginatedApi(wrapperFunction, {
+    pageNumber: 1,
+    pageSize: 20,
+    ...initialParams
+  });
+
+  // When branchId becomes available, trigger a fetch to load real data
+  useEffect(() => {
+    if (branchId && branchId > 0) {
+      paginated.fetchData();
+    }
+  }, [branchId]);
+
+  return paginated;
 }
 
 // Cash Drawer Management hooks

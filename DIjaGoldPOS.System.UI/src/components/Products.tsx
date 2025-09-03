@@ -36,6 +36,8 @@ import {
 import {
   Package,
   Plus,
+  Upload,
+  Download,
   Search,
   Edit,
   Trash2,
@@ -48,48 +50,91 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { formatCurrency } from './utils/currency';
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes, useSuppliers, useGoldRates, useMakingCharges } from '../hooks/useApi';
+import { usePaginatedProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useKaratTypes, useProductCategoryTypes, useSuppliers, useGoldRates, useMakingCharges } from '../hooks/useApi';
 import { lookupsApi } from '../services/api';
 import { Product, SupplierDto } from '../services/api';
 import { LookupHelper } from '../types/lookups';
 import { calculateProductPricing, getProductPricingFromAPI } from '../utils/pricing';
+import { parseExcelFile, generateProductsTemplateXlsx, generateProductsTemplateCsv } from '../utils/excel';
+
+// Simple in-memory cache to dedupe pricing calls per product (helps with StrictMode double effects)
+const pricingCache = new Map<number, { price: number; ts: number }>();
+// Coalesce concurrent requests per product id
+const pricingInFlight = new Map<number, Promise<number>>();
+const PRICING_TTL_MS = 30_000; // 30 seconds
 
 // Component to handle async price display
-function ProductPriceDisplay({ product, goldRatesData, makingChargesData }: { 
+function ProductPriceDisplay({ product, goldRatesData, makingChargesData, goldRatesVersion, makingChargesVersion }: { 
   product: Product, 
   goldRatesData: any[], 
-  makingChargesData: any[] 
+  makingChargesData: any[],
+  goldRatesVersion: string,
+  makingChargesVersion: string,
 }) {
   const [price, setPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     const fetchPrice = async () => {
       try {
+        console.debug('[ProductPriceDisplay] fetch start', { productId: product.id, goldRatesVersion, makingChargesVersion, ts: Date.now() });
+        if (!mounted) return;
         setLoading(true);
-        const pricing = await getProductPricingFromAPI(product.id, 1);
-        setPrice(pricing.estimatedTotalPrice);
+
+        // Use cache if fresh
+        const cached = pricingCache.get(product.id);
+        if (cached && Date.now() - cached.ts < PRICING_TTL_MS) {
+          setPrice(cached.price);
+          console.debug('[ProductPriceDisplay] cache hit', { productId: product.id, price: cached.price });
+          return;
+        }
+
+        // Coalesce concurrent requests
+        let promise = pricingInFlight.get(product.id);
+        if (!promise) {
+          promise = getProductPricingFromAPI(product.id, 1).then((p) => p.estimatedTotalPrice);
+          pricingInFlight.set(product.id, promise);
+        } else {
+          console.debug('[ProductPriceDisplay] in-flight reuse', { productId: product.id });
+        }
+        const apiPrice = await promise.finally(() => pricingInFlight.delete(product.id));
+        if (!mounted) return;
+        setPrice(apiPrice);
+        pricingCache.set(product.id, { price: apiPrice, ts: Date.now() });
+        console.debug('[ProductPriceDisplay] fetch success', { productId: product.id, price: apiPrice, ts: Date.now() });
       } catch (error) {
         console.error('Error fetching price from API:', error);
         // Fallback to local calculation
         try {
           if (goldRatesData && makingChargesData) {
             const pricing = calculateProductPricing(product, goldRatesData, makingChargesData, 1, null, []);
+            if (!mounted) return;
             setPrice(pricing.finalTotal);
+            pricingCache.set(product.id, { price: pricing.finalTotal, ts: Date.now() });
+            console.debug('[ProductPriceDisplay] fallback success', { productId: product.id, price: pricing.finalTotal, ts: Date.now() });
           } else {
+            if (!mounted) return;
             setPrice(0);
+            console.debug('[ProductPriceDisplay] fallback no data -> 0', { productId: product.id, ts: Date.now() });
           }
         } catch (fallbackError) {
           console.error('Fallback calculation failed:', fallbackError);
+          if (!mounted) return;
           setPrice(0);
         }
       } finally {
+        if (!mounted) return;
         setLoading(false);
+        console.debug('[ProductPriceDisplay] fetch end', { productId: product.id, ts: Date.now() });
       }
     };
 
     fetchPrice();
-  }, [product.id, goldRatesData, makingChargesData]);
+    return () => {
+      mounted = false;
+    };
+  }, [product.id, goldRatesVersion, makingChargesVersion]);
 
   if (loading) {
     return <Loader2 className="h-4 w-4 animate-spin" />;
@@ -98,17 +143,45 @@ function ProductPriceDisplay({ product, goldRatesData, makingChargesData }: {
   return <span>{formatCurrency(price || 0)}</span>;
 }
 
+// Memoized wrapper to prevent unnecessary rerenders
+const MemoProductPriceDisplay = React.memo(
+  ProductPriceDisplay,
+  (prev, next) =>
+    prev.product.id === next.product.id &&
+    prev.goldRatesVersion === next.goldRatesVersion &&
+    prev.makingChargesVersion === next.makingChargesVersion
+);
+
 export default function Products() {
   const { isManager } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [karatFilter, setKaratFilter] = useState('all');
   const [isNewProductOpen, setIsNewProductOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkRows, setBulkRows] = useState<any[]>([]);
+  const [bulkParsing, setBulkParsing] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ total: 0, success: 0, failed: 0 });
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
-  // API hooks
-  const { data: productsData, loading: productsLoading, error: productsError, execute: fetchProducts } = useProducts();
+  // API hooks (paginated)
+  const { 
+    data: productsData, 
+    loading: productsLoading, 
+    error: productsError,
+    params: productParams,
+    updateParams: updateProductParams,
+    fetchData: fetchProducts,
+    nextPage: nextProductsPage,
+    prevPage: prevProductsPage,
+    hasNextPage: productsHasNext,
+    hasPrevPage: productsHasPrev,
+  } = usePaginatedProducts({ pageNumber: 1, pageSize: 20, isActive: true });
   const { execute: createProduct, loading: creatingProduct } = useCreateProduct();
   const { execute: updateProduct, loading: updatingProduct } = useUpdateProduct();
   const { execute: deleteProduct, loading: deletingProduct } = useDeleteProduct();
@@ -121,6 +194,9 @@ export default function Products() {
   // Pricing data hooks
   const { data: goldRatesData, loading: goldRatesLoading, fetchRates } = useGoldRates();
   const { data: makingChargesData, loading: makingChargesLoading, fetchCharges } = useMakingCharges();
+  // Stable version tokens to avoid effect loops from changing array references
+  const goldRatesVersion = React.useMemo(() => String(goldRatesData?.length ?? 0), [goldRatesData]);
+  const makingChargesVersion = React.useMemo(() => String(makingChargesData?.length ?? 0), [makingChargesData]);
   
   // Subcategory state
   const [subCategoriesData, setSubCategoriesData] = useState<any[]>([]);
@@ -198,20 +274,23 @@ export default function Products() {
     }
   }, [productForm.categoryType, categoryTypesData, fetchSubCategories]);
 
-  // Fetch products on mount and when filters change
+  // Fetch products when filters change (reset to page 1)
   useEffect(() => {
-    fetchProducts({
+    updateProductParams({
       searchTerm: searchQuery || undefined,
       categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
       karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
       isActive: true,
       pageNumber: 1,
-      pageSize: 100,
     });
-  }, [searchQuery, categoryFilter, karatFilter, fetchProducts, categoryTypesData, karatTypesData]);
+  }, [searchQuery, categoryFilter, karatFilter, categoryTypesData, karatTypesData, updateProductParams]);
 
   // Get products from API
   const products = productsData?.items || [];
+  const totalCount = productsData?.totalCount || 0;
+  const pageNumber = productsData?.pageNumber || 1;
+  const pageSize = productsData?.pageSize || productParams?.pageSize || 20;
+  const totalPages = productsData?.totalPages || Math.ceil((totalCount || 0) / (pageSize || 1));
   
   // Generate categories and karats from API data, fallback to backend category types
   const categories = categoryTypesData ? ['GoldJewelry', 'Bullion', 'Coins'] : ['GoldJewelry', 'Bullion', 'Coins'];
@@ -347,13 +426,13 @@ export default function Products() {
         alert('Product created successfully!');
       }
 
-      await fetchProducts({
+      // Refresh list and reset to first page with current filters
+      updateProductParams({
         searchTerm: searchQuery || undefined,
         categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
         karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
         isActive: true,
         pageNumber: 1,
-        pageSize: 100,
       });
 
       // Reset form and close dialog
@@ -399,24 +478,160 @@ export default function Products() {
     try {
       await deleteProduct(product.id);
       alert('Product deleted successfully!');
-      
-      await fetchProducts({
-        searchTerm: searchQuery || undefined,
-        categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
-        karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
-        isActive: true,
-        pageNumber: 1,
-        pageSize: 100,
-      });
+      // Refresh current page
+      fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
       alert(error instanceof Error ? error.message : 'Failed to delete product');
     }
   };
 
+  // Bulk upload helpers (scoped within Products component)
+  const resetBulkState = () => {
+    setBulkFile(null);
+    setBulkRows([]);
+    setBulkParsing(false);
+    setBulkUploading(false);
+    setBulkProgress({ total: 0, success: 0, failed: 0 });
+    setBulkErrors([]);
+  };
 
+  const handleBulkFileChange = async (file?: File) => {
+    if (!file) return;
+    try {
+      setBulkParsing(true);
+      const rows = await parseExcelFile(file);
+      setBulkRows(rows);
+      setBulkProgress({ total: rows.length, success: 0, failed: 0 });
+    } catch (err) {
+      console.error('Failed to parse file:', err);
+      alert('Failed to parse file. Ensure it is a valid .xlsx or .csv.');
+      setBulkRows([]);
+    } finally {
+      setBulkParsing(false);
+    }
+  };
 
+  const boolVal = (v: any, def = false) => {
+    if (typeof v === 'boolean') return v;
+    if (v == null || v === '') return def;
+    const s = String(v).trim().toLowerCase();
+    return ['true', 'yes', 'y', '1'].includes(s);
+  };
 
+  const numVal = (v: any): number | undefined => {
+    if (v === '' || v == null) return undefined;
+    const n = Number(v);
+    return isNaN(n) ? undefined : n;
+  };
+
+  const mapRowToCreateProduct = (row: any) => {
+    const categoryTypeName = (row.CategoryType ?? row.categoryType ?? '').toString();
+    const karatTypeName = (row.KaratType ?? row.karatType ?? '').toString();
+    const categoryTypeId = LookupHelper.getValue(categoryTypesData || [], categoryTypeName);
+    const karatTypeId = LookupHelper.getValue(karatTypesData || [], karatTypeName);
+    if (!categoryTypeId) throw new Error(`Invalid CategoryType '${categoryTypeName}'`);
+    if (!karatTypeId) throw new Error(`Invalid KaratType '${karatTypeName}'`);
+      
+    const weightRaw = row.Weight ?? row.weight;
+    const weight = Number(weightRaw);
+    if (!weight || isNaN(weight) || weight <= 0) throw new Error(`Invalid Weight '${weightRaw}'`);
+
+    const productData = {
+      productCode: String(row.ProductCode ?? row.productCode ?? '').trim(),
+      name: String(row.Name ?? row.name ?? '').trim(),
+      categoryTypeId,
+      karatTypeId,
+      weight,
+      brand: (row.Brand ?? row.brand)?.toString().trim() || undefined,
+      designStyle: (row.DesignStyle ?? row.designStyle)?.toString().trim() || undefined,
+      subCategoryId: numVal(row.SubCategoryId ?? row.subCategoryId),
+      shape: (row.Shape ?? row.shape)?.toString().trim() || undefined,
+      purityCertificateNumber: (row.PurityCertificateNumber ?? row.purityCertificateNumber)?.toString().trim() || undefined,
+      countryOfOrigin: (row.CountryOfOrigin ?? row.countryOfOrigin)?.toString().trim() || undefined,
+      yearOfMinting: numVal(row.YearOfMinting ?? row.yearOfMinting),
+      faceValue: numVal(row.FaceValue ?? row.faceValue),
+      hasNumismaticValue: boolVal(row.HasNumismaticValue ?? row.hasNumismaticValue, false),
+      makingChargesApplicable: boolVal(row.MakingChargesApplicable ?? row.makingChargesApplicable, true),
+      useProductMakingCharges: boolVal(row.UseProductMakingCharges ?? row.useProductMakingCharges, false),
+      supplierId: numVal(row.SupplierId ?? row.supplierId),
+      isActive: true,
+    } as any;
+
+    if (!productData.productCode) throw new Error('ProductCode is required');
+    if (!productData.name) throw new Error('Name is required');
+    return productData;
+  };
+
+  const handleStartBulkUpload = async () => {
+    if (!isManager) {
+      alert('Only managers can upload products');
+      return;
+    }
+    if (bulkRows.length === 0) {
+      alert('No rows parsed. Please select a valid file.');
+      return;
+    }
+    setBulkUploading(true);
+    setBulkErrors([]);
+    let success = 0;
+    let failed = 0;
+    for (let i = 0; i < bulkRows.length; i++) {
+      const row = bulkRows[i];
+      try {
+        const productData = mapRowToCreateProduct(row);
+        await createProduct(productData as any);
+        success++;
+      } catch (err: any) {
+        failed++;
+        const msg = err?.message || String(err);
+        setBulkErrors((prev: string[]) => [...prev, `Row ${i + 2}: ${msg}`]);
+      } finally {
+        setBulkProgress((prev: { total: number; success: number; failed: number }) => ({ ...prev, success, failed }));
+      }
+    }
+
+    updateProductParams({
+      searchTerm: searchQuery || undefined,
+      categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
+      karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
+      isActive: true,
+      pageNumber: 1,
+    });
+
+    setBulkUploading(false);
+    alert(`Bulk upload completed. Success: ${success}, Failed: ${failed}`);
+  };
+
+  const handleDownloadTemplateXlsx = async () => {
+    try {
+      const blob = await generateProductsTemplateXlsx();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'products_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate XLSX template');
+    }
+  };
+
+  const handleDownloadTemplateCsv = () => {
+    try {
+      const blob = generateProductsTemplateCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'products_template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate CSV template');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -616,6 +831,60 @@ export default function Products() {
             </DialogContent>
           </Dialog>
         )}
+        {isManager && (
+          <Dialog open={isBulkUploadOpen} onOpenChange={(open) => { setIsBulkUploadOpen(open); if (!open) resetBulkState(); }}>
+            <DialogTrigger asChild>
+              <Button className="touch-target" variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Bulk Upload
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
+              <DialogHeader>
+                <DialogTitle>Bulk Upload Products</DialogTitle>
+                <DialogDescription>Upload an Excel (.xlsx) or CSV file using the provided template columns.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={handleDownloadTemplateXlsx}>
+                    <Download className="mr-2 h-4 w-4" /> Template (XLSX)
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleDownloadTemplateCsv}>
+                    <Download className="mr-2 h-4 w-4" /> Template (CSV)
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bulkFile">Select file</Label>
+                  <Input id="bulkFile" type="file" accept=".xlsx,.csv" onChange={(e) => { const f = e.target.files?.[0]; setBulkFile(f || null); if (f) handleBulkFileChange(f); }} />
+                  {bulkParsing && (
+                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Parsing file...</div>
+                  )}
+                  {bulkRows.length > 0 && (
+                    <div className="text-sm">
+                      Parsed rows: <b>{bulkRows.length}</b>
+                    </div>
+                  )}
+                </div>
+                {bulkRows.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-sm">Progress: {bulkProgress.success} succeeded, {bulkProgress.failed} failed of {bulkProgress.total}</div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => resetBulkState()} disabled={bulkUploading}>Reset</Button>
+                      <Button type="button" variant="golden" onClick={handleStartBulkUpload} disabled={bulkUploading}>
+                        {bulkUploading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</>) : 'Start Upload'}
+                      </Button>
+                    </div>
+                    {bulkErrors.length > 0 && (
+                      <div className="max-h-40 overflow-auto border rounded p-2 text-sm text-red-600 bg-red-50">
+                        {bulkErrors.map((e, i) => (<div key={i}>{e}</div>))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Filters */}
@@ -629,8 +898,30 @@ export default function Products() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 touch-target"
+                data-testid="product-search"
               />
             </div>
+            <Button
+              variant="outline"
+              onClick={() =>
+                updateProductParams({
+                  searchTerm: searchQuery || undefined,
+                  categoryTypeId:
+                    categoryFilter !== 'all'
+                      ? LookupHelper.getValue(categoryTypesData || [], categoryFilter)
+                      : undefined,
+                  karatTypeId:
+                    karatFilter !== 'all'
+                      ? LookupHelper.getValue(karatTypesData || [], karatFilter)
+                      : undefined,
+                  isActive: true,
+                  pageNumber: 1,
+                })
+              }
+              data-testid="product-search-btn"
+            >
+              Search
+            </Button>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-full md:w-40">
                 <SelectValue placeholder="Category" />
@@ -662,7 +953,7 @@ export default function Products() {
         <CardHeader>
           <CardTitle>Products</CardTitle>
           <CardDescription>
-            {productsLoading ? 'Loading...' : `${products.length} product(s) found`}
+            {productsLoading ? 'Loading...' : `${totalCount} product(s) found`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -682,14 +973,7 @@ export default function Products() {
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
               <p className="text-red-600">Error loading products: {productsError}</p>
               <Button 
-                onClick={() => fetchProducts({
-                  searchTerm: searchQuery || undefined,
-                  categoryTypeId: categoryFilter !== 'all' ? LookupHelper.getValue(categoryTypesData || [], categoryFilter) : undefined,
-                  karatTypeId: karatFilter !== 'all' ? LookupHelper.getValue(karatTypesData || [], karatFilter) : undefined,
-                  isActive: true,
-                  pageNumber: 1,
-                  pageSize: 100,
-                })} 
+                onClick={() => fetchProducts()} 
                 className="mt-4"
               >
                 Retry
@@ -705,6 +989,7 @@ export default function Products() {
               </p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -721,7 +1006,7 @@ export default function Products() {
               <TableBody>
                 {products.map((product) => {
                   return (
-                    <TableRow key={product.id}>
+                    <TableRow key={product.id} data-testid="product-row" data-product-id={product.id}>
                       <TableCell className="font-medium">{product.productCode}</TableCell>
                       <TableCell>
                         <div>
@@ -741,11 +1026,13 @@ export default function Products() {
                       <TableCell>{product.weight}g</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">
-                            <ProductPriceDisplay 
+                          <p className="font-medium" data-testid="pricing-total">
+                            <MemoProductPriceDisplay 
                               product={product} 
                               goldRatesData={goldRatesData || []} 
-                              makingChargesData={makingChargesData || []} 
+                              makingChargesData={makingChargesData || []}
+                              goldRatesVersion={goldRatesVersion}
+                              makingChargesVersion={makingChargesVersion}
                             />
                           </p>
                           {product.makingChargesApplicable && (
@@ -769,7 +1056,7 @@ export default function Products() {
                             <DropdownMenuItem 
                               onClick={() => {
                                 setSelectedProduct(product);
-                                // Could add a view details dialog here
+                                setIsViewDialogOpen(true);
                               }}
                               className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]"
                             >
@@ -806,9 +1093,127 @@ export default function Products() {
                 })}
               </TableBody>
             </Table>
+            {/* Pagination Controls */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+              <div className="text-sm text-muted-foreground">
+                Page {pageNumber} of {Math.max(totalPages, 1)} • Showing {(products.length > 0 ? (pageNumber - 1) * pageSize + 1 : 0)}–{(pageNumber - 1) * pageSize + products.length} of {totalCount}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Rows per page</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => updateProductParams({ pageSize: Number(v), pageNumber: 1 })}
+                >
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 shadow-lg">
+                    {[10, 20, 50, 100].map(s => (
+                      <SelectItem key={s} value={String(s)} className="hover:bg-[#F4E9B1] focus:bg-[#F4E9B1] focus:text-[#0D1B2A]">{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" disabled={!productsHasPrev} onClick={prevProductsPage}>
+                    Prev
+                  </Button>
+                  <Button variant="outline" disabled={!productsHasNext} onClick={nextProductsPage}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
+      {/* View Details Dialog */}
+      {selectedProduct && (
+        <Dialog
+          open={isViewDialogOpen}
+          onOpenChange={(open) => {
+            setIsViewDialogOpen(open);
+            if (!open) {
+              setSelectedProduct(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl bg-white border-gray-200 shadow-lg">
+            <DialogHeader>
+              <DialogTitle>Product Details</DialogTitle>
+              <DialogDescription>Quick view of the selected product</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Product Code</p>
+                <p className="font-medium">{selectedProduct.productCode}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Name</p>
+                <p className="font-medium">{selectedProduct.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Category</p>
+                <p className="font-medium">{LookupHelper.getDisplayName(categoryTypesData || [], selectedProduct.categoryTypeId)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Karat</p>
+                <p className="font-medium">{LookupHelper.getDisplayName(karatTypesData || [], selectedProduct.karatTypeId)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Weight</p>
+                <p className="font-medium">{selectedProduct.weight} g</p>
+              </div>
+              {selectedProduct.brand && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Brand</p>
+                  <p className="font-medium">{selectedProduct.brand}</p>
+                </div>
+              )}
+              {selectedProduct.shape && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Shape/Dimensions</p>
+                  <p className="font-medium">{selectedProduct.shape}</p>
+                </div>
+              )}
+              {selectedProduct.subCategory && (
+                <div className="col-span-2">
+                  <p className="text-sm text-muted-foreground">Subcategory</p>
+                  <p className="font-medium">{typeof selectedProduct.subCategory === 'string' ? selectedProduct.subCategory : selectedProduct.subCategory.name}</p>
+                </div>
+              )}
+              {selectedProduct.supplierId && (
+                <div className="col-span-2">
+                  <p className="text-sm text-muted-foreground">Supplier</p>
+                  <p className="font-medium">
+                    {(() => {
+                      const s = (suppliersData?.items || []).find((x: SupplierDto) => x.id === selectedProduct.supplierId);
+                      return s ? `${s.companyName}${s.contactPersonName ? ` (${s.contactPersonName})` : ''}` : '—';
+                    })()}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>Close</Button>
+              {isManager && (
+                <Button
+                  variant="golden"
+                  onClick={() => {
+                    if (selectedProduct) {
+                      openEditDialog(selectedProduct);
+                      setIsNewProductOpen(true);
+                      setIsViewDialogOpen(false);
+                    }
+                  }}
+                >
+                  <Edit className="mr-2 h-4 w-4" /> Edit
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

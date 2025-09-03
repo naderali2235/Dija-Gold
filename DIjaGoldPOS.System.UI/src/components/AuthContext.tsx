@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLogin, useCurrentUser } from '../hooks/useApi';
+import { getAuthToken } from '../services/api';
 import { User as ApiUser } from '../services/api';
 
 interface User {
@@ -84,6 +85,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Initializing auth...');
       
       try {
+        // Guard: if no token is present, don't call /auth/me to avoid 401 loops
+        const token = getAuthToken();
+        const onLoginRoute = typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/login';
+        if (!token) {
+          console.log('No auth token found; skipping current user fetch.');
+          setUser(null);
+          setError(null);
+          return;
+        }
+        if (onLoginRoute) {
+          console.log('On login route; deferring current user fetch.');
+          return;
+        }
         console.log('Attempting to get current user from API...');
         const apiUser = await fetchUser();
         if (apiUser) {

@@ -50,8 +50,10 @@ public class CreateProductManufactureDtoValidator : AbstractValidator<CreateProd
             .MaximumLength(20)
             .When(x => !string.IsNullOrWhiteSpace(x.Priority));
 
+        // Accept date-only inputs from UI: validate by date part to avoid timezone issues
         RuleFor(x => x.EstimatedCompletionDate)
-            .GreaterThan(DateTime.UtcNow)
+            .Must(d => !d.HasValue || d.Value.Date >= DateTime.UtcNow.Date)
+            .WithMessage("'Estimated Completion Date' must be today or a future date.")
             .When(x => x.EstimatedCompletionDate.HasValue);
 
         // Business rule validation

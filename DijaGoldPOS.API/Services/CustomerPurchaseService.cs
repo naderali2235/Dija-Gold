@@ -19,17 +19,20 @@ public class CustomerPurchaseService : ICustomerPurchaseService
     private readonly IMapper _mapper;
     private readonly ILogger<CustomerPurchaseService> _logger;
     private readonly IAuditService _auditService;
+    private readonly IRawGoldPurchaseOrderService _rawGoldPurchaseOrderService;
 
     public CustomerPurchaseService(
         ApplicationDbContext context,
         IMapper mapper,
         ILogger<CustomerPurchaseService> logger,
-        IAuditService auditService)
+        IAuditService auditService,
+        IRawGoldPurchaseOrderService rawGoldPurchaseOrderService)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _auditService = auditService ?? throw new ArgumentNullException(nameof(auditService));
+        _rawGoldPurchaseOrderService = rawGoldPurchaseOrderService ?? throw new ArgumentNullException(nameof(rawGoldPurchaseOrderService));
     }
 
     public async Task<ApiResponse<CustomerPurchaseDto>> CreatePurchaseAsync(CreateCustomerPurchaseRequest request, string userId)
@@ -43,8 +46,9 @@ public class CustomerPurchaseService : ICustomerPurchaseService
             if (!request.Items.Any())
                 return ApiResponse<CustomerPurchaseDto>.ErrorResponse("Purchase must have at least one item");
 
-            // Get next purchase number
-            var nextPurchaseNumber = await GenerateNextPurchaseNumberAsync();
+            // We will generate the next purchase number and save with retry to avoid duplicates under concurrency
+            const int maxAttempts = 5;
+            string nextPurchaseNumber = string.Empty;
 
             // Calculate total amount from items
             var calculatedTotal = request.Items.Sum(i => i.TotalAmount);
@@ -54,10 +58,10 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                     request.TotalAmount, calculatedTotal);
             }
 
-            // Create purchase entity
+            // Create purchase entity (PurchaseNumber will be set inside retry loop)
             var purchase = new CustomerPurchase
             {
-                PurchaseNumber = nextPurchaseNumber,
+                PurchaseNumber = string.Empty,
                 CustomerId = request.CustomerId,
                 BranchId = request.BranchId,
                 PurchaseDate = DateTime.UtcNow,
@@ -85,9 +89,73 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                 purchase.CustomerPurchaseItems.Add(purchaseItem);
             }
 
-            // Save to database
+            // Save to database with retry on unique PurchaseNumber collisions
             await _context.CustomerPurchases.AddAsync(purchase);
-            await _context.SaveChangesAsync();
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                nextPurchaseNumber = await GenerateNextPurchaseNumberAsync();
+                purchase.PurchaseNumber = nextPurchaseNumber;
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    break; // success
+                }
+                catch (DbUpdateException ex) when (IsUniquePurchaseNumberViolation(ex))
+                {
+                    _logger.LogWarning(ex, "Duplicate PurchaseNumber {PurchaseNumber} detected on attempt {Attempt}. Retrying...", nextPurchaseNumber, attempt);
+
+                    if (attempt == maxAttempts)
+                    {
+                        return ApiResponse<CustomerPurchaseDto>.ErrorResponse("Failed to generate a unique purchase number. Please try again.");
+                    }
+
+                    // Ensure a new number will be generated on next loop iteration
+                    continue;
+                }
+            }
+
+            // Create a linked Raw Gold Purchase Order (RGP) using the system supplier
+            try
+            {
+                var systemSupplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.IsSystemSupplier);
+                if (systemSupplier == null)
+                {
+                    _logger.LogWarning("System supplier not found. Skipping creation of linked Raw Gold Purchase Order for CP {PurchaseNumber}", nextPurchaseNumber);
+                }
+                else
+                {
+                    var rgpCreateDto = new CreateRawGoldPurchaseOrderDto
+                    {
+                        SupplierId = systemSupplier.Id,
+                        BranchId = purchase.BranchId,
+                        OrderDate = DateTime.UtcNow,
+                        ExpectedDeliveryDate = null,
+                        Notes = $"Linked to customer purchase {purchase.PurchaseNumber} (Id {purchase.Id})",
+                        Items = purchase.CustomerPurchaseItems.Select(item => new CreateRawGoldPurchaseOrderItemRequestDto
+                        {
+                            KaratTypeId = item.KaratTypeId,
+                            Description = "From Customer Purchase",
+                            WeightOrdered = item.Weight,
+                            UnitCostPerGram = item.UnitPrice,
+                            Notes = item.Notes
+                        }).ToList()
+                    };
+
+                    // This will auto-receive and update inventory for system supplier
+                    var rgp = await _rawGoldPurchaseOrderService.CreateAsync(rgpCreateDto);
+                    _logger.LogInformation("Created linked Raw Gold PO {PurchaseOrderNumber} for CP {PurchaseNumber}", rgp.PurchaseOrderNumber, purchase.PurchaseNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Roll back the created customer purchase to maintain consistency
+                _logger.LogError(ex, "Failed to create linked Raw Gold PO for CP {PurchaseNumber}. Rolling back customer purchase.", purchase.PurchaseNumber);
+                _context.CustomerPurchases.Remove(purchase);
+                await _context.SaveChangesAsync();
+                return ApiResponse<CustomerPurchaseDto>.ErrorResponse("Failed to create linked raw gold purchase order. Purchase was not saved.");
+            }
 
             // Load the complete purchase with navigation properties
             var completePurchase = await _context.CustomerPurchases
@@ -116,6 +184,19 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                     TotalAmount = cpi.TotalAmount,
                     Notes = cpi.Notes
                 }).ToList();
+
+            // Populate linked Raw Gold PO fields (find by note reference)
+            var linkedPo = await _context.RawGoldPurchaseOrders
+                .AsNoTracking()
+                .Where(po => po.BranchId == completePurchase.BranchId && po.Notes != null && po.Notes.Contains($"Linked to customer purchase {completePurchase.PurchaseNumber}"))
+                .OrderByDescending(po => po.Id)
+                .FirstOrDefaultAsync();
+
+            if (linkedPo != null)
+            {
+                purchaseDto.LinkedRawGoldPurchaseOrderId = linkedPo.Id;
+                purchaseDto.LinkedRawGoldPurchaseOrderNumber = linkedPo.PurchaseOrderNumber;
+            }
 
             // Audit log
             await _auditService.LogAsync("CustomerPurchase", "Create",
@@ -163,6 +244,19 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                     Notes = cpi.Notes
                 }).ToList();
 
+            // Populate linked Raw Gold PO fields
+            var linkedPo = await _context.RawGoldPurchaseOrders
+                .AsNoTracking()
+                .Where(po => po.BranchId == purchase.BranchId && po.Notes != null && po.Notes.Contains($"Linked to customer purchase {purchase.PurchaseNumber}"))
+                .OrderByDescending(po => po.Id)
+                .FirstOrDefaultAsync();
+
+            if (linkedPo != null)
+            {
+                purchaseDto.LinkedRawGoldPurchaseOrderId = linkedPo.Id;
+                purchaseDto.LinkedRawGoldPurchaseOrderNumber = linkedPo.PurchaseOrderNumber;
+            }
+
             return ApiResponse<CustomerPurchaseDto>.SuccessResponse(purchaseDto);
         }
         catch (Exception ex)
@@ -200,6 +294,19 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                     TotalAmount = cpi.TotalAmount,
                     Notes = cpi.Notes
                 }).ToList();
+
+            // Populate linked Raw Gold PO fields
+            var linkedPo = await _context.RawGoldPurchaseOrders
+                .AsNoTracking()
+                .Where(po => po.BranchId == purchase.BranchId && po.Notes != null && po.Notes.Contains($"Linked to customer purchase {purchase.PurchaseNumber}"))
+                .OrderByDescending(po => po.Id)
+                .FirstOrDefaultAsync();
+
+            if (linkedPo != null)
+            {
+                purchaseDto.LinkedRawGoldPurchaseOrderId = linkedPo.Id;
+                purchaseDto.LinkedRawGoldPurchaseOrderNumber = linkedPo.PurchaseOrderNumber;
+            }
 
             return ApiResponse<CustomerPurchaseDto>.SuccessResponse(purchaseDto);
         }
@@ -273,6 +380,18 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                         TotalAmount = cpi.TotalAmount,
                         Notes = cpi.Notes
                     }).ToList();
+                // Populate linked Raw Gold PO fields
+                var linkedPo = _context.RawGoldPurchaseOrders
+                    .AsNoTracking()
+                    .Where(po => po.BranchId == cp.BranchId && po.Notes != null && po.Notes.Contains($"Linked to customer purchase {cp.PurchaseNumber}"))
+                    .OrderByDescending(po => po.Id)
+                    .FirstOrDefault();
+
+                if (linkedPo != null)
+                {
+                    dto.LinkedRawGoldPurchaseOrderId = linkedPo.Id;
+                    dto.LinkedRawGoldPurchaseOrderNumber = linkedPo.PurchaseOrderNumber;
+                }
                 return dto;
             }).ToList();
 
@@ -463,6 +582,30 @@ public class CustomerPurchaseService : ICustomerPurchaseService
             if (purchase.IsActive == false)
                 return ApiResponse<bool>.ErrorResponse("Purchase is already cancelled");
 
+            // Try to locate linked Raw Gold PO by the reference in Notes we created during CP creation
+            try
+            {
+                var linkedRgp = await _context.RawGoldPurchaseOrders
+                    .FirstOrDefaultAsync(po => po.BranchId == purchase.BranchId &&
+                                                po.Notes != null &&
+                                                po.Notes.Contains($"Linked to customer purchase {purchase.PurchaseNumber}"));
+
+                if (linkedRgp != null && linkedRgp.Status != "Cancelled")
+                {
+                    await _rawGoldPurchaseOrderService.UpdateStatusAsync(linkedRgp.Id, "Cancelled", $"Auto-cancelled due to customer purchase {purchase.PurchaseNumber} cancellation");
+                    _logger.LogInformation("Linked Raw Gold PO {RgpNumber} cancelled due to CP {PurchaseNumber} cancellation", linkedRgp.PurchaseOrderNumber, purchase.PurchaseNumber);
+                }
+                else if (linkedRgp == null)
+                {
+                    _logger.LogWarning("No linked Raw Gold PO found for CP {PurchaseNumber} during cancellation", purchase.PurchaseNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to cancel linked Raw Gold PO for CP {PurchaseNumber}", purchase.PurchaseNumber);
+                // Continue with CP cancellation to avoid leaving it active
+            }
+
             purchase.IsActive = false;
             purchase.ModifiedAt = DateTime.UtcNow;
             purchase.ModifiedBy = userId;
@@ -526,16 +669,56 @@ public class CustomerPurchaseService : ICustomerPurchaseService
 
     private async Task<string> GenerateNextPurchaseNumberAsync()
     {
-        var lastPurchase = await _context.CustomerPurchases
+        // Note: Numbers are zero-padded so string ordering is correct.
+        // Ignore global query filters (e.g., soft delete) to always consider all existing purchase numbers.
+        var lastPurchaseNumber = await _context.CustomerPurchases
+            .IgnoreQueryFilters()
             .OrderByDescending(cp => cp.PurchaseNumber)
+            .Select(cp => cp.PurchaseNumber)
             .FirstOrDefaultAsync();
 
-        if (lastPurchase == null)
+        if (string.IsNullOrWhiteSpace(lastPurchaseNumber))
         {
             return "CP-00001";
         }
 
-        var lastNumber = int.Parse(lastPurchase.PurchaseNumber.Split('-')[1]);
+        var lastNumber = int.Parse(lastPurchaseNumber.Split('-')[1]);
         return $"CP-{(lastNumber + 1):D5}";
+    }
+
+    private static bool IsUniquePurchaseNumberViolation(DbUpdateException ex)
+    {
+        // SQL Server duplicate key violations: 2601 (duplicate index), 2627 (unique constraint)
+        if (ex.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
+        {
+            return sqlEx.Number == 2601 || sqlEx.Number == 2627;
+        }
+        return false;
+    }
+
+    private async Task SavePurchaseWithRetryAsync(CustomerPurchase purchase)
+    {
+        int retryCount = 0;
+        while (retryCount < 3)
+        {
+            try
+            {
+                _context.CustomerPurchases.Add(purchase);
+                await _context.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateException ex)
+            {
+                if (IsUniquePurchaseNumberViolation(ex))
+                {
+                    purchase.PurchaseNumber = await GenerateNextPurchaseNumberAsync();
+                    retryCount++;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
     }
 }

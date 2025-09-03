@@ -21,6 +21,8 @@ public class CustomerPurchaseDto
     public string? Notes { get; set; }
     public string CreatedByUserId { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+    public int? LinkedRawGoldPurchaseOrderId { get; set; }
+    public string? LinkedRawGoldPurchaseOrderNumber { get; set; }
     public List<CustomerPurchaseItemDto> Items { get; set; } = new();
 }
 

@@ -64,7 +64,7 @@ public class ProductManufactureService : IProductManufactureService
                 TotalManufacturingCost = totalCost, // Now includes both raw gold cost + manufacturing cost
                 BatchNumber = createDto.BatchNumber,
                 ManufacturingNotes = createDto.ManufacturingNotes,
-                Status = createDto.Status, // Use the status from DTO
+                Status = "Draft", // Force initial status to Draft; status changes must go through workflow
                 WorkflowStep = "Draft",
                 Priority = createDto.Priority ?? "Normal",
                 EstimatedCompletionDate = createDto.EstimatedCompletionDate,
@@ -145,8 +145,11 @@ public class ProductManufactureService : IProductManufactureService
             if (updateDto.ManufacturingNotes != null)
                 entity.ManufacturingNotes = updateDto.ManufacturingNotes;
 
+            // Disallow direct status changes here; enforce workflow endpoints for transitions
             if (updateDto.Status != null)
-                entity.Status = updateDto.Status;
+            {
+                throw new InvalidOperationException("Direct status updates are not allowed. Use the workflow endpoints to transition status.");
+            }
 
             entity.ModifiedAt = DateTime.UtcNow;
 
@@ -554,6 +557,9 @@ public class ProductManufactureService : IProductManufactureService
 
             // Update consumed weight
             rawGoldItem.WeightConsumedInManufacturing += consumedWeight;
+            // Keep AvailableWeightForManufacturing in sync with consumption. This field has a backing store
+            // and was previously set during receiving, so we must update it explicitly here.
+            rawGoldItem.AvailableWeightForManufacturing = Math.Max(0m, rawGoldItem.WeightReceived - rawGoldItem.WeightConsumedInManufacturing);
             _unitOfWork.Repository<RawGoldPurchaseOrderItem>().Update(rawGoldItem);
         }
         catch (Exception ex)
@@ -586,6 +592,8 @@ public class ProductManufactureService : IProductManufactureService
             {
                 // Update existing inventory - reduce weight on hand
                 rawGoldInventory.WeightOnHand -= consumedWeight;
+                // Reduce reserved as we are consuming from reserved stock while PO is open
+                rawGoldInventory.WeightReserved = Math.Max(0m, rawGoldInventory.WeightReserved - consumedWeight);
                 rawGoldInventory.LastMovementDate = DateTime.UtcNow;
                 _unitOfWork.Repository<RawGoldInventory>().Update(rawGoldInventory);
 
@@ -593,6 +601,8 @@ public class ProductManufactureService : IProductManufactureService
                 var movement = new RawGoldInventoryMovement
                 {
                     RawGoldInventoryId = rawGoldInventory.Id,
+                    RawGoldPurchaseOrderId = rawGoldItem.RawGoldPurchaseOrderId,
+                    RawGoldPurchaseOrderItemId = rawGoldPurchaseOrderItemId,
                     MovementType = "Manufacturing Consumption",
                     WeightChange = -consumedWeight,
                     WeightBalance = rawGoldInventory.WeightOnHand,

@@ -205,4 +205,56 @@ public class RawGoldPurchaseOrdersController : ControllerBase
             return StatusCode(500, "An error occurred while retrieving raw gold inventory");
         }
     }
+
+    /// <summary>
+    /// Process a payment (partial or full) for a raw gold purchase order
+    /// </summary>
+    [HttpPost("{id}/payments")]
+    public async Task<ActionResult<RawGoldPurchaseOrderPaymentResult>> ProcessPayment(int id, [FromBody] ProcessRawGoldPurchaseOrderPaymentRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            // Ensure request uses the route id
+            request.RawGoldPurchaseOrderId = id;
+
+            var result = await _rawGoldPurchaseOrderService.ProcessPaymentAsync(request);
+            if (!result.IsSuccess)
+                return BadRequest(result.ErrorMessage);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing payment for raw gold purchase order with ID {Id}", id);
+            return StatusCode(500, "An error occurred while processing the payment");
+        }
+    }
+
+    /// <summary>
+    /// Update status for a raw gold purchase order (e.g., Cancelled)
+    /// </summary>
+    [HttpPut("{id}/status")]
+    public async Task<ActionResult<RawGoldPurchaseOrderDto>> UpdateStatus(int id, [FromBody] UpdateRawGoldPurchaseOrderStatusRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var po = await _rawGoldPurchaseOrderService.UpdateStatusAsync(id, request.NewStatus, request.Notes);
+            return Ok(po);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating status for raw gold purchase order with ID {Id}", id);
+            return StatusCode(500, "An error occurred while updating the status");
+        }
+    }
 }

@@ -71,6 +71,12 @@ export function GoldRatesDisplay({
   disabled = false,
   className = ""
 }: GoldRatesDisplayProps) {
+  // Use provided global keys when available (for Settings page that calls transformGoldRates),
+  // otherwise derive keys from the passed goldRates prop (for Dashboard and other read-only views)
+  const derivedKeys = React.useMemo(() => {
+    return GOLD_RATES_KEYS.length > 0 ? GOLD_RATES_KEYS : Object.keys(goldRates || {});
+  }, [goldRates]);
+
   return (
     <Card className={`pos-card ${className}`}>
       <CardHeader>
@@ -86,7 +92,7 @@ export function GoldRatesDisplay({
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {GOLD_RATES_KEYS.map((karat) => {
+          {derivedKeys.map((karat) => {
             const rateData = goldRates[karat];
             const isManuallyEdited = manuallyEditedRates.has(karat);
             const rate = rateData?.rate || 0;

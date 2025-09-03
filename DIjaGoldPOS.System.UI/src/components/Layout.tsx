@@ -92,7 +92,6 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       icon: Shield,
       id: 'product-ownership',
       badge: null,
-      managerOnly: true,
     },
     {
       title: 'Ownership Consolidation',
@@ -154,6 +153,12 @@ function LayoutContent({ children, currentPage, onPageChange }: LayoutProps) {
       title: 'Manufacturing Reports',
       icon: BarChart3,
       id: 'manufacturing-reports',
+      managerOnly: true,
+    },
+    {
+      title: 'Treasury',
+      icon: Coins,
+      id: 'treasury',
       managerOnly: true,
     },
     {

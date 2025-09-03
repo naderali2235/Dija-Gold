@@ -50,7 +50,7 @@ public interface IProductOwnershipService
     /// <summary>
     /// Get low ownership products
     /// </summary>
-    Task<List<ProductOwnershipDto>> GetLowOwnershipProductsAsync(decimal threshold = 0.5m);
+    Task<List<ProductOwnershipDto>> GetLowOwnershipProductsAsync(decimal threshold = 50m);
     
     /// <summary>
     /// Get products with outstanding payments

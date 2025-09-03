@@ -19,8 +19,7 @@ public class ProductOwnershipProfile : Profile
             .ForMember(dest => dest.SupplierName, opt => opt.MapFrom(src => src.Supplier != null ? src.Supplier.CompanyName : null))
             .ForMember(dest => dest.PurchaseOrderNumber, opt => opt.MapFrom(src => src.PurchaseOrder != null ? src.PurchaseOrder.PurchaseOrderNumber : null))
             .ForMember(dest => dest.CustomerPurchaseNumber, opt => opt.MapFrom(src => src.CustomerPurchase != null ? src.CustomerPurchase.PurchaseNumber : null))
-            .ForMember(dest => dest.OwnershipPercentage, opt => opt.MapFrom(src => 
-                src.TotalQuantity > 0 ? (src.OwnedQuantity / src.TotalQuantity) * 100 : 0))
+            .ForMember(dest => dest.OwnershipPercentage, opt => opt.MapFrom(src => src.OwnershipPercentage))
             .ForMember(dest => dest.OutstandingAmount, opt => opt.MapFrom(src => src.TotalCost - src.AmountPaid));
 
         // ProductOwnershipRequest to ProductOwnership entity

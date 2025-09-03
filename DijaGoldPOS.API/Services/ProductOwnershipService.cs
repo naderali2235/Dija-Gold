@@ -76,7 +76,7 @@ public class ProductOwnershipService : IProductOwnershipService
                 existingOwnership.AmountPaid += request.AmountPaid;
                 existingOwnership.OutstandingAmount = existingOwnership.TotalCost - existingOwnership.AmountPaid;
                 existingOwnership.OwnershipPercentage = existingOwnership.TotalQuantity > 0 
-                    ? (existingOwnership.OwnedQuantity / existingOwnership.TotalQuantity) * 100 
+                    ? (existingOwnership.OwnedQuantity / existingOwnership.TotalQuantity) * 100
                     : 0;
                 existingOwnership.ModifiedAt = DateTime.UtcNow;
                 existingOwnership.ModifiedBy = userId;
@@ -225,7 +225,7 @@ public class ProductOwnershipService : IProductOwnershipService
             ownership.OwnedWeight = newOwnedWeight;
             ownership.OutstandingAmount = ownership.TotalCost - ownership.AmountPaid;
             ownership.OwnershipPercentage = ownership.TotalQuantity > 0 
-                ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100 
+                ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100
                 : 0;
             ownership.ModifiedAt = DateTime.UtcNow;
             ownership.ModifiedBy = userId;
@@ -275,7 +275,7 @@ public class ProductOwnershipService : IProductOwnershipService
                 ownership.OwnedQuantity -= quantityToDeduct;
                 ownership.OwnedWeight -= weightToDeduct;
                 ownership.OwnershipPercentage = ownership.TotalQuantity > 0 
-                    ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100 
+                    ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100
                     : 0;
                 ownership.ModifiedAt = DateTime.UtcNow;
                 ownership.ModifiedBy = userId;
@@ -354,12 +354,20 @@ public class ProductOwnershipService : IProductOwnershipService
                 ownership.OwnedQuantity -= quantityToDeduct;
                 ownership.OwnedWeight -= weightToDeduct;
                 ownership.OwnershipPercentage = ownership.TotalQuantity > 0 
-                    ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100 
+                    ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100
                     : 0;
                 ownership.ModifiedAt = DateTime.UtcNow;
                 ownership.ModifiedBy = userId;
 
                 remainingWeight -= weightToDeduct;
+            }
+
+            // Ensure there are new products to create
+            if (request.NewProducts == null || request.NewProducts.Count == 0)
+            {
+                var message = "No new products specified for conversion.";
+                _logger.LogWarning(message);
+                return (false, message);
             }
 
             // Create ownership records for new products
@@ -373,13 +381,15 @@ public class ProductOwnershipService : IProductOwnershipService
                     TotalWeight = newProduct.Weight,
                     OwnedQuantity = newProduct.Quantity,
                     OwnedWeight = newProduct.Weight,
-                    OwnershipPercentage = 100, // Fully owned since converted from owned raw gold
+                    OwnershipPercentage = 100, // Fully owned since converted from owned raw gold (stored as 0-100)
                     TotalCost = 0, // No additional cost for conversion
                     AmountPaid = 0,
                     OutstandingAmount = 0,
                     IsActive = true,
                     CreatedBy = userId,
-                    ModifiedBy = userId
+                    ModifiedBy = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    ModifiedAt = DateTime.UtcNow
                 };
 
                 await _productOwnershipRepository.AddAsync(newOwnership);
@@ -387,9 +397,9 @@ public class ProductOwnershipService : IProductOwnershipService
 
             await _unitOfWork.SaveChangesAsync();
 
-            var successMessage = $"Successfully converted {request.WeightToConvert}g of raw gold to {request.NewProducts.Count} products";
-            _logger.LogInformation(successMessage);
-            return (true, successMessage);
+            var success = $"Successfully converted {request.WeightToConvert}g of raw gold to {request.NewProducts.Count} products";
+            _logger.LogInformation(success);
+            return (true, success);
         }
         catch (Exception ex)
         {
@@ -411,7 +421,7 @@ public class ProductOwnershipService : IProductOwnershipService
             var alerts = new List<OwnershipAlertDto>();
 
             // Get low ownership products
-            var lowOwnershipProducts = await _productOwnershipRepository.GetLowOwnershipProductsAsync(0.5m);
+            var lowOwnershipProducts = await _productOwnershipRepository.GetLowOwnershipProductsAsync(50m);
             foreach (var ownership in lowOwnershipProducts)
             {
                 if (branchId.HasValue && ownership.BranchId != branchId.Value) continue;

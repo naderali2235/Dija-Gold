@@ -65,6 +65,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Cash management
     public DbSet<CashDrawerBalance> CashDrawerBalances { get; set; }
 
+    // Treasury management
+    public DbSet<TreasuryAccount> TreasuryAccounts { get; set; }
+    public DbSet<TreasuryTransaction> TreasuryTransactions { get; set; }
+
     // Manufacturing
     public DbSet<ProductManufacture> ProductManufactures { get; set; }
     public DbSet<ProductManufactureRawMaterial> ProductManufactureRawMaterials { get; set; }
@@ -116,6 +120,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
 
 
+        // Configure treasury
+        ConfigureTreasury(builder);
+
         // Configure lookup tables
         ConfigureLookupTables(builder);
 
@@ -134,6 +141,42 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany(b => b.Users)
                   .HasForeignKey(u => u.BranchId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+    }
+
+    /// <summary>
+    /// Configure treasury entities
+    /// </summary>
+    private static void ConfigureTreasury(ModelBuilder builder)
+    {
+        // TreasuryAccount
+        builder.Entity<TreasuryAccount>(entity =>
+        {
+            entity.HasIndex(t => t.BranchId).IsUnique();
+            entity.Property(t => t.CurrentBalance).HasColumnType("decimal(18,2)");
+            entity.Property(t => t.CurrencyCode).HasMaxLength(3);
+
+            entity.HasOne(t => t.Branch)
+                  .WithMany()
+                  .HasForeignKey(t => t.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // TreasuryTransaction
+        builder.Entity<TreasuryTransaction>(entity =>
+        {
+            entity.HasIndex(t => t.TreasuryAccountId);
+            entity.HasIndex(t => t.PerformedAt);
+
+            entity.Property(t => t.Amount).HasColumnType("decimal(18,2)");
+            entity.Property(t => t.ReferenceType).HasMaxLength(100);
+            entity.Property(t => t.ReferenceId).HasMaxLength(100);
+            entity.Property(t => t.Notes).HasMaxLength(1000);
+
+            entity.HasOne(t => t.TreasuryAccount)
+                  .WithMany()
+                  .HasForeignKey(t => t.TreasuryAccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -717,7 +760,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(po => po.TotalWeight).HasColumnType("decimal(10,3)");
             entity.Property(po => po.OwnedQuantity).HasColumnType("decimal(10,3)");
             entity.Property(po => po.OwnedWeight).HasColumnType("decimal(10,3)");
-            entity.Property(po => po.OwnershipPercentage).HasColumnType("decimal(5,4)");
+            entity.Property(po => po.OwnershipPercentage).HasColumnType("decimal(7,4)");
             entity.Property(po => po.TotalCost).HasColumnType("decimal(18,2)");
             entity.Property(po => po.AmountPaid).HasColumnType("decimal(18,2)");
             entity.Property(po => po.OutstandingAmount).HasColumnType("decimal(18,2)");
@@ -763,7 +806,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(om => om.OwnedQuantityAfter).HasColumnType("decimal(10,3)");
             entity.Property(om => om.OwnedWeightAfter).HasColumnType("decimal(10,3)");
             entity.Property(om => om.AmountPaidAfter).HasColumnType("decimal(18,2)");
-            entity.Property(om => om.OwnershipPercentageAfter).HasColumnType("decimal(5,4)");
+            entity.Property(om => om.OwnershipPercentageAfter).HasColumnType("decimal(7,4)");
             entity.Property(om => om.Notes).HasMaxLength(500);
             entity.Property(om => om.CreatedByUserId).IsRequired().HasMaxLength(450);
 
@@ -1037,6 +1080,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<InventoryMovement>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrder>().HasQueryFilter(e => e.IsActive);
         builder.Entity<PurchaseOrderItem>().HasQueryFilter(e => e.IsActive);
+        builder.Entity<TreasuryAccount>().HasQueryFilter(e => e.IsActive && e.Branch.IsActive);
+        builder.Entity<TreasuryTransaction>().HasQueryFilter(e => !e.IsDeleted && e.TreasuryAccount.IsActive && e.TreasuryAccount.Branch.IsActive);
         builder.Entity<RawGoldPurchaseOrder>().HasQueryFilter(e => e.IsActive);
         builder.Entity<RawGoldPurchaseOrderItem>().HasQueryFilter(e => e.IsActive);
         builder.Entity<RawGoldInventory>().HasQueryFilter(e => e.IsActive);
@@ -1156,6 +1201,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(rgi => rgi.MinimumStockLevel).HasColumnType("decimal(10,3)");
             entity.Property(rgi => rgi.ReorderPoint).HasColumnType("decimal(10,3)");
             entity.Property(rgi => rgi.Notes).HasMaxLength(1000);
+            entity.Property(rgi => rgi.LastCountDate).HasDefaultValueSql("GETUTCDATE()");
 
             entity.HasOne(rgi => rgi.KaratType)
                   .WithMany()

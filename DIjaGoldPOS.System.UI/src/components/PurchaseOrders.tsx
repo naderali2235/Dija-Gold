@@ -22,7 +22,10 @@ import {
   useCreateRawGoldPurchaseOrder,
   useUpdateRawGoldPurchaseOrderStatus,
   useReceiveRawGoldPurchaseOrder,
-  useCurrentUser
+  useProcessPurchaseOrderPayment,
+  useProcessRawGoldPurchaseOrderPayment,
+  useCurrentUser,
+  usePaymentMethods
 } from '../hooks/useApi';
 import { 
   PurchaseOrderDto, 
@@ -46,6 +49,19 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+// Helper: compute amount paid and outstanding with fallbacks
+const getAmountPaid = (po: any) => {
+  return typeof po?.amountPaid === 'number' ? po.amountPaid : 0;
+};
+
+const getOutstanding = (po: any) => {
+  if (typeof po?.outstandingBalance === 'number') return Math.max(0, po.outstandingBalance);
+  const total = typeof po?.totalAmount === 'number' ? po.totalAmount : 0;
+  const paid = getAmountPaid(po);
+  const outstanding = total - paid;
+  return Math.max(0, Number(outstanding.toFixed(2)));
+};
+
 export default function PurchaseOrders() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const { fetchUser } = useCurrentUser();
@@ -56,7 +72,7 @@ export default function PurchaseOrders() {
   const [orderType, setOrderType] = useState('all'); // 'all', 'regular', 'raw-gold'
   const [isNewPOOpen, setIsNewPOOpen] = useState(false);
   const [isNewRawGoldPOOpen, setIsNewRawGoldPOOpen] = useState(false);
-  const [selectedPO, setSelectedPO] = useState<PurchaseOrderDto | null>(null);
+  const [selectedPO, setSelectedPO] = useState<(PurchaseOrderDto & { type?: 'regular' | 'raw-gold' }) | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
   // API hooks
@@ -95,6 +111,15 @@ export default function PurchaseOrders() {
     execute: receiveRawGoldPurchaseOrder 
   } = useReceiveRawGoldPurchaseOrder();
 
+  // Payment hooks
+  const { execute: processPurchaseOrderPayment } = useProcessPurchaseOrderPayment();
+  const { execute: processRawGoldPurchaseOrderPayment } = useProcessRawGoldPurchaseOrderPayment();
+  const { data: paymentMethods, execute: fetchPaymentMethods } = usePaymentMethods();
+
+  // Payment dialog state
+  const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ amount: '', paymentMethodId: '', notes: '', referenceNumber: '' });
+
   // Load suppliers, products, and branches
   const { 
     data: suppliersData, 
@@ -109,7 +134,9 @@ export default function PurchaseOrders() {
   const { 
     data: productsData, 
     loading: productsLoading,
-    fetchData: fetchProducts 
+    fetchData: fetchProducts,
+    updateParams: updateProductParams,
+    params: productParams
   } = usePaginatedProducts({
     pageNumber: 1,
     pageSize: 100,
@@ -142,6 +169,22 @@ export default function PurchaseOrders() {
     notes: '',
     items: [{ productId: '', quantity: '', weight: '', unitCost: '', notes: '' }],
   });
+
+  // Product filters for regular PO items
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productKaratFilter, setProductKaratFilter] = useState<string>('');
+
+  // Update products list when filters change
+  useEffect(() => {
+    const karatId = productKaratFilter ? parseInt(productKaratFilter, 10) : undefined;
+    updateProductParams({
+      pageNumber: 1,
+      pageSize: productParams?.pageSize || 100,
+      isActive: true,
+      searchTerm: productSearchTerm || undefined,
+      karatTypeId: karatId,
+    });
+  }, [productSearchTerm, productKaratFilter, updateProductParams, productParams?.pageSize]);
 
   // Form state for raw gold PO
   const [rawGoldPOForm, setRawGoldPOForm] = useState({
@@ -177,16 +220,93 @@ export default function PurchaseOrders() {
         loadRawGoldPurchaseOrders()
       ]);
 
-      // Load suppliers, products, branches, and karat types
+      // Load suppliers, products, branches, karat types, and payment methods
       await Promise.all([
         fetchSuppliers(),
         fetchProducts(),
         fetchBranches(),
-        fetchKaratTypes()
+        fetchKaratTypes(),
+        fetchPaymentMethods()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
+    }
+  };
+
+  const handlePayPO = async (po: any) => {
+    if (!isManager) {
+      toast.error('Only managers can process purchase order payments');
+      return;
+    }
+    try {
+      setSelectedPO(po);
+      // Ensure payment methods are loaded
+      if (!paymentMethods || (Array.isArray(paymentMethods) && paymentMethods.length === 0)) {
+        await fetchPaymentMethods();
+      }
+      setPaymentForm({
+        amount: getOutstanding(po).toFixed(2),
+        paymentMethodId: '',
+        notes: '',
+        referenceNumber: po.purchaseOrderNumber || ''
+      });
+      setIsPayDialogOpen(true);
+    } catch (error) {
+      console.error('Error preparing payment dialog:', error);
+      toast.error('Failed to open payment dialog');
+    }
+  };
+
+  const handleSubmitPayment = async () => {
+    if (!isManager) {
+      toast.error('Only managers can process purchase order payments');
+      return;
+    }
+    if (!selectedPO) {
+      toast.error('No purchase order selected');
+      return;
+    }
+    try {
+      const amount = parseFloat(paymentForm.amount);
+      const paymentMethodId = parseInt(paymentForm.paymentMethodId, 10);
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Enter a valid amount');
+        return;
+      }
+      if (isNaN(paymentMethodId) || paymentMethodId <= 0) {
+        toast.error('Select a payment method');
+        return;
+      }
+      let request: any;
+      if (selectedPO.type === 'raw-gold') {
+        request = {
+          RawGoldPurchaseOrderId: selectedPO.id,
+          PaymentAmount: amount,
+          PaymentMethodId: paymentMethodId,
+          Notes: paymentForm.notes || undefined,
+          ReferenceNumber: paymentForm.referenceNumber || undefined,
+        };
+        await processRawGoldPurchaseOrderPayment(selectedPO.id, request);
+      } else {
+        request = {
+          PurchaseOrderId: selectedPO.id,
+          PaymentAmount: amount,
+          PaymentMethodId: paymentMethodId,
+          Notes: paymentForm.notes || undefined,
+          ReferenceNumber: paymentForm.referenceNumber || undefined,
+        };
+        await processPurchaseOrderPayment(selectedPO.id, request);
+      }
+
+      toast.success('Payment processed successfully');
+      setIsPayDialogOpen(false);
+      setPaymentForm({ amount: '', paymentMethodId: '', notes: '', referenceNumber: '' });
+      setSelectedPO(null);
+      loadData();
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast.error('Failed to process payment');
     }
   };
 
@@ -209,6 +329,9 @@ export default function PurchaseOrders() {
         expectedDeliveryDate: po.expectedDeliveryDate,
         actualDeliveryDate: po.actualDeliveryDate,
         totalAmount: po.totalAmount,
+        // Map payment fields if present and compute fallback
+        amountPaid: typeof po.amountPaid === 'number' ? po.amountPaid : 0,
+        outstandingBalance: typeof po.outstandingBalance === 'number' ? po.outstandingBalance : Math.max(0, (po.totalAmount || 0) - (po.amountPaid || 0)),
         status: po.status,
         supplierId: po.supplierId,
         branchId: po.branchId
@@ -386,7 +509,7 @@ export default function PurchaseOrders() {
         items: rawGoldPOForm.items.map(item => ({
           karatTypeId: parseInt(item.karatTypeId),
           weightOrdered: parseFloat(item.weightOrdered),
-          costPerGram: parseFloat(item.costPerGram),
+          unitCostPerGram: parseFloat(item.costPerGram),
           description: item.description || '',
           notes: item.notes || undefined
         }))
@@ -435,7 +558,7 @@ export default function PurchaseOrders() {
         items: rawGoldPOForm.items.map(item => ({
           karatTypeId: parseInt(item.karatTypeId),
           weightOrdered: parseFloat(item.weightOrdered),
-          costPerGram: parseFloat(item.costPerGram),
+          unitCostPerGram: parseFloat(item.costPerGram),
           description: item.description || '',
           notes: item.notes || undefined
         }))
@@ -603,12 +726,12 @@ export default function PurchaseOrders() {
           <div className="flex gap-2">
             <Dialog open={isNewPOOpen} onOpenChange={setIsNewPOOpen}>
               <DialogTrigger asChild>
-                <Button className="touch-target pos-button-primary bg-blue-600 hover:bg-blue-700 text-white">
+                <Button className="touch-target pos-button-primary bg-blue-600 hover:bg-blue-700 text-white" data-testid="new-regular-po-btn">
                   <ShoppingCart className="mr-2 h-4 w-4" />
                   New Regular PO
                 </Button>
               </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="regular-po-dialog">
               <DialogHeader>
                 <DialogTitle>Create Regular Purchase Order</DialogTitle>
                 <DialogDescription>
@@ -666,9 +789,40 @@ export default function PurchaseOrders() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="grid grid-cols-12 gap-3">
+                    <div className="col-span-8 space-y-1">
+                      <Label className="text-xs">Search Products</Label>
+                      <div className="relative">
+                        <Input
+                          placeholder="Search by name or code"
+                          value={productSearchTerm}
+                          onChange={(e) => setProductSearchTerm(e.target.value)}
+                          className="pr-8"
+                        />
+                        <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div className="col-span-4 space-y-1">
+                      <Label className="text-xs">Filter by Karat</Label>
+                      <Select
+                        value={productKaratFilter || ''}
+                        onValueChange={(value) => setProductKaratFilter(value === 'all' ? '' : value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All karats" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          {karatTypes?.map((k) => (
+                            <SelectItem key={k.id} value={k.id.toString()}>{k.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between">
                     <Label>Items</Label>
-                    <Button type="button" variant="outline" onClick={addPOItem} size="sm">
+                    <Button type="button" variant="outline" onClick={addPOItem} size="sm" data-testid="po-add-item-btn">
                       <Plus className="mr-1 h-3 w-3" />
                       Add Item
                     </Button>
@@ -691,6 +845,24 @@ export default function PurchaseOrders() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {item.productId && (
+                            (() => {
+                              const p = products.find(p => p.id === parseInt(item.productId));
+                              return (
+                                <div className="mt-1 rounded border bg-muted/30 p-2">
+                                  {p ? (
+                                    <div className="flex flex-wrap gap-4 text-xs">
+                                      <span><span className="font-medium">Name:</span> {p.name}</span>
+                                      <span><span className="font-medium">Code:</span> {p.productCode}</span>
+                                      <span><span className="font-medium">Weight:</span> {p.weight} g</span>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Product details unavailable.</p>
+                                  )}
+                                </div>
+                              );
+                            })()
+                          )}
                         </div>
                         <div className="col-span-2 space-y-1">
                           <Label className="text-xs">Quantity</Label>
@@ -777,6 +949,7 @@ export default function PurchaseOrders() {
                   onClick={handleCreatePO} 
                   disabled={createLoading}
                   className="pos-button-primary bg-blue-600 hover:bg-blue-700 text-white"
+                  data-testid="po-submit-btn"
                 >
                   {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Regular Purchase Order
@@ -787,12 +960,12 @@ export default function PurchaseOrders() {
           
           <Dialog open={isNewRawGoldPOOpen} onOpenChange={setIsNewRawGoldPOOpen}>
             <DialogTrigger asChild>
-              <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]">
+              <Button className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]" data-testid="new-raw-gold-po-btn">
                 <Zap className="mr-2 h-4 w-4" />
                 New Raw Gold PO
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-7xl max-h-screen overflow-y-auto">
+            <DialogContent className="max-w-7xl max-h-screen overflow-y-auto" data-testid="raw-gold-po-dialog">
               <DialogHeader>
                 <DialogTitle>{isEditMode && selectedPO ? 'Edit Raw Gold Purchase Order' : 'Create Raw Gold Purchase Order'}</DialogTitle>
                 <DialogDescription>
@@ -852,7 +1025,7 @@ export default function PurchaseOrders() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label>Raw Gold Items</Label>
-                    <Button type="button" variant="outline" onClick={addRawGoldPOItem} size="sm">
+                    <Button type="button" variant="outline" onClick={addRawGoldPOItem} size="sm" data-testid="raw-po-add-item-btn">
                       <Plus className="mr-1 h-3 w-3" />
                       Add Raw Gold Item
                     </Button>
@@ -967,9 +1140,87 @@ export default function PurchaseOrders() {
                   onClick={isEditMode ? handleUpdateRawGoldPO : handleCreateRawGoldPO} 
                   disabled={createLoading}
                   className="pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
+                  data-testid="raw-po-submit-btn"
                 >
                   {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isEditMode ? 'Update Raw Gold Purchase Order' : 'Create Raw Gold Purchase Order'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Payment Dialog */}
+          <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
+            <DialogContent className="max-w-lg" data-testid="po-payment-dialog">
+              <DialogHeader>
+                <DialogTitle>Process Purchase Order Payment</DialogTitle>
+                <DialogDescription>
+                  {selectedPO ? (
+                    <div className="mt-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">PO Number</span>
+                        <span className="font-medium">{selectedPO.purchaseOrderNumber}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Outstanding</span>
+                        <span className="font-semibold">{formatCurrency(getOutstanding(selectedPO))}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input
+                    type="number"
+                    value={paymentForm.amount}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                    placeholder="0.00"
+                    data-testid="po-payment-amount"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select
+                    value={paymentForm.paymentMethodId}
+                    onValueChange={(value) => setPaymentForm({ ...paymentForm, paymentMethodId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(paymentMethods || []).map((pm: any) => (
+                        <SelectItem key={pm.id} value={pm.id.toString()}>
+                          {pm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Reference Number</Label>
+                  <Input
+                    value={paymentForm.referenceNumber}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })}
+                    placeholder="Optional reference"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={paymentForm.notes}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                    placeholder="Optional notes"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setIsPayDialogOpen(false)} data-testid="po-payment-cancel">
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmitPayment} className="pos-button-primary">
+                  Submit Payment
                 </Button>
               </div>
             </DialogContent>
@@ -1101,7 +1352,7 @@ export default function PurchaseOrders() {
                   </TableHeader>
                   <TableBody>
                     {filteredPOs.map((po) => (
-                      <TableRow key={po.id}>
+                      <TableRow key={`${po.type || 'regular'}-${po.id}`}>
                         <TableCell className="font-medium">{po.purchaseOrderNumber}</TableCell>
                         <TableCell>
                           {po.type === 'raw-gold' ? (
@@ -1143,6 +1394,18 @@ export default function PurchaseOrders() {
                         <TableCell>{getStatusBadge(po.status)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            {isManager && (
+                              <Button
+                                onClick={() => handlePayPO(po)}
+                                size="sm"
+                                variant="outline"
+                                className="text-green-700 hover:bg-green-50"
+                                disabled={getOutstanding(po) <= 0}
+                              >
+                                <DollarSign className="h-4 w-4 mr-1" />
+                                Pay PO
+                              </Button>
+                            )}
                             {/* Status Change Buttons */}
                             {isManager && po.status !== 'Received' && po.status !== 'Cancelled' && (
                               <>
@@ -1300,6 +1563,16 @@ export default function PurchaseOrders() {
                                     <div>
                                       <Label>Total Amount</Label>
                                       <p className="text-lg font-semibold">{formatCurrency(po.totalAmount)}</p>
+                                    </div>
+                                    <div>
+                                      <Label>Amount Paid</Label>
+                                      <p className="text-lg font-semibold">{formatCurrency(getAmountPaid(po))}</p>
+                                    </div>
+                                    <div>
+                                      <Label>Outstanding Amount</Label>
+                                      <p className="text-lg font-semibold {getOutstanding(po) > 0 ? 'text-red-600' : 'text-green-600'}">
+                                        {formatCurrency(getOutstanding(po))}
+                                      </p>
                                     </div>
                                     <div>
                                       <Label>Order Type</Label>

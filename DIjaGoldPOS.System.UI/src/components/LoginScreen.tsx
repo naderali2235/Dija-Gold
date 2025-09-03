@@ -301,6 +301,7 @@ export default function LoginScreen() {
                   className="pl-10 h-12 border-[#0D1B2A]/20 focus:border-[#D4AF37] focus:ring-[#D4AF37]"
                   disabled={isLoading}
                   required
+                  data-testid="username"
                 />
               </div>
             </div>
@@ -321,6 +322,7 @@ export default function LoginScreen() {
                   className="pl-10 pr-10 h-12 border-[#0D1B2A]/20 focus:border-[#D4AF37] focus:ring-[#D4AF37]"
                   disabled={isLoading}
                   required
+                  data-testid="password"
                 />
                 <Button
                   type="button"
@@ -341,7 +343,7 @@ export default function LoginScreen() {
 
             {/* Error Message */}
             {error && (
-              <div className={`p-3 border rounded-lg ${getErrorStyles()}`}>
+              <div className={`p-3 border rounded-lg ${getErrorStyles()}`} data-testid="login-error">
                 <div className="flex items-center gap-2">
                   {getErrorIcon()}
                   <p className="text-sm">{error}</p>
@@ -383,6 +385,7 @@ export default function LoginScreen() {
               type="submit"
               className="w-full h-12 text-lg bg-gradient-to-r from-[#D4AF37] to-[#B8941F] hover:from-[#B8941F] hover:to-[#D4AF37] text-[#0D1B2A] font-semibold shadow-lg transition-all duration-200 transform hover:scale-105"
               disabled={isLoading || !isOnline || !isServerReachable}
+              data-testid="login-submit"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
@@ -399,7 +402,6 @@ export default function LoginScreen() {
               )}
             </Button>
           </form>
-
 
           {/* Footer */}
           <div className="text-center pt-4 border-t border-[#0D1B2A]/10">

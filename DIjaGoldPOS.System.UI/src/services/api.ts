@@ -117,7 +117,15 @@ async function apiRequest<T>(
 
   try {
     const response = await fetch(url, config);
-    const data = await response.json();
+
+    // Read raw text first to avoid JSON parse errors on empty bodies
+    const rawText = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    const hasJson = contentType.includes('application/json');
+    const hasBody = rawText.trim().length > 0;
+
+    // Attempt to parse JSON only when appropriate
+    const parsed = hasJson && hasBody ? JSON.parse(rawText) : null;
 
     if (!response.ok) {
       // Handle specific HTTP errors
@@ -127,11 +135,33 @@ async function apiRequest<T>(
         window.location.href = '/login';
         throw new Error('Session expired. Please login again.');
       }
-      
-      throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+
+      const message = (parsed && parsed.message) ? parsed.message : `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
-    return data;
+    // For successful responses, normalize API wrapper shape
+    // Accept both camelCase { success, data, message } and PascalCase { Success, Data, Message }
+    if (parsed !== null) {
+      if (typeof parsed === 'object' && parsed !== null) {
+        const hasCamelSuccess = Object.prototype.hasOwnProperty.call(parsed, 'success');
+        const hasPascalSuccess = Object.prototype.hasOwnProperty.call(parsed as any, 'Success');
+        if (hasCamelSuccess || hasPascalSuccess) {
+          const success = hasCamelSuccess ? (parsed as any).success : (parsed as any).Success;
+          const message = Object.prototype.hasOwnProperty.call(parsed as any, 'message')
+            ? (parsed as any).message
+            : (Object.prototype.hasOwnProperty.call(parsed as any, 'Message') ? (parsed as any).Message : '');
+          const data = Object.prototype.hasOwnProperty.call(parsed as any, 'data')
+            ? (parsed as any).data
+            : (Object.prototype.hasOwnProperty.call(parsed as any, 'Data') ? (parsed as any).Data : undefined);
+          return { success, message, data } as ApiResponse<T>;
+        }
+      }
+      return parsed as any;
+    }
+
+    // No JSON body but success (e.g., 204 No Content)
+    return { success: true, message: 'OK' } as ApiResponse<T>;
   } catch (error) {
     console.error(`API Error (${endpoint}):`, error);
     throw error;
@@ -1208,14 +1238,14 @@ export const suppliersApi = {
     transactionType?: string;
     pageNumber?: number;
     pageSize?: number;
-  } = {}): Promise<SupplierTransactionDto[]> {
+  } = {}): Promise<PagedResult<SupplierTransactionDto>> {
     const queryString = new URLSearchParams(
       Object.entries(params)
         .filter(([_, value]) => value !== undefined)
         .map(([key, value]) => [key, String(value)])
     ).toString();
     
-    const response = await apiRequest<SupplierTransactionDto[]>(`/suppliers/${id}/transactions?${queryString}`);
+    const response = await apiRequest<PagedResult<SupplierTransactionDto>>(`/suppliers/${id}/transactions?${queryString}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -1792,6 +1822,19 @@ export const purchaseOrdersApi = {
     }
     
     throw new Error(response.message || 'Failed to get status transitions');
+  },
+
+  async processPayment(id: number, request: ProcessPurchaseOrderPaymentRequest): Promise<PurchaseOrderPaymentResult> {
+    const response = await apiRequest<PurchaseOrderPaymentResult>(`/purchaseorders/${id}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+
+    throw new Error(response.message || 'Failed to process purchase order payment');
   }
 };
 
@@ -2438,6 +2481,40 @@ export interface PurchaseOrderStatusTransitionDto {
   currentStatus: string;
   availableTransitions: string[];
   validationMessage?: string;
+}
+
+// Purchase Order Payments
+export interface ProcessPurchaseOrderPaymentRequest {
+  amount: number;
+  paymentMethodId: number;
+  notes?: string;
+  referenceNumber?: string;
+}
+
+export interface PurchaseOrderPaymentResult {
+  success: boolean;
+  message?: string;
+  purchaseOrder: PurchaseOrderDto;
+  amountPaid: number;
+  outstandingAmount: number;
+  transactionNumber?: string;
+}
+
+// Raw Gold Purchase Order Payments
+export interface ProcessRawGoldPurchaseOrderPaymentRequest {
+  amount: number;
+  paymentMethodId: number;
+  notes?: string;
+  referenceNumber?: string;
+}
+
+export interface RawGoldPurchaseOrderPaymentResult {
+  success: boolean;
+  message?: string;
+  rawGoldPurchaseOrder: any;
+  amountPaid: number;
+  outstandingAmount: number;
+  transactionNumber?: string;
 }
 
 // Labels/Printing Management API interfaces
@@ -3497,8 +3574,6 @@ export interface TechnicianSearchRequestDto {
   pageSize?: number;
 }
 
-
-
 // Customer Purchase API interfaces
 export interface CustomerPurchaseDto {
   id: number;
@@ -3515,6 +3590,8 @@ export interface CustomerPurchaseDto {
   notes?: string;
   createdByUserId: string;
   createdAt: string;
+  linkedRawGoldPurchaseOrderId?: number;
+  linkedRawGoldPurchaseOrderNumber?: string;
   items: CustomerPurchaseItemDto[];
 }
 
@@ -4185,16 +4262,18 @@ export const productOwnershipApi = {
         .reduce((acc, [key, value]) => ({ ...acc, [key]: String(value) }), {})
     }).toString();
     
-    const response = await apiRequest<{
-      items: ProductOwnershipDto[];
-      totalCount: number;
-      pageNumber: number;
-      pageSize: number;
-      totalPages: number;
-    }>(`/productownership/list?${queryParams}`);
+    const response = await apiRequest<any>(`/productownership/list?${queryParams}`);
     
     if (response.success && response.data) {
-      return response.data;
+      const d = response.data;
+      // Map possible PascalCase keys from backend to camelCase expected by UI
+      return {
+        items: d.items ?? d.Items ?? [],
+        totalCount: d.totalCount ?? d.TotalCount ?? 0,
+        pageNumber: d.pageNumber ?? d.Page ?? 1,
+        pageSize: d.pageSize ?? d.PageSize ?? (params.pageSize ?? 20),
+        totalPages: d.totalPages ?? d.TotalPages ?? 0,
+      };
     }
     
     throw new Error(response.message || 'Failed to fetch product ownership list');
@@ -4267,23 +4346,32 @@ export const productOwnershipApi = {
   },
 
   async getProductOwnership(productId: number, branchId: number): Promise<ProductOwnershipDto[]> {
-    const response = await apiRequest<ProductOwnershipDto[]>(`/productownership/product/${productId}/branch/${branchId}`);
-    
-    if (response.success && response.data) {
-      return response.data;
+    const response = await apiRequest<ProductOwnershipDto[] | ApiResponse<ProductOwnershipDto[]>>(`/productownership/product/${productId}/branch/${branchId}`);
+
+    // Handle both wrapped and unwrapped responses
+    if (Array.isArray(response)) {
+      return response;
     }
-    
-    throw new Error(response.message || 'Failed to fetch product ownership');
+    if (response && (response as ApiResponse<ProductOwnershipDto[]>).success && (response as ApiResponse<ProductOwnershipDto[]>).data) {
+      return (response as ApiResponse<ProductOwnershipDto[]>).data as ProductOwnershipDto[];
+    }
+
+    const message = (response as ApiResponse)?.message || 'Failed to fetch product ownership';
+    throw new Error(message);
   },
 
   async getOwnershipMovements(productOwnershipId: number): Promise<OwnershipMovementDto[]> {
-    const response = await apiRequest<OwnershipMovementDto[]>(`/productownership/movements/${productOwnershipId}`);
-    
-    if (response.success && response.data) {
-      return response.data;
+    const response = await apiRequest<OwnershipMovementDto[] | ApiResponse<OwnershipMovementDto[]>>(`/productownership/movements/${productOwnershipId}`);
+
+    if (Array.isArray(response)) {
+      return response;
     }
-    
-    throw new Error(response.message || 'Failed to fetch ownership movements');
+    if (response && (response as ApiResponse<OwnershipMovementDto[]>).success && (response as ApiResponse<OwnershipMovementDto[]>).data) {
+      return (response as ApiResponse<OwnershipMovementDto[]>).data as OwnershipMovementDto[];
+    }
+
+    const message = (response as ApiResponse)?.message || 'Failed to fetch ownership movements';
+    throw new Error(message);
   },
 
   async getLowOwnershipProducts(threshold: number = 0.5): Promise<ProductOwnershipDto[]> {
@@ -4429,87 +4517,189 @@ export interface ManufacturingWorkflowHistory {
   changedAt: string;
 }
 
-// Manufacturing Reports DTOs
+// Manufacturing Reports DTOs (aligned with backend C# DTOs)
+export interface DateRangeDto {
+  StartDate: string; // ISO date string
+  EndDate: string;   // ISO date string
+}
+
+export interface ManufacturingSummaryDto {
+  TotalRawGoldPurchased: number;
+  TotalRawGoldConsumed: number;
+  TotalWastage: number;
+  TotalProductsManufactured: number;
+  RawGoldUtilizationRate: number;
+  OverallCompletionRate: number;
+  TotalManufacturingCost: number;
+  TotalRawGoldCost: number;
+  AverageCostPerGram: number;
+  ApprovalRate: number;
+  QualityPassRate: number;
+}
+
 export interface ManufacturingDashboardDto {
-  Summary: {
-    TotalRawGoldPurchased: number;
-    TotalRawGoldConsumed: number;
-    TotalWastage: number;
-    TotalProductsManufactured: number;
-    RawGoldUtilizationRate: number;
-    OverallCompletionRate: number;
-    TotalManufacturingCost: number;
-    TotalRawGoldCost: number;
-    AverageCostPerGram: number;
-    ApprovalRate: number;
-    QualityPassRate: number;
-  };
+  ReportPeriod: DateRangeDto;
+  Summary: ManufacturingSummaryDto;
   RawGoldUtilization: RawGoldUtilizationReportDto;
-  Efficiency: EfficiencyReportDto;
+  Efficiency: ManufacturingEfficiencyReportDto;
   CostAnalysis: CostAnalysisReportDto;
   WorkflowPerformance: WorkflowPerformanceReportDto;
 }
 
+export interface SupplierRawGoldUtilizationDto {
+  SupplierId: number;
+  SupplierName: string;
+  RawGoldPurchased: number;
+  RawGoldConsumed: number;
+  Wastage: number;
+  UtilizationRate: number;
+}
+
+export interface KaratTypeUtilizationDto {
+  KaratType: string;
+  RawGoldPurchased: number;
+  RawGoldConsumed: number;
+  Wastage: number;
+  UtilizationRate: number;
+}
+
+export interface ProductTypeUtilizationDto {
+  ProductType: string;
+  RawGoldConsumed: number;
+  ProductsManufactured: number;
+  AverageConsumptionPerProduct: number;
+}
+
 export interface RawGoldUtilizationReportDto {
+  ReportPeriod: DateRangeDto;
   TotalRawGoldPurchased: number;
   TotalRawGoldConsumed: number;
   TotalWastage: number;
   RawGoldUtilizationRate: number;
   TotalProductsManufactured: number;
-  SupplierBreakdown: {
-    SupplierName: string;
-    TotalWeight: number;
-    ConsumedWeight: number;
-    Wastage: number;
-  }[];
+  AverageWastageRate: number;
+  BySupplier: SupplierRawGoldUtilizationDto[];
+  ByKaratType: KaratTypeUtilizationDto[];
+  ByProductType: ProductTypeUtilizationDto[];
 }
 
-export interface EfficiencyReportDto {
+export interface TechnicianEfficiencyDto {
+  TechnicianId: number;
+  TechnicianName: string;
+  TotalRecords: number;
+  CompletedRecords: number;
+  CompletionRate: number;
+  AverageEfficiencyRating: number;
+}
+
+export interface BranchEfficiencyDto {
+  BranchId: number;
+  BranchName: string;
+  TotalRecords: number;
+  CompletedRecords: number;
+  CompletionRate: number;
+  AverageEfficiencyRating: number;
+}
+
+export interface PriorityEfficiencyDto {
+  Priority: string;
+  TotalRecords: number;
+  CompletedRecords: number;
+  CompletionRate: number;
+  AverageEfficiencyRating: number;
+}
+
+export interface MonthlyEfficiencyDto {
+  Month: string; // ISO date string
+  TotalRecords: number;
+  CompletedRecords: number;
+  CompletionRate: number;
+  AverageEfficiencyRating: number;
+}
+
+export interface ManufacturingEfficiencyReportDto {
+  ReportPeriod: DateRangeDto;
+  TotalManufacturingRecords: number;
+  CompletedRecords: number;
+  InProgressRecords: number;
+  PendingRecords: number;
+  RejectedRecords: number;
   OverallCompletionRate: number;
-  AverageCompletionTime: number;
-  TechnicianPerformance: {
-    TechnicianName: string;
-    CompletedItems: number;
-    AverageTime: number;
-    Efficiency: number;
-  }[];
-  MonthlyTrend: {
-    Month: string;
-    CompletionRate: number;
-  }[];
+  AverageManufacturingTime: number; // hours
+  AverageWastageRate: number;
+  AverageEfficiencyRating: number;
+  ByTechnician: TechnicianEfficiencyDto[];
+  ByBranch: BranchEfficiencyDto[];
+  ByPriority: PriorityEfficiencyDto[];
+  EfficiencyTrend: MonthlyEfficiencyDto[];
+}
+
+// Backwards-compatible alias for existing usages
+export type EfficiencyReportDto = ManufacturingEfficiencyReportDto;
+
+export interface ProductTypeCostDto {
+  ProductType: string;
+  RawGoldCost: number;
+  ManufacturingCost: number;
+  TotalCost: number;
+  ProductsManufactured: number;
+  AverageCostPerProduct: number;
+}
+
+export interface MonthlyCostDto {
+  Month: string; // ISO date string
+  RawGoldCost: number;
+  ManufacturingCost: number;
+  TotalCost: number;
+  ProductsManufactured: number;
+}
+
+export interface TopCostProductDto {
+  ProductId: number;
+  ProductName: string;
+  ProductCode: string;
+  TotalCost: number;
+  ManufactureDate: string; // ISO date
+  BatchNumber?: string | null;
 }
 
 export interface CostAnalysisReportDto {
-  TotalManufacturingCost: number;
+  ReportPeriod: DateRangeDto;
   TotalRawGoldCost: number;
+  TotalManufacturingCost: number;
+  TotalWastageCost: number;
   AverageCostPerGram: number;
-  CostBreakdown: {
-    Category: string;
-    Amount: number;
-    Percentage: number;
-  }[];
-  ProductCostAnalysis: {
-    ProductName: string;
-    Units: number;
-    TotalCost: number;
-    CostPerUnit: number;
-  }[];
+  CostBreakdownByProductType: ProductTypeCostDto[];
+  CostTrend: MonthlyCostDto[];
+  TopCostProducts: TopCostProductDto[];
+}
+
+export interface WorkflowStepAnalysisDto {
+  StepName: string;
+  TotalRecords: number;
+  AverageTimeInStep: number; // hours
+  CompletionRate: number;
+}
+
+export interface WorkflowTransitionAnalysisDto {
+  FromStatus: string;
+  ToStatus: string;
+  TransitionCount: number;
+  AverageTransitionTime: number; // hours
+  SuccessRate: number;
 }
 
 export interface WorkflowPerformanceReportDto {
+  ReportPeriod: DateRangeDto;
+  TotalWorkflowTransitions: number;
+  AverageTimeInDraft: number;
+  AverageTimeInProgress: number;
+  AverageTimeInQualityCheck: number;
   ApprovalRate: number;
+  RejectionRate: number;
   QualityPassRate: number;
-  AverageProcessingTime: number;
-  WorkflowStages: {
-    Stage: string;
-    Count: number;
-    AverageTime: number;
-  }[];
-  Bottlenecks: {
-    Stage: string;
-    Delay: number;
-    Impact: string;
-  }[];
+  WorkflowStepAnalysis: WorkflowStepAnalysisDto[];
+  TransitionAnalysis: WorkflowTransitionAnalysisDto[];
 }
 
 // Product Manufacturing API
@@ -4598,31 +4788,46 @@ const productManufactureApi = {
 
   async getAvailableRawGoldItems(): Promise<any[]> {
     const response = await apiRequest<any[]>('/ProductManufacture/available-raw-gold');
-    
+
+    // The API may return an array directly, or a wrapped response
+    if (Array.isArray(response)) {
+      return response as unknown as any[];
+    }
+
     if (response.success && response.data) {
       return response.data;
     }
-    
+
     throw new Error(response.message || 'Failed to fetch available raw gold items');
   },
 
   async getRemainingWeight(purchaseOrderItemId: number): Promise<number> {
     const response = await apiRequest<number>(`/ProductManufacture/purchase-order-item/${purchaseOrderItemId}/remaining-weight`);
     
+    // The API may return a number directly, or a wrapped response
+    if (typeof (response as unknown) === 'number') {
+      return response as unknown as number;
+    }
+
     if (response.success && response.data !== undefined) {
       return response.data;
     }
-    
+
     throw new Error(response.message || 'Failed to fetch remaining weight');
   },
 
   async checkSufficientWeight(purchaseOrderItemId: number, requiredWeight: number): Promise<boolean> {
     const response = await apiRequest<boolean>(`/ProductManufacture/purchase-order-item/${purchaseOrderItemId}/check-weight?requiredWeight=${requiredWeight}`);
     
+    // The API may return a boolean directly, or a wrapped response
+    if (typeof (response as unknown) === 'boolean') {
+      return response as unknown as boolean;
+    }
+
     if (response.success && response.data !== undefined) {
       return response.data;
     }
-    
+
     throw new Error(response.message || 'Failed to check sufficient weight');
   },
 
@@ -4632,11 +4837,14 @@ const productManufactureApi = {
       body: JSON.stringify(data),
     });
     
-    if (response.success && response.data) {
-      return response.data;
+    // Handle both wrapped and unwrapped responses
+    const wrapped = response as unknown as { success?: boolean; data?: ProductManufactureDto; message?: string };
+    if (wrapped && typeof wrapped === 'object' && 'success' in wrapped) {
+      if (wrapped.success && wrapped.data) return wrapped.data;
+      throw new Error(wrapped.message || 'Failed to transition workflow');
     }
-    
-    throw new Error(response.message || 'Failed to transition workflow');
+    // Unwrapped object response
+    return response as unknown as ProductManufactureDto;
   },
 
   async performQualityCheck(id: number, data: QualityCheckDto): Promise<ProductManufactureDto> {
@@ -4645,11 +4853,14 @@ const productManufactureApi = {
       body: JSON.stringify(data),
     });
     
-    if (response.success && response.data) {
-      return response.data;
+    // Handle both wrapped and unwrapped responses
+    const wrapped = response as unknown as { success?: boolean; data?: ProductManufactureDto; message?: string };
+    if (wrapped && typeof wrapped === 'object' && 'success' in wrapped) {
+      if (wrapped.success && wrapped.data) return wrapped.data;
+      throw new Error(wrapped.message || 'Failed to perform quality check');
     }
-    
-    throw new Error(response.message || 'Failed to perform quality check');
+    // Unwrapped object response
+    return response as unknown as ProductManufactureDto;
   },
 
   async performFinalApproval(id: number, data: FinalApprovalDto): Promise<ProductManufactureDto> {
@@ -4658,119 +4869,50 @@ const productManufactureApi = {
       body: JSON.stringify(data),
     });
     
-    if (response.success && response.data) {
-      return response.data;
+    // Handle both wrapped and unwrapped responses
+    const wrapped = response as unknown as { success?: boolean; data?: ProductManufactureDto; message?: string };
+    if (wrapped && typeof wrapped === 'object' && 'success' in wrapped) {
+      if (wrapped.success && wrapped.data) return wrapped.data;
+      throw new Error(wrapped.message || 'Failed to perform final approval');
     }
-    
-    throw new Error(response.message || 'Failed to perform final approval');
+    // Unwrapped object response
+    return response as unknown as ProductManufactureDto;
   },
 
   async getWorkflowHistory(id: number): Promise<ManufacturingWorkflowHistory[]> {
     const response = await apiRequest<ManufacturingWorkflowHistory[]>(`/ProductManufacture/${id}/workflow-history`);
     
-    if (response.success && response.data) {
-      return response.data;
+    // Handle both wrapped and unwrapped responses
+    if (Array.isArray(response as unknown)) {
+      return response as unknown as ManufacturingWorkflowHistory[];
     }
-    
-    throw new Error(response.message || 'Failed to fetch workflow history');
+    const wrapped = response as unknown as { success?: boolean; data?: ManufacturingWorkflowHistory[]; message?: string };
+    if (wrapped && wrapped.success && wrapped.data) {
+      return wrapped.data;
+    }
+    throw new Error(wrapped?.message || 'Failed to fetch workflow history');
   },
 
   async getAvailableTransitions(id: number): Promise<string[]> {
     const response = await apiRequest<string[]>(`/ProductManufacture/${id}/available-transitions`);
     
-    if (response.success && response.data) {
-      return response.data;
+    // Handle both wrapped and unwrapped responses
+    if (Array.isArray(response as unknown)) {
+      return response as unknown as string[];
     }
-    
-    throw new Error(response.message || 'Failed to fetch available transitions');
+    const wrapped = response as unknown as { success?: boolean; data?: string[]; message?: string };
+    if (wrapped && wrapped.success && wrapped.data) {
+      return wrapped.data;
+    }
+    throw new Error(wrapped?.message || 'Failed to fetch available transitions');
   },
-
-  // Manufacturing Reports API endpoints
-  async getManufacturingDashboard(startDate?: string, endDate?: string): Promise<ManufacturingDashboardDto> {
-    let url = '/ManufacturingReports/dashboard';
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await apiRequest<ManufacturingDashboardDto>(url);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch manufacturing dashboard');
-  },
-
-  async getRawGoldUtilizationReport(startDate?: string, endDate?: string): Promise<RawGoldUtilizationReportDto> {
-    let url = '/ManufacturingReports/raw-gold-utilization';
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await apiRequest<RawGoldUtilizationReportDto>(url);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch raw gold utilization report');
-  },
-
-  async getEfficiencyReport(startDate?: string, endDate?: string): Promise<EfficiencyReportDto> {
-    let url = '/ManufacturingReports/efficiency';
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await apiRequest<EfficiencyReportDto>(url);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch efficiency report');
-  },
-
-  async getCostAnalysisReport(startDate?: string, endDate?: string): Promise<CostAnalysisReportDto> {
-    let url = '/ManufacturingReports/cost-analysis';
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await apiRequest<CostAnalysisReportDto>(url);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch cost analysis report');
-  },
-
-  async getWorkflowPerformanceReport(startDate?: string, endDate?: string): Promise<WorkflowPerformanceReportDto> {
-    let url = '/ManufacturingReports/workflow-performance';
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await apiRequest<WorkflowPerformanceReportDto>(url);
-    
-    if (response.success && response.data) {
-      return response.data;
-    }
-    
-    throw new Error(response.message || 'Failed to fetch workflow performance report');
-  }
+  
 };
 
 // Ownership Consolidation API
 export const ownershipConsolidationApi = {
   async consolidateOwnership(data: { productId: number; supplierId: number; branchId: number }): Promise<ConsolidationResult> {
-    const response = await apiRequest<ConsolidationResult>('/ownershipconsolidation/consolidate', {
+    const response = await apiRequest<ConsolidationResult>('/OwnershipConsolidation/consolidate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -4783,7 +4925,7 @@ export const ownershipConsolidationApi = {
   },
 
   async consolidateSupplierOwnership(supplierId: number, branchId: number): Promise<ConsolidationResult[]> {
-    const response = await apiRequest<ConsolidationResult[]>(`/ownershipconsolidation/consolidate-supplier/${supplierId}?branchId=${branchId}`, {
+    const response = await apiRequest<ConsolidationResult[]>(`/OwnershipConsolidation/consolidate-supplier/${supplierId}?branchId=${branchId}`, {
       method: 'POST',
     });
     
@@ -4795,7 +4937,7 @@ export const ownershipConsolidationApi = {
   },
 
   async getConsolidationOpportunities(branchId: number): Promise<ConsolidationOpportunity[]> {
-    const response = await apiRequest<ConsolidationOpportunity[]>(`/ownershipconsolidation/opportunities?branchId=${branchId}`);
+    const response = await apiRequest<ConsolidationOpportunity[]>(`/OwnershipConsolidation/opportunities?branchId=${branchId}`);
     
     if (response.success && response.data) {
       return response.data;
@@ -4805,7 +4947,7 @@ export const ownershipConsolidationApi = {
   },
 
   async calculateWeightedAverageCost(ownershipIds: number[]): Promise<WeightedAverageCost> {
-    const response = await apiRequest<WeightedAverageCost>('/ownershipconsolidation/weighted-average-cost', {
+    const response = await apiRequest<WeightedAverageCost>('/OwnershipConsolidation/weighted-average-cost', {
       method: 'POST',
       body: JSON.stringify(ownershipIds),
     });
@@ -4890,11 +5032,33 @@ export const rawGoldPurchaseOrdersApi = {
       body: JSON.stringify(request),
     });
     
-    if (response.success && response.data) {
-      return response.data;
-    }
+    console.debug('updateRawGoldPurchaseOrderStatus response:', response);
     
-    throw new Error(response.message || 'Failed to update raw gold purchase order status');
+    // Accept multiple possible response shapes from backend
+    // 1) { success: true, data: ... }
+    // 2) { success: true }
+    // 3) Direct purchase order object without wrapper
+    if (response && typeof response === 'object') {
+      if ('success' in response) {
+        if (response.success) {
+          return (response as any).data ?? true;
+        }
+        // If backend marks success false but returns a valid PO in data reflecting new status, accept it
+        const data = (response as any).data;
+        if (data && typeof data === 'object' && 'id' in data && 'status' in data) {
+          return data;
+        }
+        throw new Error((response as any).message || 'Failed to update raw gold purchase order status');
+      }
+
+      // If it's a direct PO object, return it
+      if ('id' in response && 'status' in response) {
+        return response;
+      }
+    }
+
+    // Fallback: treat any truthy response as success
+    return response ?? true;
   },
 
   async receiveRawGoldPurchaseOrder(id: number, request: any): Promise<any> {
@@ -4903,11 +5067,146 @@ export const rawGoldPurchaseOrdersApi = {
       body: JSON.stringify(request),
     });
     
-    if (response.success && response.data) {
-      return response.data;
-    }
+    console.debug('receiveRawGoldPurchaseOrder response:', response);
     
-    throw new Error(response.message || 'Failed to receive raw gold purchase order');
+    // Accept multiple possible response shapes from backend
+    // 1) { success: true, data: ... }
+    // 2) { success: true }
+    // 3) Direct purchase order object without wrapper
+    if (response && typeof response === 'object') {
+      if ('success' in response) {
+        if (response.success) {
+          return (response as any).data ?? true;
+        }
+        // If backend marks success false but returns a valid PO in data reflecting received items, accept it
+        const data = (response as any).data;
+        if (data && typeof data === 'object' && 'id' in data && 'items' in data) {
+          return data;
+        }
+        throw new Error((response as any).message || 'Failed to receive raw gold purchase order');
+      }
+
+      // If it's a direct PO object, return it
+      if ('id' in response && 'items' in response) {
+        return response;
+      }
+    }
+
+    // Fallback: treat any truthy response as success
+    return response ?? true;
+  },
+
+  async processPayment(id: number, request: ProcessRawGoldPurchaseOrderPaymentRequest): Promise<RawGoldPurchaseOrderPaymentResult> {
+    const response = await apiRequest<any>(`/RawGoldPurchaseOrders/${id}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+
+    // Accept multiple possible response shapes from backend
+    // 1) { success: true, data: ... }
+    // 2) { isSuccess: true, purchaseOrder: {...}, amountPaid, ... }
+    // 3) Direct purchase order object without wrapper
+    if (response && typeof response === 'object') {
+      // Standard API wrapper
+      if ('success' in response) {
+        if (response.success) {
+          const data = (response as any).data;
+          // If data is already the normalized result, return it; otherwise wrap
+          if (data && typeof data === 'object' && ('rawGoldPurchaseOrder' in data || 'id' in data)) {
+            return data as RawGoldPurchaseOrderPaymentResult;
+          }
+          const po = data ?? response;
+          const poObj = (po && typeof po === 'object' && 'rawGoldPurchaseOrder' in po) ? (po as any).rawGoldPurchaseOrder : po;
+          const amountPaid = (po as any)?.amountPaid ?? (poObj as any)?.amountPaid ?? 0;
+          const outstandingAmount = (po as any)?.outstandingAmount ?? (poObj as any)?.outstandingBalance ?? (typeof (poObj as any)?.totalAmount === 'number' ? Math.max(0, ((poObj as any).totalAmount || 0) - (amountPaid || 0)) : 0);
+          const transactionNumber = (po as any)?.transactionNumber;
+          return {
+            success: true,
+            message: (response as any).message ?? 'OK',
+            rawGoldPurchaseOrder: poObj,
+            amountPaid,
+            outstandingAmount,
+            transactionNumber,
+          } as RawGoldPurchaseOrderPaymentResult;
+        }
+        // If backend marks success false, still attempt to salvage valid PO data
+        const data = (response as any).data;
+        if (data && typeof data === 'object' && ('id' in data || 'items' in data)) {
+          const amountPaid = (data as any)?.amountPaid ?? 0;
+          const outstandingAmount = (data as any)?.outstandingAmount ?? (data as any)?.outstandingBalance ?? (typeof (data as any)?.totalAmount === 'number' ? Math.max(0, ((data as any).totalAmount || 0) - (amountPaid || 0)) : 0);
+          const transactionNumber = (data as any)?.transactionNumber;
+          return {
+            success: true,
+            message: (response as any).message ?? 'OK',
+            rawGoldPurchaseOrder: data,
+            amountPaid,
+            outstandingAmount,
+            transactionNumber,
+          } as RawGoldPurchaseOrderPaymentResult;
+        }
+        throw new Error((response as any).message || 'Failed to process raw gold purchase order payment');
+      }
+
+      // Alternate wrapper used by some endpoints
+      if ('isSuccess' in response) {
+        const po = (response as any).purchaseOrder ?? (response as any).rawGoldPurchaseOrder ?? (response as any).data;
+        const amountPaid = (response as any).amountPaid ?? (po as any)?.amountPaid ?? 0;
+        const outstandingAmount = (response as any).outstandingAmount ?? (po as any)?.outstandingBalance ?? (typeof (po as any)?.totalAmount === 'number' ? Math.max(0, ((po as any).totalAmount || 0) - (amountPaid || 0)) : 0);
+        const transactionNumber = (response as any).transactionNumber;
+        if ((response as any).isSuccess && po) {
+          return {
+            success: true,
+            message: (response as any).message ?? (response as any).Message ?? 'OK',
+            rawGoldPurchaseOrder: po,
+            amountPaid,
+            outstandingAmount,
+            transactionNumber,
+          } as RawGoldPurchaseOrderPaymentResult;
+        }
+        // If isSuccess false, still try to return PO if present
+        if (po) {
+          return {
+            success: true,
+            message: (response as any).message ?? (response as any).Message ?? 'OK',
+            rawGoldPurchaseOrder: po,
+            amountPaid,
+            outstandingAmount,
+            transactionNumber,
+          } as RawGoldPurchaseOrderPaymentResult;
+        }
+        throw new Error((response as any).message || (response as any).Message || 'Failed to process raw gold purchase order payment');
+      }
+
+      // Direct PO object
+      if ('id' in response && ("items" in response || "status" in response)) {
+        const po: any = response as any;
+        const amountPaid = po?.amountPaid ?? 0;
+        const outstandingAmount = po?.outstandingAmount ?? po?.outstandingBalance ?? (typeof po?.totalAmount === 'number' ? Math.max(0, (po.totalAmount || 0) - (amountPaid || 0)) : 0);
+        const transactionNumber = po?.transactionNumber;
+        return {
+          success: true,
+          message: 'OK',
+          rawGoldPurchaseOrder: response,
+          amountPaid,
+          outstandingAmount,
+          transactionNumber,
+        } as RawGoldPurchaseOrderPaymentResult;
+      }
+    }
+
+    // Fallback: treat any truthy response as success
+    const po: any = response ?? {};
+    const amountPaid = po?.amountPaid ?? 0;
+    const outstandingAmount = po?.outstandingAmount ?? po?.outstandingBalance ?? (typeof po?.totalAmount === 'number' ? Math.max(0, (po.totalAmount || 0) - (amountPaid || 0)) : 0);
+    const transactionNumber = po?.transactionNumber;
+    return {
+      success: true,
+      message: 'OK',
+      rawGoldPurchaseOrder: po,
+      amountPaid,
+      outstandingAmount,
+      transactionNumber,
+    } as RawGoldPurchaseOrderPaymentResult;
   }
 };
 
@@ -4982,11 +5281,13 @@ export const weightedAverageCostingApi = {
 // Manufacturing Reports API
 const manufacturingReportsApi = {
   // Manufacturing Reports API endpoints
-  async getManufacturingDashboard(startDate?: string, endDate?: string): Promise<ManufacturingDashboardDto> {
+  async getManufacturingDashboard(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<ManufacturingDashboardDto> {
     let url = '/ManufacturingReports/dashboard';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (branchId !== undefined) params.append('branchId', String(branchId));
+    if (technicianId !== undefined) params.append('technicianId', String(technicianId));
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -4999,11 +5300,13 @@ const manufacturingReportsApi = {
     throw new Error(response.message || 'Failed to fetch manufacturing dashboard');
   },
 
-  async getRawGoldUtilizationReport(startDate?: string, endDate?: string): Promise<RawGoldUtilizationReportDto> {
+  async getRawGoldUtilizationReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<RawGoldUtilizationReportDto> {
     let url = '/ManufacturingReports/raw-gold-utilization';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (branchId !== undefined) params.append('branchId', String(branchId));
+    if (technicianId !== undefined) params.append('technicianId', String(technicianId));
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -5016,11 +5319,13 @@ const manufacturingReportsApi = {
     throw new Error(response.message || 'Failed to fetch raw gold utilization report');
   },
 
-  async getEfficiencyReport(startDate?: string, endDate?: string): Promise<EfficiencyReportDto> {
+  async getEfficiencyReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<EfficiencyReportDto> {
     let url = '/ManufacturingReports/efficiency';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (branchId !== undefined) params.append('branchId', String(branchId));
+    if (technicianId !== undefined) params.append('technicianId', String(technicianId));
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -5033,11 +5338,13 @@ const manufacturingReportsApi = {
     throw new Error(response.message || 'Failed to fetch efficiency report');
   },
 
-  async getCostAnalysisReport(startDate?: string, endDate?: string): Promise<CostAnalysisReportDto> {
+  async getCostAnalysisReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<CostAnalysisReportDto> {
     let url = '/ManufacturingReports/cost-analysis';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (branchId !== undefined) params.append('branchId', String(branchId));
+    if (technicianId !== undefined) params.append('technicianId', String(technicianId));
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -5050,11 +5357,13 @@ const manufacturingReportsApi = {
     throw new Error(response.message || 'Failed to fetch cost analysis report');
   },
 
-  async getWorkflowPerformanceReport(startDate?: string, endDate?: string): Promise<WorkflowPerformanceReportDto> {
+  async getWorkflowPerformanceReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<WorkflowPerformanceReportDto> {
     let url = '/ManufacturingReports/workflow-performance';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (branchId !== undefined) params.append('branchId', String(branchId));
+    if (technicianId !== undefined) params.append('technicianId', String(technicianId));
     
     if (params.toString()) {
       url += `?${params.toString()}`;

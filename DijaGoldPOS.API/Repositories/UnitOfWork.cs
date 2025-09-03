@@ -2,7 +2,9 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace DijaGoldPOS.API.Repositories;
 
@@ -26,6 +28,7 @@ public class UnitOfWork : IUnitOfWork
     private ISupplierRepository? _suppliers;
     private IPurchaseOrderRepository? _purchaseOrders;
     private ICustomerPurchaseRepository? _customerPurchases;
+    private ITreasuryRepository? _treasury;
 
     public UnitOfWork(ApplicationDbContext context)
     {
@@ -65,6 +68,9 @@ public class UnitOfWork : IUnitOfWork
 
     public ICustomerPurchaseRepository CustomerPurchases =>
         _customerPurchases ??= new CustomerPurchaseRepository(_context);
+
+    public ITreasuryRepository Treasury =>
+        _treasury ??= new TreasuryRepository(_context, _context.GetService<ILogger<TreasuryRepository>>());
 
     /// <summary>
     /// Get a generic repository for the specified entity type

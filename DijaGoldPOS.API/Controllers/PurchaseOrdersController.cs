@@ -111,6 +111,24 @@ public class PurchaseOrdersController : ControllerBase
             ? Ok(ApiResponse.SuccessResponse("Purchase order updated"))
             : BadRequest(ApiResponse.ErrorResponse("Unable to update purchase order"));
     }
+
+    [HttpPost("{id:int}/payments")]
+    [ProducesResponseType(typeof(ApiResponse<PurchaseOrderPaymentResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ProcessPayment(int id, [FromBody] ProcessPurchaseOrderPaymentRequestDto request)
+    {
+        if (id != request.PurchaseOrderId)
+            return BadRequest(ApiResponse.ErrorResponse("Route id and body purchase order id do not match"));
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
+        var result = await _service.ProcessPaymentAsync(request, userId);
+
+        if (!result.IsSuccess)
+            return BadRequest(ApiResponse.ErrorResponse(result.ErrorMessage ?? "Payment failed"));
+
+        return Ok(ApiResponse<PurchaseOrderPaymentResult>.SuccessResponse(result));
+    }
 }
 
 

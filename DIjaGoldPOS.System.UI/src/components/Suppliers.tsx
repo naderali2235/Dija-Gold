@@ -66,7 +66,7 @@ import {
   useSupplierProducts,
   useSupplierBalance,
   useUpdateSupplierBalance,
-  useSupplierTransactions,
+  usePaginatedSupplierTransactions,
   useSearchPurchaseOrders,
 } from '../hooks/useApi';
 import {
@@ -187,7 +187,33 @@ export default function Suppliers() {
   const { execute: fetchSupplierProducts, loading: productsLoading } = useSupplierProducts();
   const { execute: fetchSupplierBalance, loading: balanceLoading } = useSupplierBalance();
   const { execute: updateSupplierBalance, loading: balanceUpdateLoading } = useUpdateSupplierBalance();
-  const { execute: fetchSupplierTransactions, loading: transactionsLoading } = useSupplierTransactions();
+  const [transactionsFromDate, setTransactionsFromDate] = useState<string>('');
+  const [transactionsToDate, setTransactionsToDate] = useState<string>('');
+  const {
+    data: supplierTransactionsData,
+    loading: transactionsLoading,
+    error: transactionsError,
+    updateParams: updateSupplierTransactionsParams,
+    hasNextPage: txHasNextPage,
+    hasPrevPage: txHasPrevPage,
+    nextPage: txNextPage,
+    prevPage: txPrevPage,
+    setPage: txSetPage,
+  } = usePaginatedSupplierTransactions({
+    supplierId: selectedSupplier?.id,
+    pageNumber: 1,
+    pageSize: 20,
+  }) as {
+    data: { items: SupplierTransactionDto[]; totalCount: number; pageNumber: number; pageSize: number } | null;
+    loading: boolean;
+    error: string | null;
+    updateParams: (params: any) => void;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+    nextPage: () => void;
+    prevPage: () => void;
+    setPage: (page: number) => void;
+  };
 
   // Local state for supplier details
   const [supplierProducts, setSupplierProducts] = useState<SupplierProductsDto | null>(null);
@@ -209,15 +235,12 @@ export default function Suppliers() {
     }
   };
 
-  const handleFetchSupplierTransactions = async (supplierId: number) => {
-    try {
-      const transactions = await fetchSupplierTransactions(supplierId);
-      setSupplierTransactions(transactions);
-    } catch (error) {
-      console.error('Failed to fetch supplier transactions:', error);
-      setSupplierTransactions([]);
+  // Keep legacy state in sync if needed elsewhere (optional)
+  useEffect(() => {
+    if (supplierTransactionsData?.items) {
+      setSupplierTransactions(supplierTransactionsData.items);
     }
-  };
+  }, [supplierTransactionsData]);
 
   // Update search parameters with debounce
   useEffect(() => {
@@ -332,20 +355,30 @@ export default function Suppliers() {
 
     // Fetch supplier details
     try {
-      const [products, balance, transactions, purchaseOrders] = await Promise.all([
+      const [products, balance, purchaseOrders] = await Promise.all([
         fetchSupplierProducts(supplier.id),
         fetchSupplierBalance(supplier.id),
-        fetchSupplierTransactions(supplier.id),
         searchPurchaseOrders({ supplierId: supplier.id }),
       ]);
       setSupplierProducts(products);
       setSupplierBalance(balance);
-      setSupplierTransactions(transactions);
       setPurchaseOrders(purchaseOrders.items || []);
     } catch (error) {
       console.error('Failed to fetch supplier details:', error);
     }
   };
+
+  // Update transactions params when supplier or date filters change
+  useEffect(() => {
+    if (selectedSupplier?.id) {
+      updateSupplierTransactionsParams({
+        supplierId: selectedSupplier.id,
+        fromDate: transactionsFromDate || undefined,
+        toDate: transactionsToDate || undefined,
+        pageNumber: 1,
+      });
+    }
+  }, [selectedSupplier?.id, transactionsFromDate, transactionsToDate, updateSupplierTransactionsParams]);
 
   const handleUpdateBalance = async () => {
     if (!selectedSupplier) return;
@@ -465,7 +498,13 @@ export default function Suppliers() {
         </div>
         {isManager && (
           <Button 
-            onClick={() => setIsNewSupplierOpen(true)}
+            onClick={() => {
+              // Open Add Supplier with a fresh, empty form
+              setIsEditMode(false);
+              setSelectedSupplier(null);
+              resetForm();
+              setIsNewSupplierOpen(true);
+            }}
             className="touch-target pos-button-primary bg-[#D4AF37] hover:bg-[#B8941F] text-[#0D1B2A]"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -673,15 +712,6 @@ export default function Suppliers() {
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(`/purchase-orders?supplierId=${supplier.id}`, '_blank')}
-                                    className="touch-target bg-blue-50 hover:bg-blue-100"
-                                    title="Create Purchase Order"
-                                  >
-                                    <ShoppingCart className="h-4 w-4" />
-                                  </Button>
                                   {canDeleteSupplier(supplier) && (
                                     <Button
                                       variant="outline"
@@ -799,10 +829,43 @@ export default function Suppliers() {
             <CardHeader>
               <CardTitle>Supplier Transactions</CardTitle>
               <CardDescription>
-                Payment history and account movements
+                {selectedSupplier ? `Payment history and account movements for ${selectedSupplier.companyName}` : 'Select a supplier to view transactions'}
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="fromDate">From</Label>
+                  <Input
+                    id="fromDate"
+                    type="date"
+                    value={transactionsFromDate}
+                    onChange={(e) => setTransactionsFromDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="toDate">To</Label>
+                  <Input
+                    id="toDate"
+                    type="date"
+                    value={transactionsToDate}
+                    onChange={(e) => setTransactionsToDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTransactionsFromDate('');
+                      setTransactionsToDate('');
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -821,35 +884,69 @@ export default function Suppliers() {
                         <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                       </TableCell>
                     </TableRow>
-                  ) : supplierTransactions && supplierTransactions.length > 0 ? (
-                    supplierTransactions.map((transaction: SupplierTransactionDto) => (
-                      <TableRow key={transaction.transactionId}>
-                        <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="capitalize">{transaction.transactionType.replace('_', ' ')}</TableCell>
-                        <TableCell className="font-medium">{transaction.transactionNumber}</TableCell>
-                        <TableCell className={transaction.amount < 0 ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(transaction.amount))}
+                  ) : transactionsError ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-red-600">
+                        Error loading transactions: {transactionsError}
+                      </TableCell>
+                    </TableRow>
+                  ) : supplierTransactionsData && supplierTransactionsData.items && supplierTransactionsData.items.length > 0 ? (
+                    supplierTransactionsData.items.map((txn: SupplierTransactionDto) => (
+                      <TableRow key={txn.transactionId}>
+                        <TableCell>{new Date(txn.transactionDate).toLocaleDateString()}</TableCell>
+                        <TableCell className="capitalize">{txn.transactionType?.replace(/_/g, ' ')}</TableCell>
+                        <TableCell>{txn.transactionNumber || '-'}</TableCell>
+                        <TableCell className={txn.amount > 0 ? 'text-red-600' : 'text-green-600'}>
+                          {formatCurrency(txn.amount)}
                         </TableCell>
-                        <TableCell>{formatCurrency(transaction.balanceAfterTransaction)}</TableCell>
-                        <TableCell>{transaction.notes || 'N/A'}</TableCell>
+                        <TableCell>{formatCurrency(txn.balanceAfterTransaction ?? 0)}</TableCell>
+                        <TableCell>{txn.notes || '-'}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No transactions found
+                        {selectedSupplier ? 'No transactions found' : 'No supplier selected'}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+
+              {/* Pagination */}
+              {supplierTransactionsData && (
+                <div className="flex items-center justify-between px-2 py-4 border-t mt-2">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {supplierTransactionsData.items.length} of {supplierTransactionsData.totalCount} transactions
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button size="sm" variant="outline" onClick={txPrevPage} disabled={!txHasPrevPage}>
+                      Previous
+                    </Button>
+                    <span className="flex items-center px-3 text-sm">
+                      Page {supplierTransactionsData.pageNumber} of {Math.ceil(supplierTransactionsData.totalCount / supplierTransactionsData.pageSize)}
+                    </span>
+                    <Button size="sm" variant="outline" onClick={txNextPage} disabled={!txHasNextPage}>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
+      </Tabs>
       {/* Create Supplier Dialog */}
-      <Dialog open={isNewSupplierOpen} onOpenChange={setIsNewSupplierOpen}>
+      <Dialog open={isNewSupplierOpen} onOpenChange={(open) => {
+        setIsNewSupplierOpen(open);
+        if (open) {
+          // Always start with empty form on dialog open
+          setIsEditMode(false);
+          setSelectedSupplier(null);
+          resetForm();
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 shadow-lg">
           <DialogHeader>
             <DialogTitle>Add New Supplier</DialogTitle>

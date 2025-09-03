@@ -147,7 +147,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.Property<string>("Details")
                         .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("EntityId")
                         .HasMaxLength(100)
@@ -159,7 +159,7 @@ namespace DijaGoldPOS.API.Migrations
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("FinancialTransactionId")
                         .HasColumnType("int");
@@ -1881,7 +1881,7 @@ namespace DijaGoldPOS.API.Migrations
                         .HasColumnType("decimal(10,3)");
 
                     b.Property<decimal>("OwnershipPercentageAfter")
-                        .HasColumnType("decimal(5,4)");
+                        .HasColumnType("decimal(7,4)");
 
                     b.Property<int>("ProductOwnershipId")
                         .HasColumnType("int");
@@ -2270,7 +2270,7 @@ namespace DijaGoldPOS.API.Migrations
                         .HasColumnType("decimal(10,3)");
 
                     b.Property<decimal>("OwnershipPercentage")
-                        .HasColumnType("decimal(5,4)");
+                        .HasColumnType("decimal(7,4)");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
@@ -3144,6 +3144,104 @@ namespace DijaGoldPOS.API.Migrations
                     b.ToTable("Technicians");
                 });
 
+            modelBuilder.Entity("DijaGoldPOS.API.Models.TreasuryAccount", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<decimal>("CurrentBalance")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .IsUnique();
+
+                    b.ToTable("TreasuryAccounts");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.TreasuryTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("PerformedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PerformedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("TreasuryAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PerformedAt");
+
+                    b.HasIndex("TreasuryAccountId");
+
+                    b.ToTable("TreasuryTransactions");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -3974,6 +4072,28 @@ namespace DijaGoldPOS.API.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.TreasuryAccount", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("DijaGoldPOS.API.Models.TreasuryTransaction", b =>
+                {
+                    b.HasOne("DijaGoldPOS.API.Models.TreasuryAccount", "TreasuryAccount")
+                        .WithMany()
+                        .HasForeignKey("TreasuryAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TreasuryAccount");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

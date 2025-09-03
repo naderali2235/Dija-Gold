@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -79,16 +79,24 @@ import {
   useCreateProduct,
   useUpdateProduct,
   useProductManufacturingRecords,
+  useProductManufacturingRecordsByProduct,
+  useProductManufacturingRecordsByBatch,
+  useProductManufacturingSummary,
   useCreateProductManufacturingRecord,
   useTransitionWorkflow,
   usePerformQualityCheck,
   usePerformFinalApproval,
   useWorkflowHistory,
   useAvailableTransitions,
-  useRawGoldPurchaseOrders,
+  useAvailableRawGoldItems,
+  useRemainingWeight,
+  useCheckSufficientWeight,
+  useDeleteProductManufacturingRecord,
   useBranches,
   useSearchTechnicians,
+  useKaratTypes,
 } from '../hooks/useApi';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from './ui/command';
 import { CreateProductManufactureRawMaterialDto } from '../types/ownership';
 
 // Extended interface for UI state
@@ -116,10 +124,18 @@ const ProductManufacture: React.FC = () => {
   const [finalApprovalDialogOpen, setFinalApprovalDialogOpen] = useState(false);
   const [rawMaterialsDialogOpen, setRawMaterialsDialogOpen] = useState(false);
   const [workflowHistoryDialogOpen, setWorkflowHistoryDialogOpen] = useState(false);
-  
+  // Dialog-local filters
+  const [selectedKaratTypeId, setSelectedKaratTypeId] = useState<string>('');
+  const [productSearchTerm, setProductSearchTerm] = useState<string>('');
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState<string>('');
+
   // Workflow history and transitions state
   const [workflowHistory, setWorkflowHistory] = useState<any[]>([]);
   const [availableTransitions, setAvailableTransitions] = useState<string[]>([]);
+
+  // Filtering/search state
+  const [batchSearch, setBatchSearch] = useState<string>('');
+  const [productFilterId, setProductFilterId] = useState<string>('');
 
   // Form states
   const [manufacturingForm, setManufacturingForm] = useState({
@@ -136,9 +152,10 @@ const ProductManufacture: React.FC = () => {
     priority: 'Normal',
     estimatedCompletionDate: ''
   });
-  
+
   // Add loading state for PO items
   const [poItemsLoading, setPOItemsLoading] = useState(false);
+  const [selectedItemRemainingWeight, setSelectedItemRemainingWeight] = useState<number | null>(null);
 
   const [workflowForm, setWorkflowForm] = useState({
     targetStatus: '',
@@ -171,20 +188,78 @@ const ProductManufacture: React.FC = () => {
   // API hooks
   const productsApi = useProducts();
   const productApi = useProduct();
-  const rawGoldPurchaseOrdersApi = useRawGoldPurchaseOrders();
   const manufacturingRecordsApi = useProductManufacturingRecords();
+  const manufacturingByProductApi = useProductManufacturingRecordsByProduct();
+  const manufacturingByBatchApi = useProductManufacturingRecordsByBatch();
+  const manufacturingSummaryApi = useProductManufacturingSummary();
   const createRecordApi = useCreateProductManufacturingRecord();
   const transitionWorkflowApi = useTransitionWorkflow();
   const qualityCheckApi = usePerformQualityCheck();
   const finalApprovalApi = usePerformFinalApproval();
   const workflowHistoryApi = useWorkflowHistory();
   const availableTransitionsApi = useAvailableTransitions();
+  const availableRawGoldItemsApi = useAvailableRawGoldItems();
+  const remainingWeightApi = useRemainingWeight();
+  const checkSufficientWeightApi = useCheckSufficientWeight();
+  const deleteManufacturingApi = useDeleteProductManufacturingRecord();
   const branchesApi = useBranches();
+  const karatTypesApi = useKaratTypes();
   const { 
     execute: searchTechnicians, 
     data: techniciansData, 
     loading: techniciansLoading 
   } = useSearchTechnicians();
+
+  // Debounce product search term
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedProductSearch(productSearchTerm.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [productSearchTerm]);
+
+  // Fetch karat types when create dialog opens and reset filters on close
+  useEffect(() => {
+    const loadKaratTypes = async () => {
+      if (createDialogOpen) {
+        try {
+          // If hook exposes fetch, call it; otherwise assume initial load happens elsewhere
+          if (typeof (karatTypesApi as any).fetchKaratTypes === 'function') {
+            await (karatTypesApi as any).fetchKaratTypes();
+          }
+        } catch (e) {
+          console.error('Failed to load karat types', e);
+        }
+      } else {
+        setSelectedKaratTypeId('');
+        setProductSearchTerm('');
+        setDebouncedProductSearch('');
+      }
+    };
+    loadKaratTypes();
+  }, [createDialogOpen]);
+
+  // Fetch products when filters change while dialog is open
+  useEffect(() => {
+    const fetchFilteredProducts = async () => {
+      if (!createDialogOpen) return;
+      try {
+        await productsApi.execute({
+          isActive: true,
+          pageNumber: 1,
+          pageSize: 50,
+          ...(selectedKaratTypeId ? { karatTypeId: parseInt(selectedKaratTypeId) } : {}),
+          ...(debouncedProductSearch ? { searchTerm: debouncedProductSearch } : {}),
+        });
+      } catch (error) {
+        console.error('Error fetching filtered products:', error);
+      }
+    };
+    fetchFilteredProducts();
+  }, [createDialogOpen, selectedKaratTypeId, debouncedProductSearch]);
+
+  // When karat type changes, clear selected product and raw gold source
+  useEffect(() => {
+    setManufacturingForm(prev => ({ ...prev, productId: '', sourceRawGoldPurchaseOrderItemId: '' }));
+  }, [selectedKaratTypeId]);
 
   // Fetch raw gold purchase order items when product changes
   useEffect(() => {
@@ -192,39 +267,17 @@ const ProductManufacture: React.FC = () => {
       if (manufacturingForm.productId) {
         setPOItemsLoading(true);
         try {
-          // Get the product to determine its karat type using the hook
+          // Load selected product details to get its karat type
           const product = await productApi.execute(parseInt(manufacturingForm.productId));
-          console.log('Product details:', product);
-          
-          // Get all raw gold purchase orders using the hook
-          const rawGoldOrders = await rawGoldPurchaseOrdersApi.execute();
-          console.log('Raw Gold Purchase Orders:', rawGoldOrders);
-          
-          // Extract raw gold items that match the product's karat type and have available weight
-          const availableItems: any[] = [];
-          rawGoldOrders.forEach((rgpo: any) => {
-            // Only process received orders
-            if (rgpo.status === 'Received' && rgpo.items && Array.isArray(rgpo.items)) {
-              rgpo.items.forEach((item: any) => {
-                if (item.karatTypeId === product.karatTypeId && 
-                    item.status === 'Received' && 
-                    item.availableWeightForManufacturing > 0) {
-                  availableItems.push({
-                    ...item,
-                    purchaseOrderNumber: rgpo.purchaseOrderNumber,
-                    supplierName: rgpo.supplierName || 'Unknown Supplier',
-                    status: 'Completed', // Default status
-                    karatTypeName: item.karatTypeName || 'Unknown Karat',
-                    description: item.description || 'Raw Gold'
-                  });
-                }
-              });
-            }
+          const productKaratTypeId = product?.karatTypeId ?? product?.karatType?.id;
+
+          // Use backend endpoint for available raw gold items and filter by product karat type
+          const availableItemsAll = await availableRawGoldItemsApi.execute();
+          const availableItems = (availableItemsAll || []).filter((item: any) => {
+            const available = (item.availableWeightForManufacturing ?? item.remainingWeight ?? 0) > 0;
+            return available && (productKaratTypeId ? item.karatTypeId === productKaratTypeId : true);
           });
-          
-          console.log(`Found ${availableItems.length} available raw gold items for product ${manufacturingForm.productId} with karat type ${product.karatTypeId}:`, availableItems);
           setSelectedProductPOItems(availableItems);
-          
           if (availableItems.length === 0) {
             console.log('No available raw gold items found for this product karat type');
           }
@@ -237,11 +290,29 @@ const ProductManufacture: React.FC = () => {
       } else {
         setSelectedProductPOItems([]);
         setManufacturingForm(prev => ({ ...prev, sourceRawGoldPurchaseOrderItemId: '' }));
+        setSelectedItemRemainingWeight(null);
       }
     };
-    
     fetchRawGoldItems();
   }, [manufacturingForm.productId]);
+
+  // When source PO item changes, fetch remaining weight
+  useEffect(() => {
+    const fetchRemaining = async () => {
+      try {
+        if (manufacturingForm.sourceRawGoldPurchaseOrderItemId) {
+          const remaining = await remainingWeightApi.execute(parseInt(manufacturingForm.sourceRawGoldPurchaseOrderItemId));
+          setSelectedItemRemainingWeight(typeof remaining === 'number' ? remaining : null);
+        } else {
+          setSelectedItemRemainingWeight(null);
+        }
+      } catch (e) {
+        console.error('Failed to fetch remaining weight', e);
+        setSelectedItemRemainingWeight(null);
+      }
+    };
+    fetchRemaining();
+  }, [manufacturingForm.sourceRawGoldPurchaseOrderItemId]);
 
   // Fetch data on component mount
   useEffect(() => {
@@ -254,7 +325,6 @@ const ProductManufacture: React.FC = () => {
           manufacturingRecordsApi.execute(),
           branchesApi.execute()
         ]);
-        
         setManufacturingRecords(records || []);
 
       } catch (error) {
@@ -317,6 +387,22 @@ const ProductManufacture: React.FC = () => {
       return;
     }
 
+    // Check sufficient weight from backend before submitting
+    try {
+      const sufficient = await checkSufficientWeightApi.execute(
+        parseInt(manufacturingForm.sourceRawGoldPurchaseOrderItemId),
+        parseFloat(manufacturingForm.consumedWeight)
+      );
+      if (!sufficient) {
+        alert('Insufficient remaining weight on the selected raw gold item for the requested consumed weight.');
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to check sufficient weight', e);
+      alert('Failed to validate available weight. Please try again.');
+      return;
+    }
+
     if (isNaN(parseFloat(manufacturingForm.manufacturingCostPerGram)) || parseFloat(manufacturingForm.manufacturingCostPerGram) < 0) {
       alert('Please enter a valid manufacturing cost per gram');
       return;
@@ -342,7 +428,6 @@ const ProductManufacture: React.FC = () => {
       };
 
       const newRecord = await createRecordApi.execute(manufacturingData);
-      
       // Add new record to the list
       setManufacturingRecords(prev => [newRecord, ...prev]);
       setCreateDialogOpen(false);
@@ -384,14 +469,12 @@ const ProductManufacture: React.FC = () => {
         TargetStatus: workflowForm.targetStatus,
         Notes: workflowForm.notes
       });
-      
       // Update the record in the list
       setManufacturingRecords(prev => 
         prev.map(record => 
           record.id === selectedRecord.id ? updatedRecord : record
         )
       );
-      
       setWorkflowDialogOpen(false);
       setSelectedRecord(null);
     } catch (error) {
@@ -412,14 +495,12 @@ const ProductManufacture: React.FC = () => {
         Passed: qualityCheckForm.passed,
         Notes: qualityCheckForm.notes
       });
-      
       // Update the record in the list
       setManufacturingRecords(prev => 
         prev.map(record => 
           record.id === selectedRecord.id ? updatedRecord : record
         )
       );
-      
       setQualityCheckDialogOpen(false);
       setSelectedRecord(null);
     } catch (error) {
@@ -440,14 +521,12 @@ const ProductManufacture: React.FC = () => {
         Approved: finalApprovalForm.approved,
         Notes: finalApprovalForm.notes
       });
-      
       // Update the record in the list
       setManufacturingRecords(prev => 
         prev.map(record => 
           record.id === selectedRecord.id ? updatedRecord : record
         )
       );
-      
       setFinalApprovalDialogOpen(false);
       setSelectedRecord(null);
     } catch (error) {
@@ -560,6 +639,26 @@ const ProductManufacture: React.FC = () => {
         return ['Complete', 'Reject'];
       default:
         return [];
+    }
+  };
+
+  // Delete manufacturing record
+  const handleDeleteRecord = async (record: any) => {
+    const confirmed = window.confirm('Are you sure you want to delete this manufacturing record?');
+    if (!confirmed) return;
+    try {
+      setLoading(true);
+      const ok = await deleteManufacturingApi.execute(record.id);
+      if (ok) {
+        setManufacturingRecords(prev => prev.filter(r => r.id !== record.id));
+      } else {
+        alert('Failed to delete record');
+      }
+    } catch (e) {
+      console.error('Failed to delete record', e);
+      alert('Failed to delete record');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -676,7 +775,17 @@ const ProductManufacture: React.FC = () => {
                         <p className="text-xs text-muted-foreground">Batch: {record.batchNumber}</p>
                       </div>
                       <div className="text-right">
-                        {getStatusBadge(record.status)}
+                        <div className="flex items-center gap-2 justify-end">
+                          {getStatusBadge(record.status)}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => handleOpenWorkflowDialog(record)}
+                          >
+                            Change
+                          </Button>
+                        </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(record.createdAt).toLocaleDateString()}
                         </p>
@@ -699,6 +808,72 @@ const ProductManufacture: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filters */}
+              <div className="flex flex-col md:flex-row gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="filterProduct">Filter by Product</Label>
+                  <Select value={productFilterId} onValueChange={setProductFilterId}>
+                    <SelectTrigger className="w-[240px]">
+                      <SelectValue placeholder="Select a product" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(productsApi.data?.items || []).map((p: any) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        if (productFilterId) {
+                          const byProd = await manufacturingByProductApi.execute(parseInt(productFilterId));
+                          setManufacturingRecords(byProd || []);
+                          // Optionally fetch summary
+                          await manufacturingSummaryApi.execute(parseInt(productFilterId));
+                        } else {
+                          const all = await manufacturingRecordsApi.execute();
+                          setManufacturingRecords(all || []);
+                        }
+                      } catch (e) {
+                        console.error('Failed to filter by product', e);
+                      }
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="batchSearch">Search by Batch</Label>
+                  <Input
+                    id="batchSearch"
+                    placeholder="Enter batch number"
+                    value={batchSearch}
+                    onChange={e => setBatchSearch(e.target.value)}
+                    className="w-[240px]"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        if (batchSearch.trim()) {
+                          const byBatch = await manufacturingByBatchApi.execute(batchSearch.trim());
+                          setManufacturingRecords(byBatch || []);
+                        } else {
+                          const all = await manufacturingRecordsApi.execute();
+                          setManufacturingRecords(all || []);
+                        }
+                      } catch (e) {
+                        console.error('Failed to search by batch', e);
+                      }
+                    }}
+                  >
+                    Search
+                  </Button>
+                </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -721,53 +896,78 @@ const ProductManufacture: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">{record.batchNumber}</TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(record.status)}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => handleOpenWorkflowDialog(record)}
+                          >
+                            Change
+                          </Button>
+                        </div>
+                      </TableCell>
                       <TableCell>{record.consumedWeight}g</TableCell>
                       <TableCell>${record.totalManufacturingCost.toFixed(2)}</TableCell>
                       <TableCell>{new Date(record.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => {
-                              setSelectedRecord(record);
-                              setViewDialogOpen(true);
-                            }}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleViewWorkflowHistory(record)}>
-                              <Clock className="w-4 h-4 mr-2" />
-                              Workflow History
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenWorkflowDialog(record)}>
-                              <ArrowRight className="w-4 h-4 mr-2" />
-                              Transition Workflow
-                            </DropdownMenuItem>
-                            {record.status === 'Quality Check' && (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenWorkflowDialog(record)}
+                          >
+                            Change Status
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => {
                                 setSelectedRecord(record);
-                                setQualityCheckDialogOpen(true);
+                                setViewDialogOpen(true);
                               }}>
-                                <Settings className="w-4 h-4 mr-2" />
-                                Quality Check
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details
                               </DropdownMenuItem>
-                            )}
-                            {record.status === 'Final Approval' && (
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedRecord(record);
-                                setFinalApprovalDialogOpen(true);
-                              }}>
-                                <Award className="w-4 h-4 mr-2" />
-                                Final Approval
+                              <DropdownMenuItem onClick={() => handleViewWorkflowHistory(record)}>
+                                <Clock className="w-4 h-4 mr-2" />
+                                Workflow History
                               </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <DropdownMenuItem onClick={() => handleOpenWorkflowDialog(record)}>
+                                <ArrowRight className="w-4 h-4 mr-2" />
+                                Transition Workflow
+                              </DropdownMenuItem>
+                              {record.status === 'Quality Check' && (
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedRecord(record);
+                                  setQualityCheckDialogOpen(true);
+                                }}>
+                                  <Settings className="w-4 h-4 mr-2" />
+                                  Quality Check
+                                </DropdownMenuItem>
+                              )}
+                              {record.status === 'Final Approval' && (
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedRecord(record);
+                                  setFinalApprovalDialogOpen(true);
+                                }}>
+                                  <Award className="w-4 h-4 mr-2" />
+                                  Final Approval
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => handleDeleteRecord(record)}>
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -849,30 +1049,77 @@ const ProductManufacture: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
+              {/* Karat Type Filter */}
               <div className="space-y-2">
-                <Label htmlFor="product">Product *</Label>
+                <Label htmlFor="karatType">Karat Type</Label>
                 <Select
-                  value={manufacturingForm.productId}
-                  onValueChange={(value) => setManufacturingForm(prev => ({ ...prev, productId: value }))}
+                  value={selectedKaratTypeId}
+                  onValueChange={(value) => setSelectedKaratTypeId(value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select product" />
+                    <SelectValue placeholder="All karat types" />
                   </SelectTrigger>
                   <SelectContent>
-                    {productsApi.data?.items?.map((product) => (
-                      <SelectItem key={product.id} value={product.id.toString()}>
-                        {product.name} ({product.productCode})
+                    {karatTypesApi.data?.map((kt: any) => (
+                      <SelectItem key={kt.id} value={kt.id.toString()}>
+                        {kt.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Selected Product quick info */}
+                {manufacturingForm.productId && (
+                  <div className="mt-2 rounded border bg-muted/30 p-2">
+                    {productApi.loading ? (
+                      <p className="text-xs text-muted-foreground">Loading product info...</p>
+                    ) : productApi.data ? (
+                      <div className="space-y-1 text-xs">
+                        <div><span className="font-medium">Name:</span> {productApi.data.name}</div>
+                        <div><span className="font-medium">Code:</span> {productApi.data.productCode}</div>
+                        <div><span className="font-medium">Weight:</span> {productApi.data.weight} g</div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No product details available.</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rawGoldItem">Raw Gold Source *</Label>
+                <Label htmlFor="product">Product *</Label>
+                <div className="border rounded">
+                  <Command>
+                    <CommandInput
+                      placeholder="Search products by name or code..."
+                      value={productSearchTerm}
+                      onValueChange={setProductSearchTerm}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        {productsApi.loading ? 'Loading...' : 'No products found'}
+                      </CommandEmpty>
+                      {productsApi.data?.items?.map((product: any) => (
+                        <CommandItem
+                          key={product.id}
+                          value={`${product.name} ${product.productCode}`}
+                          onSelect={() => setManufacturingForm(prev => ({ ...prev, productId: product.id.toString() }))}
+                        >
+                          <div className="flex justify-between w-full">
+                            <span>{product.name} ({product.productCode})</span>
+                            <span className="text-xs text-muted-foreground">{product.karatType?.name || ''}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </div>
+                {manufacturingForm.productId && (
+                  <p className="text-xs text-muted-foreground">
+                    Selected Product ID: {manufacturingForm.productId}
+                  </p>
+                )}
                 <Select
                   value={manufacturingForm.sourceRawGoldPurchaseOrderItemId}
                   onValueChange={(value) => setManufacturingForm(prev => ({ ...prev, sourceRawGoldPurchaseOrderItemId: value }))}
-                  disabled={!manufacturingForm.productId || poItemsLoading}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={
@@ -885,11 +1132,16 @@ const ProductManufacture: React.FC = () => {
                   <SelectContent>
                     {selectedProductPOItems.map((item) => (
                       <SelectItem key={item.id} value={item.id.toString()}>
-                        {item.karatTypeName} Gold - {item.supplierName} - PO: {item.purchaseOrderNumber} ({item.availableWeightForManufacturing}g available)
+                        {item.karatTypeName || item.karatType?.name || 'Unknown Karat'} Gold - {item.supplierName || 'Supplier'} - PO: {item.purchaseOrderNumber} ({(item.availableWeightForManufacturing ?? item.remainingWeight ?? 0)}g available)
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedItemRemainingWeight !== null && manufacturingForm.sourceRawGoldPurchaseOrderItemId && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Remaining weight for selected item: {selectedItemRemainingWeight} g
+                  </p>
+                )}
               </div>
             </div>
             

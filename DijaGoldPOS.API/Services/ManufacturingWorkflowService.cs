@@ -1,6 +1,8 @@
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Repositories;
+using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.IServices;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
@@ -14,15 +16,18 @@ public class ManufacturingWorkflowService : IManufacturingWorkflowService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<ManufacturingWorkflowService> _logger;
+    private readonly IProductOwnershipService _productOwnershipService;
 
     public ManufacturingWorkflowService(
         IUnitOfWork unitOfWork,
         ICurrentUserService currentUserService,
-        ILogger<ManufacturingWorkflowService> logger)
+        ILogger<ManufacturingWorkflowService> logger,
+        IProductOwnershipService productOwnershipService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _logger = logger;
+        _productOwnershipService = productOwnershipService;
     }
 
     /// <summary>
@@ -78,6 +83,36 @@ public class ManufacturingWorkflowService : IManufacturingWorkflowService
                     manufacture.ActualCompletionDate = DateTime.UtcNow;
                     manufacture.Status = "Completed";
                     manufacture.WorkflowStep = "Complete";
+
+                    // Automatically create full ownership for manufactured goods
+                    try
+                    {
+                        var manufacturedWeight = manufacture.ConsumedWeight - manufacture.WastageWeight;
+                        if (manufacturedWeight < 0) manufacturedWeight = 0;
+                        var ownershipRequest = new ProductOwnershipRequest
+                        {
+                            ProductId = manufacture.ProductId,
+                            BranchId = manufacture.BranchId,
+                            SupplierId = null, // Manufactured internally
+                            PurchaseOrderId = null,
+                            CustomerPurchaseId = null,
+                            TotalQuantity = manufacture.QuantityProduced,
+                            TotalWeight = manufacturedWeight,
+                            OwnedQuantity = manufacture.QuantityProduced,
+                            OwnedWeight = manufacturedWeight,
+                            TotalCost = manufacture.TotalManufacturingCost,
+                            AmountPaid = manufacture.TotalManufacturingCost // fully owned by company
+                        };
+
+                        await _productOwnershipService.CreateOrUpdateOwnershipAsync(ownershipRequest, currentUserId);
+                        _logger.LogInformation("Created ownership for manufactured product {ProductId} at branch {BranchId}. Qty: {Qty}, Cost: {Cost}",
+                            manufacture.ProductId, manufacture.BranchId, manufacture.QuantityProduced, manufacture.TotalManufacturingCost);
+                    }
+                    catch (Exception ownEx)
+                    {
+                        // Log but do not fail the workflow transition
+                        _logger.LogError(ownEx, "Failed to create ownership on manufacturing completion for ProductManufacture {Id}", productManufactureId);
+                    }
                     break;
 
                 case "Rejected":

@@ -17,6 +17,8 @@ using System.Reflection;
 using System.Text;
 using AutoMapper;
 using FluentValidation.AspNetCore;
+using FluentValidation;
+using DijaGoldPOS.API.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -128,6 +130,7 @@ builder.Services.AddControllers()
 // Configure FluentValidation for ASP.NET Core
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
+builder.Services.AddValidatorsFromAssemblyContaining<FeedFromCashDrawerRequestValidator>();
 
 
 // Add CORS via configuration
@@ -252,6 +255,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Ensure CORS runs early so headers are applied to all responses (incl. errors and preflight)
+app.UseCors("ConfiguredCors");
+
 // Global exception handling middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
@@ -334,8 +340,6 @@ app.UseSerilogRequestLogging(options =>
 
     // Health check endpoints are filtered out in the message template by checking the path
 });
-
-app.UseCors("ConfiguredCors");
 
 app.UseHttpsRedirection();
 

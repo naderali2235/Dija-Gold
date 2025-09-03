@@ -21,6 +21,7 @@ import Reports from './components/Reports';
 import CashDrawer from './components/CashDrawer';
 import Users from './components/Users';
 import Settings from './components/Settings';
+import Treasury from './components/Treasury';
 import { Toaster } from './components/ui/sonner';
 
 function AppContent() {
@@ -86,6 +87,8 @@ function AppContent() {
         return <ManufacturingReports />;
       case 'cash-drawer':
         return <CashDrawer />;
+      case 'treasury':
+        return <Treasury />;
       case 'users':
         return <Users />;
       case 'settings':

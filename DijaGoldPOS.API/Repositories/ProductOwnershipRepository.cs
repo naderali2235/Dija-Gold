@@ -70,7 +70,7 @@ public class ProductOwnershipRepository : Repository<ProductOwnership>, IProduct
         return (totalOwnedQuantity, totalOwnedWeight, totalQuantity, totalWeight);
     }
 
-    public async Task<List<ProductOwnership>> GetLowOwnershipProductsAsync(decimal threshold = 0.5m)
+    public async Task<List<ProductOwnership>> GetLowOwnershipProductsAsync(decimal threshold = 50m)
     {
         return await _context.ProductOwnerships
             .Where(po => po.IsActive && 

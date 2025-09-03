@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProductOwnershipRepository, ProductOwnershipRepository>();
         services.AddScoped<IFinancialTransactionRepository, FinancialTransactionRepository>();
         services.AddScoped<ICashDrawerBalanceRepository, CashDrawerBalanceRepository>();
+        services.AddScoped<ITreasuryRepository, TreasuryRepository>();
 
         // Manufacturing and pricing repositories
         services.AddScoped<IProductManufactureRepository, ProductManufactureRepository>();
@@ -145,6 +146,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProductOwnershipService, ProductOwnershipService>();
         services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();
         services.AddScoped<ICashDrawerService, CashDrawerService>();
+        services.AddScoped<ITreasuryService, TreasuryService>();
 
         // Manufacturing and repair services
         services.AddScoped<IProductManufactureService, ProductManufactureService>();

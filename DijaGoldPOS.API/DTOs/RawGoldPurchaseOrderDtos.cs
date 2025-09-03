@@ -196,3 +196,37 @@ public class ReceiveRawGoldDto : ReceiveRawGoldPurchaseOrderRequestDto { }
 public class CreateRawGoldPurchaseOrderItemDto : CreateRawGoldPurchaseOrderItemRequestDto { }
 public class UpdateRawGoldPurchaseOrderItemDto : UpdateRawGoldPurchaseOrderItemRequestDto { }
 public class ReceiveRawGoldItemDto : ReceiveRawGoldPurchaseOrderItemDto { }
+
+/// <summary>
+/// Process payment request for raw gold purchase order
+/// </summary>
+public class ProcessRawGoldPurchaseOrderPaymentRequestDto
+{
+    public int RawGoldPurchaseOrderId { get; set; }
+    public decimal PaymentAmount { get; set; }
+    public int PaymentMethodId { get; set; }
+    public string? Notes { get; set; }
+    public string? ReferenceNumber { get; set; }
+}
+
+/// <summary>
+/// Result of processing payment for raw gold purchase order
+/// </summary>
+public class RawGoldPurchaseOrderPaymentResult
+{
+    public bool IsSuccess { get; set; }
+    public string? ErrorMessage { get; set; }
+    public RawGoldPurchaseOrderDto? PurchaseOrder { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal OutstandingAmount { get; set; }
+    public string TransactionNumber { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Update raw gold purchase order status request DTO
+/// </summary>
+public class UpdateRawGoldPurchaseOrderStatusRequestDto
+{
+    public string NewStatus { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+}
