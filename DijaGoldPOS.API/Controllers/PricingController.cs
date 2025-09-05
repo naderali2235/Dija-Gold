@@ -159,7 +159,7 @@ public class PricingController : ControllerBase
                         Id = charges.Id,
                         Name = charges.Name,
                         ProductCategoryId = charges.ProductCategoryId,
-                        SubCategory = charges.SubCategory,
+                        SubCategory = charges.SubCategoryLookup?.Name,
                         ChargeTypeId = charges.ChargeTypeId,
                         ChargeValue = charges.ChargeValue,
                         EffectiveFrom = charges.EffectiveFrom,
@@ -248,7 +248,7 @@ public class PricingController : ControllerBase
                 EffectiveFrom = tc.EffectiveFrom,
                 EffectiveTo = tc.EffectiveTo,
                 IsCurrent = tc.IsCurrent,
-                DisplayOrder = tc.DisplayOrder,
+                DisplayOrder = tc.DisplayOrder ?? 0,
                 CreatedAt = tc.CreatedAt,
                 CreatedBy = tc.CreatedBy
             }).ToList();

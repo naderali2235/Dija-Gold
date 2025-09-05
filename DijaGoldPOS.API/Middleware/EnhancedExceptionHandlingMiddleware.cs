@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using Serilog.Context;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
 using System.Security;
@@ -66,8 +67,8 @@ public sealed class EnhancedExceptionHandlingMiddleware
             UnauthorizedAccessException => CreateErrorResponse(httpContext, HttpStatusCode.Unauthorized, "Unauthorized", "You are not authorized to perform this action.", correlationId),
             SecurityException => CreateErrorResponse(httpContext, HttpStatusCode.Forbidden, "Forbidden", "Access to this resource is forbidden.", correlationId),
             KeyNotFoundException => CreateErrorResponse(httpContext, HttpStatusCode.NotFound, "Resource Not Found", "The requested resource was not found.", correlationId),
-            ArgumentException argumentEx => CreateArgumentErrorResponse(httpContext, argumentEx, correlationId),
             ArgumentNullException argumentNullEx => CreateArgumentErrorResponse(httpContext, argumentNullEx, correlationId),
+            ArgumentException argumentEx => CreateArgumentErrorResponse(httpContext, argumentEx, correlationId),
             InvalidOperationException invalidOpEx => CreateInvalidOperationErrorResponse(httpContext, invalidOpEx, correlationId),
             DbUpdateException dbUpdateEx => CreateDatabaseErrorResponse(httpContext, dbUpdateEx, correlationId),
             DbException dbEx => CreateDatabaseErrorResponse(httpContext, dbEx, correlationId),
@@ -316,11 +317,10 @@ public sealed class EnhancedExceptionHandlingMiddleware
         // Use structured logging service if available
         if (_loggingService != null)
         {
-            await _loggingService.LogExceptionAsync(
+            await _loggingService.LogErrorAsync(
                 exception,
-                httpContext.Request.Path,
-                httpContext.Request.Method,
-                userId,
+                "Exception in request pipeline",
+                "HttpRequest",
                 errorResponse.TraceId,
                 new Dictionary<string, object>
                 {
@@ -328,6 +328,7 @@ public sealed class EnhancedExceptionHandlingMiddleware
                     { "ErrorType", errorResponse.Type },
                     { "UserAgent", userAgent },
                     { "IpAddress", ipAddress },
+                    { "TraceId", errorResponse.TraceId },
                     { "RequestBody", await GetRequestBodyAsync(httpContext) }
                 });
         }

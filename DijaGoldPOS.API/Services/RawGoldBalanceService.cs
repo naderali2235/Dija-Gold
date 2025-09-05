@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using AutoMapper;
 using Microsoft.Extensions.Logging;
 using DijaGoldPOS.API.Models.OwneShipModels;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.SupplierModels;
 
 namespace DijaGoldPOS.API.Services;
 

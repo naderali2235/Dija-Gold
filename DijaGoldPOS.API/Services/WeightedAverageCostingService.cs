@@ -232,7 +232,7 @@ public class WeightedAverageCostingService : IWeightedAverageCostingService
                 ProductId = productId,
                 ProductName = product.Name,
                 ProductCode = product.ProductCode,
-                CurrentCostPrice = product.CostPrice,
+                CurrentCostPrice = product.CostPrice ?? 0,
                 WeightedAverageCost = weightedAverage,
                 FifoCost = fifo,
                 LifoCost = lifo,

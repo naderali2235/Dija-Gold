@@ -91,7 +91,7 @@ public class ProductService : IProductService
         if (searchRequest.SubCategoryId.HasValue)
             query = query.Where(p => p.SubCategoryId == searchRequest.SubCategoryId.Value);
         else if (!string.IsNullOrEmpty(searchRequest.SubCategory))
-            query = query.Where(p => p.SubCategory == searchRequest.SubCategory);
+            query = query.Where(p => p.SubCategoryLookup != null && p.SubCategoryLookup.Name == searchRequest.SubCategory);
 
         if (searchRequest.SupplierId.HasValue)
             query = query.Where(p => p.SupplierId == searchRequest.SupplierId.Value);
@@ -255,11 +255,11 @@ public class ProductService : IProductService
             product.CountryOfOrigin = request.CountryOfOrigin;
             product.YearOfMinting = request.YearOfMinting;
             product.FaceValue = request.FaceValue;
-            product.HasNumismaticValue = request.HasNumismaticValue;
+            product.HasNumismaticValue = request.HasNumismaticValue ?? false;
             product.MakingChargesApplicable = request.MakingChargesApplicable;
             product.UseProductMakingCharges = request.UseProductMakingCharges;
             product.ProductMakingChargesTypeId = request.ProductMakingChargesTypeId;
-            product.ProductMakingChargesValue = request.ProductMakingChargesValue;
+            product.ProductMakingChargesValue = request.ProductMakingChargesValue ?? 0;
             product.SupplierId = request.SupplierId;
             product.ModifiedBy = userId;
             product.ModifiedAt = DateTime.UtcNow;

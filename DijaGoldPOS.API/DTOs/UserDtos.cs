@@ -21,6 +21,11 @@ public class UserDto
     public bool EmailConfirmed { get; set; }
     public bool LockoutEnabled { get; set; }
     public DateTime? LockoutEnd { get; set; }
+    
+    // Additional properties for mapping
+    public List<string> RoleNames { get; set; } = new();
+    public string? LastLoginFormatted { get; set; }
+    public bool IsOnline { get; set; }
 }
 
 /// <summary>
@@ -28,29 +33,14 @@ public class UserDto
 /// </summary>
 public class CreateUserRequestDto
 {
-
-
     public string UserName { get; set; } = string.Empty;
-
-
-
     public string FullName { get; set; } = string.Empty;
-
-
     public string Email { get; set; } = string.Empty;
-
-
     public string? EmployeeCode { get; set; }
-
-
-
+    public string? PhoneNumber { get; set; }
     public string Password { get; set; } = string.Empty;
-
-
     public List<string> Roles { get; set; } = new();
-
     public int? BranchId { get; set; }
-
     public bool IsActive { get; set; } = true;
 }
 
@@ -59,19 +49,23 @@ public class CreateUserRequestDto
 /// </summary>
 public class UpdateUserRequestDto
 {
-
     public string Id { get; set; } = string.Empty;
-
-
-
     public string FullName { get; set; } = string.Empty;
-
-
     public string Email { get; set; } = string.Empty;
-
-
     public string? EmployeeCode { get; set; }
+    public string? PhoneNumber { get; set; }
+    public int? BranchId { get; set; }
+}
 
+/// <summary>
+/// Update user DTO for mapping
+/// </summary>
+public class UpdateUserDto
+{
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string? EmployeeCode { get; set; }
+    public string? PhoneNumber { get; set; }
     public int? BranchId { get; set; }
 }
 

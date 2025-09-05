@@ -5,6 +5,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models.SalesModels;
+using DijaGoldPOS.API.Models.CustomerModels;
 
 namespace DijaGoldPOS.API.Services;
 

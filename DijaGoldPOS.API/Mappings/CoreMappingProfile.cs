@@ -62,7 +62,7 @@ public class CoreMappingProfile : Profile
         // ApplicationUser mappings
         CreateMap<ApplicationUser, UserDto>()
             .ForMember(dest => dest.BranchName, opt => opt.MapFrom(src => src.Branch != null ? src.Branch.Name : null))
-            .ForMember(dest => dest.RoleNames, opt => opt.MapFrom(src => src.UserRoles.Select(ur => ur.Role.Name).ToList()))
+            .ForMember(dest => dest.RoleNames, opt => opt.Ignore()) // Will be populated separately
             .ForMember(dest => dest.LastLoginFormatted, opt => opt.MapFrom(src => src.LastLoginAt.HasValue ? src.LastLoginAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : null))
             .ForMember(dest => dest.IsOnline, opt => opt.MapFrom(src => src.LastLoginAt.HasValue && src.LastLoginAt.Value > DateTime.UtcNow.AddMinutes(-30)));
 
