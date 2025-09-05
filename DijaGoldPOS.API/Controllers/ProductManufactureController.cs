@@ -1,8 +1,8 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Services;
-using DijaGoldPOS.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 
 namespace DijaGoldPOS.API.Controllers;
 
@@ -373,5 +373,65 @@ public class ProductManufactureController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Complete manufacturing and finalize raw gold consumption
+    /// </summary>
+    [HttpPost("{id}/complete")]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<ActionResult<ProductManufactureDto>> CompleteManufacturing(int id)
+    {
+        try
+        {
+            var userId = User.Identity?.Name ?? "system";
+            var result = await _productManufactureService.CompleteManufacturingAsync(id, userId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error completing manufacturing {Id}", id);
+            return StatusCode(500, new { error = "An error occurred while completing the manufacturing" });
+        }
+    }
+
+    /// <summary>
+    /// Cancel manufacturing and reverse all reservations and records
+    /// </summary>
+    [HttpPost("{id}/cancel")]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<ActionResult<ProductManufactureDto>> CancelManufacturing(int id, [FromBody] CancelManufacturingRequest? request = null)
+    {
+        try
+        {
+            var userId = User.Identity?.Name ?? "system";
+            var cancellationReason = request?.Reason ?? "No reason provided";
+            var result = await _productManufactureService.CancelManufacturingAsync(id, userId, cancellationReason);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling manufacturing {Id}", id);
+            return StatusCode(500, new { error = "An error occurred while cancelling the manufacturing" });
+        }
+    }
+
     #endregion
+}
+
+/// <summary>
+/// Request model for cancelling manufacturing
+/// </summary>
+public class CancelManufacturingRequest
+{
+    /// <summary>
+    /// Reason for cancellation
+    /// </summary>
+    public string? Reason { get; set; }
 }

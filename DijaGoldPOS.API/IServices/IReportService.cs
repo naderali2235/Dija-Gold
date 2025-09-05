@@ -1,7 +1,7 @@
 using DijaGoldPOS.API.Models;
 
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for reporting service

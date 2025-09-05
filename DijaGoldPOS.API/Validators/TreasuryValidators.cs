@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DijaGoldPOS.API.Controllers;
 using DijaGoldPOS.API.Data;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.FinancialModels;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service interface for product ownership management
@@ -27,10 +27,10 @@ public interface IProductOwnershipService
     /// </summary>
     Task<bool> UpdateOwnershipAfterSaleAsync(int productId, int branchId, decimal soldQuantity, string referenceNumber, string userId);
     
-    /// <summary>
-    /// Convert raw gold to products (Scenario 2)
-    /// </summary>
-    Task<(bool Success, string Message)> ConvertRawGoldToProductsAsync(ConvertRawGoldRequest request, string userId);
+    ///// <summary>
+    ///// Convert raw gold to products (Scenario 2)
+    ///// </summary>
+    //Task<(bool Success, string Message)> ConvertRawGoldToProductsAsync(ConvertRawGoldRequest request, string userId);
     
     /// <summary>
     /// Get ownership alerts
@@ -66,4 +66,14 @@ public interface IProductOwnershipService
         int? supplierId = null,
         int pageNumber = 1,
         int pageSize = 10);
+
+    /// <summary>
+    /// Validate product sale and check for unpaid supplier balances
+    /// </summary>
+    Task<(bool CanSell, string Message, List<string> Warnings)> ValidateProductSaleAsync(int productId, int branchId, decimal requestedQuantity);
+
+    /// <summary>
+    /// Get products with unpaid supplier balances (sales risk report)
+    /// </summary>
+    Task<List<ProductSaleRiskDto>> GetProductsWithUnpaidSupplierBalancesAsync(int? branchId = null);
 }

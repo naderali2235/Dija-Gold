@@ -1,4 +1,5 @@
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ProductModels;
 
 
 namespace DijaGoldPOS.API.IRepositories;

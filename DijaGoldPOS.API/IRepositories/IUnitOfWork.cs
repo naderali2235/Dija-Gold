@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.Shared;
 
 namespace DijaGoldPOS.API.IRepositories;
 

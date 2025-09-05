@@ -1,8 +1,7 @@
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.IServices;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.FinancialModels;
 using DijaGoldPOS.API.Repositories;
-using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
 using Serilog.Context;
 

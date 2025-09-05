@@ -1,7 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

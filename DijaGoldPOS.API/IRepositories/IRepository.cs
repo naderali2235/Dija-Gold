@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.Shared;
 using System.Linq.Expressions;
 
 namespace DijaGoldPOS.API.IRepositories;

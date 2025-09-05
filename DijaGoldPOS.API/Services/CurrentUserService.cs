@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.IServices;
 using System.Security.Claims;
 
 namespace DijaGoldPOS.API.Services;
@@ -37,6 +38,36 @@ public class CurrentUserService : ICurrentUserService
                 return httpContext.User.Identity?.Name ?? "system";
             }
             return "system";
+        }
+    }
+
+    public int? BranchId
+    {
+        get
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.User?.Identity?.IsAuthenticated == true)
+            {
+                var branchIdClaim = httpContext.User.FindFirstValue("BranchId");
+                if (int.TryParse(branchIdClaim, out int branchId))
+                {
+                    return branchId;
+                }
+            }
+            return null;
+        }
+    }
+
+    public string? BranchName
+    {
+        get
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.User?.Identity?.IsAuthenticated == true)
+            {
+                return httpContext.User.FindFirstValue("BranchName");
+            }
+            return null;
         }
     }
 }

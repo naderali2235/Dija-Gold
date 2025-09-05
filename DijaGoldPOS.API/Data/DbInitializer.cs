@@ -1,4 +1,13 @@
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.CustomerModels;
+using DijaGoldPOS.API.Models.FinancialModels;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.ProductModels;
+using DijaGoldPOS.API.Models.PurchaseOrderModels;
+using DijaGoldPOS.API.Models.SalesModels;
+using DijaGoldPOS.API.Models.Shared;
+using DijaGoldPOS.API.Models.SupplierModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -333,7 +342,6 @@ public static class DbInitializer
                 {
                     Name = "Ring Making Charges",
                     ProductCategoryId = goldJewelryCategory.Id,
-                    SubCategory = "Rings",
                     ChargeTypeId = percentageChargeType.Id,
                     ChargeValue = 15.00m, // 15% of gold value for rings
                     EffectiveFrom = DateTime.UtcNow.Date,
@@ -396,7 +404,6 @@ public static class DbInitializer
                     Weight = 3.500m,
                     Brand = "Dija Gold",
                     DesignStyle = "Classic",
-                    SubCategory = "Rings",
                     MakingChargesApplicable = true,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
@@ -410,7 +417,6 @@ public static class DbInitializer
                     Weight = 15.750m,
                     Brand = "Dija Gold",
                     DesignStyle = "Rope Chain",
-                    SubCategory = "Necklaces",
                     MakingChargesApplicable = true,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
@@ -501,8 +507,6 @@ public static class DbInitializer
                     DefaultDiscountPercentage = 5.00m,
                     MakingChargesWaived = false,
                     Notes = "Regular customer, prefers 21K gold jewelry",
-                    LastPurchaseDate = DateTime.UtcNow.AddDays(-5),
-                    TotalOrders = 8,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
                 },
@@ -520,8 +524,6 @@ public static class DbInitializer
                     DefaultDiscountPercentage = 3.00m,
                     MakingChargesWaived = false,
                     Notes = "Prefers rings and necklaces, 18K gold",
-                    LastPurchaseDate = DateTime.UtcNow.AddDays(-12),
-                    TotalOrders = 5,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
                 },
@@ -539,8 +541,6 @@ public static class DbInitializer
                     DefaultDiscountPercentage = 0.00m,
                     MakingChargesWaived = false,
                     Notes = "New customer, interested in bullion",
-                    LastPurchaseDate = DateTime.UtcNow.AddDays(-2),
-                    TotalOrders = 2,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
                 },
@@ -558,8 +558,6 @@ public static class DbInitializer
                     DefaultDiscountPercentage = 8.00m,
                     MakingChargesWaived = true,
                     Notes = "VIP customer, makes charges waived, prefers 22K gold",
-                    LastPurchaseDate = DateTime.UtcNow.AddDays(-1),
-                    TotalOrders = 15,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
                 },
@@ -577,8 +575,6 @@ public static class DbInitializer
                     DefaultDiscountPercentage = 10.00m,
                     MakingChargesWaived = true,
                     Notes = "Premium customer, highest loyalty tier, 24K gold collector",
-                    LastPurchaseDate = DateTime.UtcNow.AddDays(-3),
-                    TotalOrders = 25,
                     CreatedBy = "system",
                     CreatedAt = DateTime.UtcNow
                 }

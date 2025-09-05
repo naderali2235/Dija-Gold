@@ -1,5 +1,7 @@
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.SalesModels;
 using DijaGoldPOS.API.Repositories;
 
 namespace DijaGoldPOS.API.Services;

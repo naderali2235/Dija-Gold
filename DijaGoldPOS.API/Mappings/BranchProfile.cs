@@ -1,6 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.InventoryModels;
 
 namespace DijaGoldPOS.API.Mappings;
 

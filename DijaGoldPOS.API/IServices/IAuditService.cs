@@ -1,4 +1,6 @@
-namespace DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.Models.Shared;
+
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for audit logging service
@@ -93,7 +95,7 @@ public interface IAuditService
     /// <param name="pageNumber">Page number</param>
     /// <param name="pageSize">Page size</param>
     /// <returns>List of audit logs</returns>
-    Task<(List<Models.AuditLog> Logs, int TotalCount)> GetEntityAuditLogsAsync(
+    Task<(List<AuditLog> Logs, int TotalCount)> GetEntityAuditLogsAsync(
         string entityType,
         string entityId,
         int pageNumber = 1,
@@ -108,7 +110,7 @@ public interface IAuditService
     /// <param name="pageNumber">Page number</param>
     /// <param name="pageSize">Page size</param>
     /// <returns>List of audit logs</returns>
-    Task<(List<Models.AuditLog> Logs, int TotalCount)> GetUserAuditLogsAsync(
+    Task<(List<AuditLog> Logs, int TotalCount)> GetUserAuditLogsAsync(
         string userId,
         DateTime? fromDate = null,
         DateTime? toDate = null,
@@ -125,7 +127,7 @@ public interface IAuditService
     /// <param name="pageNumber">Page number</param>
     /// <param name="pageSize">Page size</param>
     /// <returns>List of audit logs</returns>
-    Task<(List<Models.AuditLog> Logs, int TotalCount)> GetSystemAuditLogsAsync(
+    Task<(List<AuditLog> Logs, int TotalCount)> GetSystemAuditLogsAsync(
         DateTime? fromDate = null,
         DateTime? toDate = null,
         string? action = null,

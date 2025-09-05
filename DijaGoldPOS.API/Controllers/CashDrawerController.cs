@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.FinancialModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;

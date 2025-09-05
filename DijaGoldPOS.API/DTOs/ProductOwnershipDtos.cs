@@ -138,41 +138,6 @@ public class OwnershipAlertDto
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>
-/// Raw gold conversion request
-/// </summary>
-public class ConvertRawGoldRequest
-{
-
-    public int RawGoldProductId { get; set; }
-    
-
-    public int BranchId { get; set; }
-    
-
-    public decimal WeightToConvert { get; set; }
-    
-
-    public decimal QuantityToConvert { get; set; }
-    
-
-    public List<NewProductFromRawGold> NewProducts { get; set; } = new();
-}
-
-/// <summary>
-/// New product created from raw gold
-/// </summary>
-public class NewProductFromRawGold
-{
-
-    public int ProductId { get; set; }
-    
-
-    public decimal Quantity { get; set; }
-    
-
-    public decimal Weight { get; set; }
-}
 
 /// <summary>
 /// Request DTO for ownership validation
@@ -182,6 +147,26 @@ public class ValidateOwnershipRequest
     public int ProductId { get; set; }
     public int BranchId { get; set; }
     public decimal RequestedQuantity { get; set; }
+}
+
+/// <summary>
+/// Request DTO for product sale validation
+/// </summary>
+public class ValidateProductSaleRequest
+{
+    public int ProductId { get; set; }
+    public int BranchId { get; set; }
+    public decimal RequestedQuantity { get; set; }
+}
+
+/// <summary>
+/// Product sale validation result - ALERTS ONLY, NO BLOCKING
+/// </summary>
+public class ProductSaleValidationResult
+{
+    public bool CanSell { get; set; } = true; // Always true - only alerts, no blocking
+    public string Message { get; set; } = string.Empty;
+    public List<string> Warnings { get; set; } = new();
 }
 
 /// <summary>
@@ -205,11 +190,3 @@ public class UpdateOwnershipSaleRequest
     public string ReferenceNumber { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Response DTO for raw gold conversion
-/// </summary>
-public class ConvertRawGoldResponse
-{
-    public bool Success { get; set; }
-    public string Message { get; set; } = string.Empty;
-}

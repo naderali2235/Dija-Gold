@@ -1,5 +1,9 @@
 
 
+using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.SalesModels;
+using DijaGoldPOS.API.Models.Shared;
+
 namespace DijaGoldPOS.API.Models;
 
 /// <summary>

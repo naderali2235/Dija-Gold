@@ -1,9 +1,10 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Shared;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.SalesModels;
 
 namespace DijaGoldPOS.API.Services;
 

@@ -1,6 +1,6 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.FinancialModels;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service interface for cash drawer operations

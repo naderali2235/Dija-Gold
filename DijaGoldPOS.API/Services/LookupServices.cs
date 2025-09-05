@@ -1,5 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
+using DijaGoldPOS.API.IServices;
 
 namespace DijaGoldPOS.API.Services;
 

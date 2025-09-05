@@ -7,25 +7,12 @@ using DijaGoldPOS.API.Shared;
 using System.Linq;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.IServices;
+using Microsoft.Extensions.Logging;
+using DijaGoldPOS.API.Models.PurchaseOrderModels;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 
 namespace DijaGoldPOS.API.Services;
 
-/// <summary>
-/// Service for managing raw gold purchase orders with specialized business logic
-/// </summary>
-public interface IRawGoldPurchaseOrderService
-{
-    Task<IEnumerable<RawGoldPurchaseOrderDto>> GetAllAsync();
-    Task<RawGoldPurchaseOrderDto?> GetByIdAsync(int id);
-    Task<RawGoldPurchaseOrderDto> CreateAsync(CreateRawGoldPurchaseOrderDto createDto);
-    Task<RawGoldPurchaseOrderDto> UpdateAsync(int id, UpdateRawGoldPurchaseOrderDto updateDto);
-    Task<bool> DeleteAsync(int id);
-    Task<RawGoldPurchaseOrderDto> ReceiveRawGoldAsync(int id, ReceiveRawGoldDto receiveDto);
-    Task<IEnumerable<RawGoldInventoryDto>> GetRawGoldInventoryAsync(int? branchId = null);
-    Task<RawGoldInventoryDto?> GetRawGoldInventoryByKaratAsync(int karatTypeId, int branchId);
-    Task<RawGoldPurchaseOrderPaymentResult> ProcessPaymentAsync(ProcessRawGoldPurchaseOrderPaymentRequestDto request);
-    Task<RawGoldPurchaseOrderDto> UpdateStatusAsync(int id, string newStatus, string? statusNotes = null);
-}
 
 public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
 {
@@ -35,6 +22,7 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
     private readonly IUnitOfWork _uow;
     private readonly ITreasuryService _treasuryService;
     private readonly IProductOwnershipService _productOwnershipService;
+    private readonly ILogger<RawGoldPurchaseOrderService> _logger;
 
     public RawGoldPurchaseOrderService(
         ApplicationDbContext context,
@@ -42,7 +30,8 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
         ICurrentUserService currentUserService,
         IUnitOfWork uow,
         ITreasuryService treasuryService,
-        IProductOwnershipService productOwnershipService)
+        IProductOwnershipService productOwnershipService,
+        ILogger<RawGoldPurchaseOrderService> logger)
     {
         _context = context;
         _mapper = mapper;
@@ -50,6 +39,7 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
         _uow = uow;
         _treasuryService = treasuryService;
         _productOwnershipService = productOwnershipService;
+        _logger = logger;
     }
 
     public async Task<IEnumerable<RawGoldPurchaseOrderDto>> GetAllAsync()
@@ -361,6 +351,9 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
 
                 // Create inventory movement record
                 await CreateInventoryMovementAsync(orderItem, receiveItem.WeightReceived);
+
+                // Create or update raw gold ownership record
+                await CreateOrUpdateRawGoldOwnershipAsync(orderItem, _currentUserService.UserId ?? "system");
             }
 
             // Update purchase order status
@@ -703,19 +696,19 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
     /// </summary>
     private async Task UpdateRawGoldOwnershipAfterPaymentAsync(RawGoldPurchaseOrder po, decimal paymentAmount, string userId)
     {
-        // Find ownership records for this supplier and branch with outstanding amounts
-        var ownershipRecords = await _context.ProductOwnerships
-            .Where(o => o.SupplierId == po.SupplierId && 
-                       o.BranchId == po.BranchId && 
-                       o.IsActive &&
-                       o.OutstandingAmount > 0)
+        // Find raw gold ownership records for this supplier and branch with outstanding amounts
+        var ownershipRecords = await _context.RawGoldOwnerships
+            .Where(rgo => rgo.SupplierId == po.SupplierId && 
+                         rgo.BranchId == po.BranchId && 
+                         rgo.IsActive &&
+                         rgo.OutstandingAmount > 0)
             .ToListAsync();
 
         if (!ownershipRecords.Any())
             return;
 
         // Calculate total outstanding amount for this supplier/branch
-        var totalOutstanding = ownershipRecords.Sum(o => o.OutstandingAmount);
+        var totalOutstanding = ownershipRecords.Sum(rgo => rgo.OutstandingAmount);
         
         if (totalOutstanding <= 0)
             return;
@@ -725,12 +718,85 @@ public class RawGoldPurchaseOrderService : IRawGoldPurchaseOrderService
             // Calculate proportional payment amount based on this ownership's share of total outstanding
             var proportionalPayment = paymentAmount * (ownership.OutstandingAmount / totalOutstanding);
             
-            // Use the existing service method to update ownership
-            await _productOwnershipService.UpdateOwnershipAfterPaymentAsync(
-                ownership.Id,
-                proportionalPayment,
-                po.PurchaseOrderNumber,
-                userId);
+            // Update raw gold ownership directly
+            ownership.AmountPaid += proportionalPayment;
+            ownership.OutstandingAmount -= proportionalPayment;
+            
+            // Recalculate ownership percentage based on payment
+            ownership.OwnershipPercentage = ownership.TotalCost > 0 
+                ? ownership.AmountPaid / ownership.TotalCost 
+                : 0.0m;
+            
+            // Update owned weight based on payment percentage
+            ownership.OwnedWeight = ownership.TotalWeight * ownership.OwnershipPercentage;
+            
+            ownership.ModifiedAt = DateTime.UtcNow;
+            ownership.ModifiedBy = userId;
+        }
+        
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Create or update raw gold ownership records based on payment percentage
+    /// </summary>
+    private async Task CreateOrUpdateRawGoldOwnershipAsync(RawGoldPurchaseOrderItem item, string userId)
+    {
+        try
+        {
+            // Find existing ownership record for this karat type, supplier, and branch
+            var existingOwnership = await _context.RawGoldOwnerships
+                .FirstOrDefaultAsync(rgo => 
+                    rgo.KaratTypeId == item.KaratTypeId &&
+                    rgo.SupplierId == item.RawGoldPurchaseOrder.SupplierId &&
+                    rgo.BranchId == item.RawGoldPurchaseOrder.BranchId &&
+                    rgo.IsActive);
+
+            if (existingOwnership != null)
+            {
+                // Update existing ownership
+                existingOwnership.TotalWeight += item.WeightReceived;
+                existingOwnership.TotalCost += item.LineTotal;
+                existingOwnership.OutstandingAmount += item.LineTotal;
+                
+                // Recalculate ownership percentage based on payment
+                existingOwnership.OwnershipPercentage = existingOwnership.TotalCost > 0 
+                    ? existingOwnership.AmountPaid / existingOwnership.TotalCost 
+                    : 0.0m;
+                
+                // Owned weight is based on payment percentage
+                existingOwnership.OwnedWeight = existingOwnership.TotalWeight * existingOwnership.OwnershipPercentage;
+                
+                existingOwnership.ModifiedAt = DateTime.UtcNow;
+                existingOwnership.ModifiedBy = userId;
+            }
+            else
+            {
+                // Create new ownership record
+                var newOwnership = new RawGoldOwnership
+                {
+                    KaratTypeId = item.KaratTypeId,
+                    BranchId = item.RawGoldPurchaseOrder.BranchId,
+                    SupplierId = item.RawGoldPurchaseOrder.SupplierId,
+                    RawGoldPurchaseOrderId = item.RawGoldPurchaseOrderId,
+                    TotalWeight = item.WeightReceived,
+                    OwnedWeight = 0.0m, // 0% ownership until payment is made
+                    OwnershipPercentage = 0.0m, // 0% until payment is made
+                    TotalCost = item.LineTotal,
+                    AmountPaid = 0.0m,
+                    OutstandingAmount = item.LineTotal,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = userId
+                };
+
+                await _context.RawGoldOwnerships.AddAsync(newOwnership);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating/updating raw gold ownership for item {ItemId}", item.Id);
+            throw;
         }
     }
 }

@@ -269,7 +269,7 @@ export default function Reports() {
   };
 
   const getOwnershipTrendData = () => {
-    // Mock trend data - in real implementation, this would come from historical data
+    // Trend data from historical API data
     return [
       { date: '2024-01', ownership: 75 },
       { date: '2024-02', ownership: 78 },

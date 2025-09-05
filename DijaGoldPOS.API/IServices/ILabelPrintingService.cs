@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ProductModels;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service for generating and printing product labels (Zebra ZPL) and QR payloads

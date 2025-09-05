@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

@@ -1,7 +1,8 @@
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.ProductModels;
 
 namespace DijaGoldPOS.API.Mappings;
 

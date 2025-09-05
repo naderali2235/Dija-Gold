@@ -4,6 +4,7 @@ using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.CustomerModels;
 using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -69,7 +70,7 @@ public class CustomerPurchaseService : ICustomerPurchaseService
                 AmountPaid = request.AmountPaid,
                 PaymentMethodId = request.PaymentMethodId,
                 Notes = request.Notes,
-                CreatedByUserId = userId,
+                ProcessedByUserId = userId, // CreatedByUserId is computed from this
                 CustomerPurchaseItems = new List<CustomerPurchaseItem>()
             };
 

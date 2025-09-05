@@ -1,7 +1,9 @@
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.CustomerModels;
+using DijaGoldPOS.API.Models.ProductModels;
 
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for pricing calculation service

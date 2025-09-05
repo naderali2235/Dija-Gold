@@ -1,6 +1,6 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for manufacturing workflow management

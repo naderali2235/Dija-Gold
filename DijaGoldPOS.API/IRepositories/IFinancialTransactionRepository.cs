@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.FinancialModels;
 
 
 namespace DijaGoldPOS.API.IRepositories;

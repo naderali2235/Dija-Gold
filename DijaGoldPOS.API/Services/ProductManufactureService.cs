@@ -1,11 +1,17 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Repositories;
-using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.Shared;
 using Microsoft.Extensions.Logging;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.ProductModels;
+using DijaGoldPOS.API.Models.PurchaseOrderModels;
+using DijaGoldPOS.API.Models.ManfacturingModels;
+using DijaGoldPOS.API.Models.OwneShipModels;
+using DijaGoldPOS.API.Models.InventoryModels;
 
 namespace DijaGoldPOS.API.Services;
 
@@ -39,10 +45,15 @@ public class ProductManufactureService : IProductManufactureService
             var totalWeightPerPiece = createDto.ConsumedWeight + createDto.WastageWeight;
             var totalWeightNeeded = totalWeightPerPiece * createDto.QuantityToProduce;
 
+            // Reserve raw gold inventory before creating manufacturing record
+            await ReserveRawGoldForManufacturingAsync(createDto.RawMaterials, createDto.CreatedBy);
+
             // Validate sufficient raw gold is available for the requested quantity
             var isAvailable = await IsRawGoldSufficientAsync(createDto.SourceRawGoldPurchaseOrderItemId, totalWeightNeeded);
             if (!isAvailable)
             {
+                // Reverse reservations if validation fails
+                await ReverseRawGoldReservationsAsync(createDto.RawMaterials, createDto.CreatedBy);
                 throw new InvalidOperationException($"Insufficient raw gold weight available for manufacturing {createDto.QuantityToProduce} pieces. Required: {totalWeightNeeded}g");
             }
 
@@ -111,7 +122,17 @@ public class ProductManufactureService : IProductManufactureService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating product manufacture record");
+            // Reverse any reservations made if creation fails
+            try
+            {
+                await ReverseRawGoldReservationsAsync(createDto.RawMaterials, createDto.CreatedBy);
+            }
+            catch (Exception reverseEx)
+            {
+                _logger.LogError(reverseEx, "Error reversing raw gold reservations after manufacturing creation failure");
+            }
+            
+            _logger.LogError(ex, "Error creating manufacturing record");
             throw;
         }
     }
@@ -679,6 +700,471 @@ public class ProductManufactureService : IProductManufactureService
             _logger.LogError(ex, "Error updating product inventory for product {ProductId}", productId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Transfer ownership from raw gold to manufactured products based on payment percentage
+    /// </summary>
+    private async Task TransferOwnershipFromRawGoldAsync(int manufacturingRecordId, List<ProductManufactureRawMaterialDto> rawMaterials, string userId)
+    {
+        try
+        {
+            foreach (var material in rawMaterials)
+            {
+                // Get raw gold ownership records for this karat type and supplier
+                var rawGoldOwnerships = await _unitOfWork.Repository<RawGoldOwnership>().GetQueryable()
+                    .Where(rgo => rgo.KaratTypeId == material.KaratTypeId && 
+                                  rgo.SupplierId == material.SupplierId &&
+                                  rgo.OwnedWeight > 0 &&
+                                  rgo.IsActive)
+                    .OrderBy(rgo => rgo.CreatedAt) // FIFO
+                    .ToListAsync();
+
+                decimal remainingWeightToTransfer = material.WeightUsed;
+
+                foreach (var ownership in rawGoldOwnerships)
+                {
+                    if (remainingWeightToTransfer <= 0) break;
+
+                    decimal weightToDeduct = Math.Min(ownership.OwnedWeight, remainingWeightToTransfer);
+                    decimal costPerGram = ownership.TotalCost / ownership.TotalWeight;
+                    decimal transferCost = weightToDeduct * costPerGram;
+
+                    // Calculate ownership percentage based on payment - ONLY paid portion gets 100% ownership
+                    decimal paymentPercentage = ownership.AmountPaid / ownership.TotalCost;
+                    decimal paidWeight = weightToDeduct * paymentPercentage;
+                    decimal unpaidWeight = weightToDeduct * (1 - paymentPercentage);
+
+                    // Create product ownership for manufactured product - split by payment status
+                    if (paidWeight > 0)
+                    {
+                        // Fully paid portion gets 100% ownership
+                        var paidOwnership = new ProductOwnership
+                        {
+                            ProductId = material.ProductId,
+                            BranchId = ownership.BranchId,
+                            SupplierId = ownership.SupplierId,
+                            TotalQuantity = paidWeight,
+                            TotalWeight = paidWeight,
+                            OwnedQuantity = paidWeight, // 100% ownership for paid portion
+                            OwnedWeight = paidWeight,
+                            OwnershipPercentage = 1.0m, // 100%
+                            TotalCost = transferCost * paymentPercentage,
+                            AmountPaid = transferCost * paymentPercentage,
+                            OutstandingAmount = 0,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = userId
+                        };
+                        await _unitOfWork.Repository<ProductOwnership>().AddAsync(paidOwnership);
+                    }
+
+                    if (unpaidWeight > 0)
+                    {
+                        // Unpaid portion gets 0% ownership
+                        var unpaidOwnership = new ProductOwnership
+                        {
+                            ProductId = material.ProductId,
+                            BranchId = ownership.BranchId,
+                            SupplierId = ownership.SupplierId,
+                            TotalQuantity = unpaidWeight,
+                            TotalWeight = unpaidWeight,
+                            OwnedQuantity = 0, // 0% ownership for unpaid portion
+                            OwnedWeight = 0,
+                            OwnershipPercentage = 0.0m, // 0%
+                            TotalCost = transferCost * (1 - paymentPercentage),
+                            AmountPaid = 0,
+                            OutstandingAmount = transferCost * (1 - paymentPercentage),
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = userId
+                        };
+                        await _unitOfWork.Repository<ProductOwnership>().AddAsync(unpaidOwnership);
+                    }
+
+                    // Reduce raw gold ownership
+                    ownership.OwnedWeight -= weightToDeduct;
+                    ownership.TotalWeight -= weightToDeduct;
+                    ownership.TotalCost -= transferCost;
+                    ownership.AmountPaid -= transferCost * paymentPercentage;
+                    ownership.OutstandingAmount -= transferCost * (1 - paymentPercentage);
+                    ownership.ModifiedAt = DateTime.UtcNow;
+                    ownership.ModifiedBy = userId;
+
+                    if (ownership.OwnedWeight <= 0)
+                    {
+                        ownership.IsActive = false;
+                    }
+
+                    remainingWeightToTransfer -= weightToDeduct;
+                }
+
+                if (remainingWeightToTransfer > 0)
+                {
+                    _logger.LogWarning("Insufficient raw gold ownership for transfer. Remaining: {Weight}g", remainingWeightToTransfer);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error transferring ownership from raw gold to manufactured products");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Raw Gold Inventory Reservation Methods
+
+    /// <summary>
+    /// Reserve raw gold inventory for manufacturing
+    /// </summary>
+    private async Task ReserveRawGoldForManufacturingAsync(List<ProductManufactureRawMaterialDto> rawMaterials, string userId)
+    {
+        foreach (var material in rawMaterials)
+        {
+            var inventory = await _unitOfWork.Repository<RawGoldInventory>()
+                .GetQueryable()
+                .FirstOrDefaultAsync(rgi => rgi.KaratTypeId == material.KaratTypeId && 
+                                          rgi.IsActive);
+
+            if (inventory == null)
+            {
+                throw new InvalidOperationException($"Raw gold inventory not found for karat type {material.KaratTypeId}");
+            }
+
+            if (inventory.AvailableWeight < material.WeightUsed)
+            {
+                throw new InvalidOperationException($"Insufficient raw gold available. Required: {material.WeightUsed}g, Available: {inventory.AvailableWeight}g");
+            }
+
+            // Reserve the weight
+            inventory.WeightReserved += material.WeightUsed;
+            inventory.ModifiedAt = DateTime.UtcNow;
+            inventory.ModifiedBy = userId;
+
+            // Create inventory movement record
+            var movement = new RawGoldInventoryMovement
+            {
+                RawGoldInventoryId = inventory.Id,
+                MovementType = "Reserved",
+                WeightChange = -material.WeightUsed, // Negative because it reduces available weight
+                WeightAfter = inventory.AvailableWeight,
+                CostPerGram = inventory.AverageCostPerGram,
+                TotalCost = material.WeightUsed * inventory.AverageCostPerGram,
+                Reference = $"Manufacturing Reservation",
+                Notes = $"Reserved {material.WeightUsed}g for manufacturing",
+                MovementDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = userId,
+                IsActive = true
+            };
+
+            await _unitOfWork.Repository<RawGoldInventoryMovement>().AddAsync(movement);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Reverse raw gold reservations (used when manufacturing fails or is cancelled)
+    /// </summary>
+    private async Task ReverseRawGoldReservationsAsync(List<ProductManufactureRawMaterialDto> rawMaterials, string userId)
+    {
+        foreach (var material in rawMaterials)
+        {
+            var inventory = await _unitOfWork.Repository<RawGoldInventory>()
+                .GetQueryable()
+                .FirstOrDefaultAsync(rgi => rgi.KaratTypeId == material.KaratTypeId && 
+                                          rgi.IsActive);
+
+            if (inventory != null)
+            {
+                // Release the reservation
+                inventory.WeightReserved = Math.Max(0, inventory.WeightReserved - material.WeightUsed);
+                inventory.ModifiedAt = DateTime.UtcNow;
+                inventory.ModifiedBy = userId;
+
+                // Create inventory movement record
+                var movement = new RawGoldInventoryMovement
+                {
+                    RawGoldInventoryId = inventory.Id,
+                    MovementType = "Reservation Reversed",
+                    WeightChange = material.WeightUsed, // Positive because it increases available weight
+                    WeightAfter = inventory.AvailableWeight,
+                    CostPerGram = inventory.AverageCostPerGram,
+                    TotalCost = material.WeightUsed * inventory.AverageCostPerGram,
+                    Reference = $"Manufacturing Reservation Reversal",
+                    Notes = $"Reversed reservation of {material.WeightUsed}g",
+                    MovementDate = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = userId,
+                    IsActive = true
+                };
+
+                await _unitOfWork.Repository<RawGoldInventoryMovement>().AddAsync(movement);
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Complete manufacturing workflow and finalize raw gold consumption
+    /// </summary>
+    public async Task<ProductManufactureDto> CompleteManufacturingAsync(int manufacturingId, string userId)
+    {
+        try
+        {
+            var manufacturing = await _repository.GetByIdAsync(manufacturingId);
+            if (manufacturing == null)
+            {
+                throw new InvalidOperationException($"Manufacturing record {manufacturingId} not found");
+            }
+
+            if (manufacturing.Status == "Completed")
+            {
+                throw new InvalidOperationException("Manufacturing is already completed");
+            }
+
+            if (manufacturing.Status == "Cancelled")
+            {
+                throw new InvalidOperationException("Cannot complete cancelled manufacturing");
+            }
+
+            // Get raw materials used in this manufacturing
+            var rawMaterials = await GetRawMaterialsForManufacturingAsync(manufacturingId);
+
+            // Complete raw gold consumption (convert reservations to actual consumption)
+            await CompleteRawGoldConsumptionAsync(rawMaterials, userId);
+
+            // Transfer ownership from raw gold to manufactured products
+            await TransferOwnershipFromRawGoldAsync(manufacturingId, rawMaterials, userId);
+
+            // Update manufacturing status
+            manufacturing.Status = "Completed";
+            manufacturing.WorkflowStep = "Complete";
+            manufacturing.ModifiedAt = DateTime.UtcNow;
+            manufacturing.ModifiedBy = userId;
+
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Manufacturing {ManufacturingId} completed successfully", manufacturingId);
+
+            return _mapper.Map<ProductManufactureDto>(manufacturing);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error completing manufacturing {ManufacturingId}", manufacturingId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Cancel manufacturing and reverse all reservations and records
+    /// </summary>
+    public async Task<ProductManufactureDto> CancelManufacturingAsync(int manufacturingId, string userId, string? cancellationReason = null)
+    {
+        try
+        {
+            var manufacturing = await _repository.GetByIdAsync(manufacturingId);
+            if (manufacturing == null)
+            {
+                throw new InvalidOperationException($"Manufacturing record {manufacturingId} not found");
+            }
+
+            if (manufacturing.Status == "Completed")
+            {
+                throw new InvalidOperationException("Cannot cancel completed manufacturing");
+            }
+
+            if (manufacturing.Status == "Cancelled")
+            {
+                throw new InvalidOperationException("Manufacturing is already cancelled");
+            }
+
+            // Get raw materials used in this manufacturing
+            var rawMaterials = await GetRawMaterialsForManufacturingAsync(manufacturingId);
+
+            // Reverse raw gold reservations
+            await ReverseRawGoldReservationsAsync(rawMaterials, userId);
+
+            // Reverse any product ownership records created
+            await ReverseProductOwnershipAsync(manufacturingId, userId);
+
+            // Reverse product inventory if any was added
+            await ReverseProductInventoryAsync(manufacturing.ProductId, manufacturing.BranchId, manufacturing.QuantityProduced, userId);
+
+            // Update manufacturing status
+            manufacturing.Status = "Cancelled";
+            manufacturing.WorkflowStep = "Cancelled";
+            manufacturing.ManufacturingNotes = string.IsNullOrEmpty(manufacturing.ManufacturingNotes) 
+                ? $"Cancelled: {cancellationReason}" 
+                : $"{manufacturing.ManufacturingNotes}\nCancelled: {cancellationReason}";
+            manufacturing.ModifiedAt = DateTime.UtcNow;
+            manufacturing.ModifiedBy = userId;
+
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Manufacturing {ManufacturingId} cancelled successfully. Reason: {Reason}", manufacturingId, cancellationReason);
+
+            return _mapper.Map<ProductManufactureDto>(manufacturing);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling manufacturing {ManufacturingId}", manufacturingId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Complete manufacturing and convert reservations to actual consumption
+    /// </summary>
+    private async Task CompleteRawGoldConsumptionAsync(List<ProductManufactureRawMaterialDto> rawMaterials, string userId)
+    {
+        foreach (var material in rawMaterials)
+        {
+            var inventory = await _unitOfWork.Repository<RawGoldInventory>()
+                .GetQueryable()
+                .FirstOrDefaultAsync(rgi => rgi.KaratTypeId == material.KaratTypeId && 
+                                          rgi.IsActive);
+
+            if (inventory == null)
+            {
+                throw new InvalidOperationException($"Raw gold inventory not found for karat type {material.KaratTypeId}");
+            }
+
+            // Convert reservation to actual consumption
+            inventory.WeightOnHand -= material.WeightUsed;
+            inventory.WeightReserved = Math.Max(0, inventory.WeightReserved - material.WeightUsed);
+            inventory.LastMovementDate = DateTime.UtcNow;
+            inventory.ModifiedAt = DateTime.UtcNow;
+            inventory.ModifiedBy = userId;
+
+            // Create inventory movement record for consumption
+            var movement = new RawGoldInventoryMovement
+            {
+                RawGoldInventoryId = inventory.Id,
+                MovementType = "Manufacturing Consumption",
+                WeightChange = -material.WeightUsed,
+                WeightAfter = inventory.WeightOnHand,
+                CostPerGram = inventory.AverageCostPerGram,
+                TotalCost = material.WeightUsed * inventory.AverageCostPerGram,
+                Reference = $"Manufacturing Completed",
+                Notes = $"Consumed {material.WeightUsed}g in manufacturing",
+                MovementDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = userId,
+                IsActive = true
+            };
+
+            await _unitOfWork.Repository<RawGoldInventoryMovement>().AddAsync(movement);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Get raw materials used in a specific manufacturing record
+    /// </summary>
+    private async Task<List<ProductManufactureRawMaterialDto>> GetRawMaterialsForManufacturingAsync(int manufacturingId)
+    {
+        // This would typically come from a manufacturing raw materials table
+        // For now, we'll reconstruct from the manufacturing record
+        var manufacturing = await _repository.GetByIdAsync(manufacturingId);
+        if (manufacturing == null)
+        {
+            return new List<ProductManufactureRawMaterialDto>();
+        }
+
+        // Get the raw gold purchase order item details
+        var purchaseOrderItem = await _unitOfWork.Repository<RawGoldPurchaseOrderItem>()
+            .GetQueryable()
+            .Include(poi => poi.RawGoldPurchaseOrder)
+            .FirstOrDefaultAsync(poi => poi.Id == manufacturing.SourceRawGoldPurchaseOrderItemId);
+
+        if (purchaseOrderItem == null)
+        {
+            return new List<ProductManufactureRawMaterialDto>();
+        }
+
+        return new List<ProductManufactureRawMaterialDto>
+        {
+            new ProductManufactureRawMaterialDto
+            {
+                PurchaseOrderItemId = purchaseOrderItem.Id,
+                ProductId = manufacturing.ProductId,
+                SupplierId = purchaseOrderItem.RawGoldPurchaseOrder.SupplierId,
+                KaratTypeId = purchaseOrderItem.KaratTypeId,
+                ConsumedWeight = manufacturing.ConsumedWeight,
+                WastageWeight = manufacturing.WastageWeight,
+                CostPerGram = purchaseOrderItem.UnitCostPerGram,
+                TotalRawMaterialCost = manufacturing.ConsumedWeight * purchaseOrderItem.UnitCostPerGram,
+                ContributionPercentage = 1.0m,
+                SequenceOrder = 1
+            }
+        };
+    }
+
+    /// <summary>
+    /// Reverse product ownership records created during manufacturing
+    /// </summary>
+    private async Task ReverseProductOwnershipAsync(int manufacturingId, string userId)
+    {
+        var ownershipRecords = await _unitOfWork.Repository<ProductOwnership>()
+            .GetQueryable()
+            .Where(po => po.ManufacturingRecordId == manufacturingId && po.IsActive)
+            .ToListAsync();
+
+        foreach (var ownership in ownershipRecords)
+        {
+            ownership.IsActive = false;
+            ownership.ModifiedAt = DateTime.UtcNow;
+            ownership.ModifiedBy = userId;
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Reverse product inventory adjustments made during manufacturing
+    /// </summary>
+    private async Task ReverseProductInventoryAsync(int productId, int branchId, int quantity, string userId)
+    {
+        var inventory = await _unitOfWork.Repository<Inventory>()
+            .GetQueryable()
+            .FirstOrDefaultAsync(pi => pi.ProductId == productId && pi.BranchId == branchId && pi.IsActive);
+
+        if (inventory != null)
+        {
+            inventory.QuantityOnHand = Math.Max(0, inventory.QuantityOnHand - quantity);
+            inventory.ModifiedAt = DateTime.UtcNow;
+            inventory.ModifiedBy = userId;
+
+            // Create inventory movement record
+            var movement = new InventoryMovement
+            {
+                InventoryId = inventory.Id,
+                MovementType = "Manufacturing Reversal",
+                QuantityChange = -quantity,
+                QuantityBalance = inventory.QuantityOnHand,
+                WeightChange = 0, // No weight change for quantity reversal
+                WeightBalance = inventory.WeightOnHand,
+                UnitCost = 0, // Will be calculated based on average cost
+                ReferenceNumber = "Manufacturing Cancellation",
+                Notes = $"Reversed manufacturing of {quantity} units",
+                MovementDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = userId,
+                IsActive = true
+            };
+
+            await _unitOfWork.Repository<InventoryMovement>().AddAsync(movement);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
     }
 
     #endregion

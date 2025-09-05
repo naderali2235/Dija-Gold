@@ -1,6 +1,8 @@
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
-
+using DijaGoldPOS.API.Models.CustomerModels;
+using DijaGoldPOS.API.Models.ProductModels;
 using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -373,7 +375,7 @@ public class PricingService : IPricingService
                 Name = update.Name,
                 ProductCategoryId = update.ProductCategoryId,
                 SubCategoryId = update.SubCategoryId,
-                SubCategory = update.SubCategory, // Keep for backward compatibility
+                // SubCategory is computed from SubCategoryId
                 ChargeTypeId = update.ChargeTypeId,
                 ChargeValue = update.ChargeValue,
                 EffectiveFrom = update.EffectiveFrom,

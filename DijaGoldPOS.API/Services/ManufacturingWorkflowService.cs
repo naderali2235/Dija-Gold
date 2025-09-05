@@ -1,10 +1,10 @@
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IServices;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 
 namespace DijaGoldPOS.API.Services;
 

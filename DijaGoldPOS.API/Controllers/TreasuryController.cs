@@ -1,10 +1,10 @@
 using DijaGoldPOS.API.IServices;
-using DijaGoldPOS.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FluentValidation;
 using FluentValidation.Results;
 using FluentValidation.AspNetCore;
+using DijaGoldPOS.API.Models.FinancialModels;
 
 namespace DijaGoldPOS.API.Controllers;
 

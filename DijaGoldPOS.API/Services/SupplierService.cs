@@ -1,6 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
 using Microsoft.Extensions.Logging;
 

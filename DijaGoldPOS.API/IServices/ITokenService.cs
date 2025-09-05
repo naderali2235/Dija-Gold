@@ -1,6 +1,6 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.Shared;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for JWT token service

@@ -2,7 +2,7 @@ using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Shared;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service interface for product management operations

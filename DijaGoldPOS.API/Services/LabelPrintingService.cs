@@ -2,7 +2,9 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using DijaGoldPOS.API.Data;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ProductModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Services;

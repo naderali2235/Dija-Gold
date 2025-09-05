@@ -1,8 +1,8 @@
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.Shared;
 using DijaGoldPOS.API.IRepositories;
 using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.Models.SalesModels;
 
 namespace DijaGoldPOS.API.Repositories;
 

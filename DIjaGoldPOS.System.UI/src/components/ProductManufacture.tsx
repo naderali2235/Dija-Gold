@@ -95,6 +95,7 @@ import {
   useBranches,
   useSearchTechnicians,
   useKaratTypes,
+  useGoldRates,
 } from '../hooks/useApi';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from './ui/command';
 import { CreateProductManufactureRawMaterialDto } from '../types/ownership';
@@ -143,7 +144,7 @@ const ProductManufacture: React.FC = () => {
     quantityToProduce: '1',
     sourceRawGoldPurchaseOrderItemId: '',
     consumedWeight: '',
-    wastageWeight: '',
+    wastageWeight: '0',
     manufacturingCostPerGram: '',
     batchNumber: '',
     manufacturingNotes: '',
@@ -152,6 +153,10 @@ const ProductManufacture: React.FC = () => {
     priority: 'Normal',
     estimatedCompletionDate: ''
   });
+
+  // Latest prices state from gold rates API
+  const [latestPrices, setLatestPrices] = useState<Record<string, number>>({});
+  const [loadingPrices, setLoadingPrices] = useState(false);
 
   // Add loading state for PO items
   const [poItemsLoading, setPOItemsLoading] = useState(false);
@@ -204,6 +209,7 @@ const ProductManufacture: React.FC = () => {
   const deleteManufacturingApi = useDeleteProductManufacturingRecord();
   const branchesApi = useBranches();
   const karatTypesApi = useKaratTypes();
+  const goldRatesApi = useGoldRates();
   const { 
     execute: searchTechnicians, 
     data: techniciansData, 
@@ -261,6 +267,26 @@ const ProductManufacture: React.FC = () => {
     setManufacturingForm(prev => ({ ...prev, productId: '', sourceRawGoldPurchaseOrderItemId: '' }));
   }, [selectedKaratTypeId]);
 
+  // Fetch latest gold rates from pricing API
+  const fetchLatestPrices = async () => {
+    setLoadingPrices(true);
+    try {
+      const goldRates = await goldRatesApi.fetchRates();
+      
+      // Convert gold rates to pricing format
+      const prices: Record<string, number> = {};
+      goldRates?.forEach(rate => {
+        prices[rate.karatTypeId.toString()] = rate.ratePerGram;
+      });
+      
+      setLatestPrices(prices);
+    } catch (error) {
+      console.error('Error fetching latest prices:', error);
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
   // Fetch raw gold purchase order items when product changes
   useEffect(() => {
     const fetchRawGoldItems = async () => {
@@ -270,6 +296,23 @@ const ProductManufacture: React.FC = () => {
           // Load selected product details to get its karat type
           const product = await productApi.execute(parseInt(manufacturingForm.productId));
           const productKaratTypeId = product?.karatTypeId ?? product?.karatType?.id;
+
+          // Set default consumed weight to product weight
+          const productWeight = product?.weight || 0;
+          setManufacturingForm(prev => ({ 
+            ...prev, 
+            consumedWeight: productWeight.toString(),
+            wastageWeight: '0' // Reset wastage to 0
+          }));
+
+          // Set manufacturing cost per gram from latest prices
+          if (productKaratTypeId && latestPrices[productKaratTypeId.toString()]) {
+            const latestPrice = latestPrices[productKaratTypeId.toString()];
+            setManufacturingForm(prev => ({ 
+              ...prev, 
+              manufacturingCostPerGram: latestPrice.toString()
+            }));
+          }
 
           // Use backend endpoint for available raw gold items and filter by product karat type
           const availableItemsAll = await availableRawGoldItemsApi.execute();
@@ -289,12 +332,18 @@ const ProductManufacture: React.FC = () => {
         }
       } else {
         setSelectedProductPOItems([]);
-        setManufacturingForm(prev => ({ ...prev, sourceRawGoldPurchaseOrderItemId: '' }));
+        setManufacturingForm(prev => ({ 
+          ...prev, 
+          sourceRawGoldPurchaseOrderItemId: '',
+          consumedWeight: '',
+          wastageWeight: '0',
+          manufacturingCostPerGram: ''
+        }));
         setSelectedItemRemainingWeight(null);
       }
     };
     fetchRawGoldItems();
-  }, [manufacturingForm.productId]);
+  }, [manufacturingForm.productId, latestPrices]);
 
   // When source PO item changes, fetch remaining weight
   useEffect(() => {
@@ -327,6 +376,11 @@ const ProductManufacture: React.FC = () => {
         ]);
         setManufacturingRecords(records || []);
 
+        // Fetch latest prices after karat types are loaded
+        if (karatTypesApi.data && karatTypesApi.data.length > 0) {
+          await fetchLatestPrices();
+        }
+
       } catch (error) {
         console.error('Error fetching data:', error);
         setManufacturingRecords([]);
@@ -338,6 +392,13 @@ const ProductManufacture: React.FC = () => {
 
     fetchData();
   }, []);
+
+  // Fetch latest prices when karat types are loaded
+  useEffect(() => {
+    if (karatTypesApi.data && karatTypesApi.data.length > 0 && Object.keys(latestPrices).length === 0) {
+      fetchLatestPrices();
+    }
+  }, [karatTypesApi.data]);
 
   // Fetch technicians separately on mount
   useEffect(() => {
@@ -447,7 +508,7 @@ const ProductManufacture: React.FC = () => {
       quantityToProduce: '1',
       sourceRawGoldPurchaseOrderItemId: '',
       consumedWeight: '',
-      wastageWeight: '',
+      wastageWeight: '0',
       manufacturingCostPerGram: '',
       batchNumber: '',
       manufacturingNotes: '',
@@ -1125,14 +1186,16 @@ const ProductManufacture: React.FC = () => {
                     <SelectValue placeholder={
                       !manufacturingForm.productId ? "Select product first" :
                       poItemsLoading ? "Loading raw gold items..." :
-                      selectedProductPOItems.length === 0 ? "No compatible raw gold items found" :
+                      selectedProductPOItems.length === 0 ? "No raw gold items with available weight" :
                       "Select raw gold source"
                     } />
                   </SelectTrigger>
                   <SelectContent>
-                    {selectedProductPOItems.map((item) => (
+                    {selectedProductPOItems
+                      .filter((item) => (item.availableWeightForManufacturing ?? item.remainingWeight ?? 0) > 0)
+                      .map((item) => (
                       <SelectItem key={item.id} value={item.id.toString()}>
-                        {item.karatTypeName || item.karatType?.name || 'Unknown Karat'} Gold - {item.supplierName || 'Supplier'} - PO: {item.purchaseOrderNumber} ({(item.availableWeightForManufacturing ?? item.remainingWeight ?? 0)}g available)
+                        {item.karatTypeName || item.karatType?.name || 'Unknown Karat'} Gold - {item.supplierName || 'Supplier'} - PO: {item.purchaseOrderNumber} ({(item.availableWeightForManufacturing ?? item.remainingWeight ?? 0).toFixed(3)}g available)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1268,8 +1331,19 @@ const ProductManufacture: React.FC = () => {
                   step="0.01"
                   value={manufacturingForm.manufacturingCostPerGram}
                   onChange={(e) => setManufacturingForm(prev => ({ ...prev, manufacturingCostPerGram: e.target.value }))}
-                  placeholder="Enter manufacturing cost per gram"
+                  placeholder={(() => {
+                    if (manufacturingForm.productId && productApi.data?.karatTypeId) {
+                      const karatPrice = latestPrices[productApi.data.karatTypeId.toString()];
+                      return karatPrice ? `Latest: $${karatPrice.toFixed(2)}` : "Enter manufacturing cost per gram";
+                    }
+                    return "Enter manufacturing cost per gram";
+                  })()}
                 />
+                {manufacturingForm.productId && productApi.data?.karatTypeId && latestPrices[productApi.data.karatTypeId.toString()] && (
+                  <p className="text-xs text-muted-foreground">
+                    Latest price: ${latestPrices[productApi.data.karatTypeId.toString()].toFixed(2)}/g
+                  </p>
+                )}
               </div>
             </div>
 

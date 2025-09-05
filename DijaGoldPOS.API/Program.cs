@@ -1,5 +1,4 @@
 using DijaGoldPOS.API.Data;
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.Extensions;
@@ -19,6 +18,7 @@ using AutoMapper;
 using FluentValidation.AspNetCore;
 using FluentValidation;
 using DijaGoldPOS.API.Validators;
+using DijaGoldPOS.API.Models.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 

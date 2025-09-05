@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.CustomerModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;
@@ -139,8 +140,8 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
         if (customer != null)
         {
             customer.TotalPurchaseAmount += transactionAmount;
-            customer.LastPurchaseDate = DateTime.UtcNow;
-            customer.TotalOrders += 1;
+            // LastPurchaseDate and TotalOrders are computed properties - they update automatically
+            customer.LastTransactionDate = DateTime.UtcNow;
             
             // Update loyalty tier based on total purchases (example logic)
             // 1=Basic, 2=Bronze, 3=Silver, 4=Gold, 5=Platinum

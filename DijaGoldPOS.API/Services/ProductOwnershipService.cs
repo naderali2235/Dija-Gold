@@ -1,8 +1,10 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.ProductModels;
 using DijaGoldPOS.API.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace DijaGoldPOS.API.Services;
@@ -297,117 +299,117 @@ public class ProductOwnershipService : IProductOwnershipService
         }
     }
 
-    /// <summary>
-    /// Convert raw gold to products (Scenario 2)
-    /// </summary>
-    public async Task<(bool Success, string Message)> ConvertRawGoldToProductsAsync(ConvertRawGoldRequest request, string userId)
-    {
-        try
-        {
-            _logger.LogInformation("Converting raw gold to products. RawGoldProductId: {RawGoldProductId}, WeightToConvert: {WeightToConvert}", 
-                request.RawGoldProductId, request.WeightToConvert);
+    ///// <summary>
+    ///// Convert raw gold to products (Scenario 2)
+    ///// </summary>
+    //public async Task<(bool Success, string Message)> ConvertRawGoldToProductsAsync(ConvertRawGoldRequest request, string userId)
+    //{
+    //    try
+    //    {
+    //        _logger.LogInformation("Converting raw gold to products. RawGoldProductId: {RawGoldProductId}, WeightToConvert: {WeightToConvert}", 
+    //            request.RawGoldProductId, request.WeightToConvert);
 
-            // Validate raw gold product exists and has sufficient ownership
-            var rawGoldOwnerships = await _productOwnershipRepository.GetByProductAndBranchAsync(request.RawGoldProductId, request.BranchId);
-            var totalOwnedWeight = rawGoldOwnerships.Where(o => o.IsActive).Sum(o => o.OwnedWeight);
+    //        // Validate raw gold product exists and has sufficient ownership
+    //        var rawGoldOwnerships = await _productOwnershipRepository.GetByProductAndBranchAsync(request.RawGoldProductId, request.BranchId);
+    //        var totalOwnedWeight = rawGoldOwnerships.Where(o => o.IsActive).Sum(o => o.OwnedWeight);
 
-            if (totalOwnedWeight < request.WeightToConvert)
-            {
-                var message = $"Insufficient raw gold weight. Available: {totalOwnedWeight}g, Required: {request.WeightToConvert}g";
-                _logger.LogWarning(message);
-                return (false, message);
-            }
+    //        if (totalOwnedWeight < request.WeightToConvert)
+    //        {
+    //            var message = $"Insufficient raw gold weight. Available: {totalOwnedWeight}g, Required: {request.WeightToConvert}g";
+    //            _logger.LogWarning(message);
+    //            return (false, message);
+    //        }
 
-            // Validate new products exist
-            foreach (var newProduct in request.NewProducts)
-            {
-                var product = await _productRepository.GetByIdAsync(newProduct.ProductId);
-                if (product == null)
-                {
-                    var message = $"Product with ID {newProduct.ProductId} not found";
-                    _logger.LogWarning(message);
-                    return (false, message);
-                }
-            }
+    //        // Validate new products exist
+    //        foreach (var newProduct in request.NewProducts)
+    //        {
+    //            var product = await _productRepository.GetByIdAsync(newProduct.ProductId);
+    //            if (product == null)
+    //            {
+    //                var message = $"Product with ID {newProduct.ProductId} not found";
+    //                _logger.LogWarning(message);
+    //                return (false, message);
+    //            }
+    //        }
 
-            // Calculate total weight of new products
-            var totalNewProductWeight = request.NewProducts.Sum(p => p.Weight);
-            if (Math.Abs(totalNewProductWeight - request.WeightToConvert) > 0.001m) // Allow small tolerance
-            {
-                var message = $"Weight mismatch. Raw gold weight: {request.WeightToConvert}g, New products total weight: {totalNewProductWeight}g";
-                _logger.LogWarning(message);
-                return (false, message);
-            }
+    //        // Calculate total weight of new products
+    //        var totalNewProductWeight = request.NewProducts.Sum(p => p.Weight);
+    //        if (Math.Abs(totalNewProductWeight - request.WeightToConvert) > 0.001m) // Allow small tolerance
+    //        {
+    //            var message = $"Weight mismatch. Raw gold weight: {request.WeightToConvert}g, New products total weight: {totalNewProductWeight}g";
+    //            _logger.LogWarning(message);
+    //            return (false, message);
+    //        }
 
-            // Deduct from raw gold ownership
-            var remainingWeight = request.WeightToConvert;
-            var rawGoldOwnershipsList = rawGoldOwnerships.Where(o => o.IsActive && o.OwnedWeight > 0).OrderBy(o => o.CreatedAt).ToList();
+    //        // Deduct from raw gold ownership
+    //        var remainingWeight = request.WeightToConvert;
+    //        var rawGoldOwnershipsList = rawGoldOwnerships.Where(o => o.IsActive && o.OwnedWeight > 0).OrderBy(o => o.CreatedAt).ToList();
 
-            foreach (var ownership in rawGoldOwnershipsList)
-            {
-                if (remainingWeight <= 0) break;
+    //        foreach (var ownership in rawGoldOwnershipsList)
+    //        {
+    //            if (remainingWeight <= 0) break;
 
-                var weightToDeduct = Math.Min(remainingWeight, ownership.OwnedWeight);
-                var quantityToDeduct = (weightToDeduct / ownership.OwnedWeight) * ownership.OwnedQuantity;
+    //            var weightToDeduct = Math.Min(remainingWeight, ownership.OwnedWeight);
+    //            var quantityToDeduct = (weightToDeduct / ownership.OwnedWeight) * ownership.OwnedQuantity;
 
-                // Update raw gold ownership
-                ownership.OwnedQuantity -= quantityToDeduct;
-                ownership.OwnedWeight -= weightToDeduct;
-                ownership.OwnershipPercentage = ownership.TotalQuantity > 0 
-                    ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100
-                    : 0;
-                ownership.ModifiedAt = DateTime.UtcNow;
-                ownership.ModifiedBy = userId;
+    //            // Update raw gold ownership
+    //            ownership.OwnedQuantity -= quantityToDeduct;
+    //            ownership.OwnedWeight -= weightToDeduct;
+    //            ownership.OwnershipPercentage = ownership.TotalQuantity > 0 
+    //                ? (ownership.OwnedQuantity / ownership.TotalQuantity) * 100
+    //                : 0;
+    //            ownership.ModifiedAt = DateTime.UtcNow;
+    //            ownership.ModifiedBy = userId;
 
-                remainingWeight -= weightToDeduct;
-            }
+    //            remainingWeight -= weightToDeduct;
+    //        }
 
-            // Ensure there are new products to create
-            if (request.NewProducts == null || request.NewProducts.Count == 0)
-            {
-                var message = "No new products specified for conversion.";
-                _logger.LogWarning(message);
-                return (false, message);
-            }
+    //        // Ensure there are new products to create
+    //        if (request.NewProducts == null || request.NewProducts.Count == 0)
+    //        {
+    //            var message = "No new products specified for conversion.";
+    //            _logger.LogWarning(message);
+    //            return (false, message);
+    //        }
 
-            // Create ownership records for new products
-            foreach (var newProduct in request.NewProducts)
-            {
-                var newOwnership = new ProductOwnership
-                {
-                    ProductId = newProduct.ProductId,
-                    BranchId = request.BranchId,
-                    TotalQuantity = newProduct.Quantity,
-                    TotalWeight = newProduct.Weight,
-                    OwnedQuantity = newProduct.Quantity,
-                    OwnedWeight = newProduct.Weight,
-                    OwnershipPercentage = 100, // Fully owned since converted from owned raw gold (stored as 0-100)
-                    TotalCost = 0, // No additional cost for conversion
-                    AmountPaid = 0,
-                    OutstandingAmount = 0,
-                    IsActive = true,
-                    CreatedBy = userId,
-                    ModifiedBy = userId,
-                    CreatedAt = DateTime.UtcNow,
-                    ModifiedAt = DateTime.UtcNow
-                };
+    //        // Create ownership records for new products
+    //        foreach (var newProduct in request.NewProducts)
+    //        {
+    //            var newOwnership = new ProductOwnership
+    //            {
+    //                ProductId = newProduct.ProductId,
+    //                BranchId = request.BranchId,
+    //                TotalQuantity = newProduct.Quantity,
+    //                TotalWeight = newProduct.Weight,
+    //                OwnedQuantity = newProduct.Quantity,
+    //                OwnedWeight = newProduct.Weight,
+    //                OwnershipPercentage = 100, // Fully owned since converted from owned raw gold (stored as 0-100)
+    //                TotalCost = 0, // No additional cost for conversion
+    //                AmountPaid = 0,
+    //                OutstandingAmount = 0,
+    //                IsActive = true,
+    //                CreatedBy = userId,
+    //                ModifiedBy = userId,
+    //                CreatedAt = DateTime.UtcNow,
+    //                ModifiedAt = DateTime.UtcNow
+    //            };
 
-                await _productOwnershipRepository.AddAsync(newOwnership);
-            }
+    //            await _productOwnershipRepository.AddAsync(newOwnership);
+    //        }
 
-            await _unitOfWork.SaveChangesAsync();
+    //        await _unitOfWork.SaveChangesAsync();
 
-            var success = $"Successfully converted {request.WeightToConvert}g of raw gold to {request.NewProducts.Count} products";
-            _logger.LogInformation(success);
-            return (true, success);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error converting raw gold to products. RawGoldProductId: {RawGoldProductId}", 
-                request.RawGoldProductId);
-            throw;
-        }
-    }
+    //        var success = $"Successfully converted {request.WeightToConvert}g of raw gold to {request.NewProducts.Count} products";
+    //        _logger.LogInformation(success);
+    //        return (true, success);
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error converting raw gold to products. RawGoldProductId: {RawGoldProductId}", 
+    //            request.RawGoldProductId);
+    //        throw;
+    //    }
+    //}
 
     /// <summary>
     /// Get ownership alerts
@@ -676,6 +678,96 @@ public class ProductOwnershipService : IProductOwnershipService
         {
             _logger.LogError(ex, "Error getting product ownership list. BranchId: {BranchId}", branchId);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Validate product sale and check for unpaid supplier balances
+    /// </summary>
+    public async Task<(bool CanSell, string Message, List<string> Warnings)> ValidateProductSaleAsync(int productId, int branchId, decimal requestedQuantity)
+    {
+        try
+        {
+            var warnings = new List<string>();
+            
+            // Get ownership records for this product and branch
+            var ownerships = await _productOwnershipRepository.GetByProductAndBranchAsync(productId, branchId);
+            
+            foreach (var ownership in ownerships.Where(o => o.IsActive && o.OutstandingAmount > 0))
+            {
+                var supplier = await _supplierRepository.GetByIdAsync(ownership.SupplierId ?? 0);
+                var supplierName = supplier?.CompanyName ?? "Unknown Supplier";
+                
+                if (ownership.AmountPaid == 0)
+                {
+                    warnings.Add($"WARNING: Product from {supplierName} is completely UNPAID (Outstanding: ${ownership.OutstandingAmount:F2})");
+                }
+                else if (ownership.OutstandingAmount > 0)
+                {
+                    warnings.Add($"WARNING: Product from {supplierName} is PARTIALLY PAID (Outstanding: ${ownership.OutstandingAmount:F2}, Paid: ${ownership.AmountPaid:F2})");
+                }
+            }
+
+            return (true, warnings.Any() ? "Sale allowed with payment warnings" : "Sale validated successfully", warnings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating product sale for product {ProductId}", productId);
+            return (false, "Error validating sale", new List<string> { "System error occurred during validation" });
+        }
+    }
+
+    /// <summary>
+    /// Get products with unpaid supplier balances (sales risk report)
+    /// </summary>
+    public async Task<List<ProductSaleRiskDto>> GetProductsWithUnpaidSupplierBalancesAsync(int? branchId = null)
+    {
+        try
+        {
+            var query = _productOwnershipRepository.GetQueryable()
+                .Where(po => po.IsActive && po.OutstandingAmount > 0);
+
+            if (branchId.HasValue)
+            {
+                query = query.Where(po => po.BranchId == branchId.Value);
+            }
+
+            var ownerships = await query
+                .Include(po => po.Product)
+                .Include(po => po.Branch)
+                .Include(po => po.Supplier)
+                .ToListAsync();
+
+            var riskProducts = ownerships
+                .GroupBy(po => new { po.ProductId, po.BranchId })
+                .Select(g => new ProductSaleRiskDto
+                {
+                    ProductId = g.Key.ProductId,
+                    ProductName = g.First().Product?.Name ?? "Unknown Product",
+                    ProductCode = g.First().Product?.ProductCode ?? "Unknown Code",
+                    BranchId = g.Key.BranchId,
+                    BranchName = g.First().Branch?.Name ?? "Unknown Branch",
+                    AvailableQuantity = g.Sum(po => po.OwnedQuantity),
+                    TotalOutstandingAmount = g.Sum(po => po.OutstandingAmount),
+                    UnpaidSuppliers = g.Select(po => new UnpaidSupplierDto
+                    {
+                        SupplierId = po.SupplierId ?? 0,
+                        SupplierName = po.Supplier?.CompanyName ?? "Unknown Supplier",
+                        OutstandingAmount = po.OutstandingAmount,
+                        AmountPaid = po.AmountPaid,
+                        TotalCost = po.TotalCost,
+                        PaymentStatus = po.AmountPaid == 0 ? "Unpaid" : 
+                                       po.OutstandingAmount == 0 ? "Paid" : "Partial"
+                    }).ToList()
+                })
+                .ToList();
+
+            return riskProducts;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting products with unpaid supplier balances");
+            return new List<ProductSaleRiskDto>();
         }
     }
 }

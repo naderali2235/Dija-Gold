@@ -85,12 +85,12 @@ export interface PaySupplierRequest {
 
 export const treasuryApi = {
   async getBranchBalance(branchId: number): Promise<number> {
-    const res = await apiRequest<number>(`/Treasury/branches/${branchId}/balance`);
+    const res = await apiRequest<number>(`/treasury/branches/${branchId}/balance`);
     return res;
   },
 
   async adjust(branchId: number, request: AdjustRequest): Promise<TreasuryTransaction> {
-    const res = await apiRequest<TreasuryTransaction>(`/Treasury/branches/${branchId}/adjust`, {
+    const res = await apiRequest<TreasuryTransaction>(`/treasury/branches/${branchId}/adjust`, {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -98,7 +98,7 @@ export const treasuryApi = {
   },
 
   async feedFromCashDrawer(branchId: number, request: FeedFromCashDrawerRequest): Promise<TreasuryTransaction> {
-    const res = await apiRequest<TreasuryTransaction>(`/Treasury/branches/${branchId}/feed-from-cashdrawer`, {
+    const res = await apiRequest<TreasuryTransaction>(`/treasury/branches/${branchId}/feed-from-cashdrawer`, {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -112,13 +112,13 @@ export const treasuryApi = {
         .filter(([, v]) => v !== undefined && v !== null)
         .map(([k, v]) => [k, String(v)])
     ).toString();
-    const url = qs ? `/Treasury/branches/${branchId}/transactions?${qs}` : `/Treasury/branches/${branchId}/transactions`;
+    const url = qs ? `/treasury/branches/${branchId}/transactions?${qs}` : `/treasury/branches/${branchId}/transactions`;
     const res = await apiRequest<TreasuryTransaction[]>(url);
     return res;
   },
 
   async paySupplier(branchId: number, request: PaySupplierRequest): Promise<{ treasuryTxn: TreasuryTransaction; supplierTxn: SupplierTransactionDto }> {
-    const res = await apiRequest<{ treasuryTxn: TreasuryTransaction; supplierTxn: SupplierTransactionDto }>(`/Treasury/branches/${branchId}/pay-supplier`, {
+    const res = await apiRequest<{ treasuryTxn: TreasuryTransaction; supplierTxn: SupplierTransactionDto }>(`/treasury/branches/${branchId}/pay-supplier`, {
       method: 'POST',
       body: JSON.stringify(request),
     });

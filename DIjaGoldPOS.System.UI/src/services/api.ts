@@ -4705,7 +4705,7 @@ export interface WorkflowPerformanceReportDto {
 // Product Manufacturing API
 const productManufactureApi = {
   async getAllManufacturingRecords(): Promise<ProductManufactureDto[]> {
-    const response = await apiRequest<ProductManufactureDto[]>('/ProductManufacture');
+    const response = await apiRequest<ProductManufactureDto[]>('/productmanufacture');
     
     // The API returns the array directly, not wrapped in a response object
     if (Array.isArray(response)) {
@@ -4726,7 +4726,7 @@ const productManufactureApi = {
   },
 
   async createManufacturingRecord(data: CreateProductManufactureDto): Promise<ProductManufactureDto> {
-    const response = await apiRequest<ProductManufactureDto>('/ProductManufacture', {
+    const response = await apiRequest<ProductManufactureDto>('/productmanufacture', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -4787,7 +4787,7 @@ const productManufactureApi = {
   },
 
   async getAvailableRawGoldItems(): Promise<any[]> {
-    const response = await apiRequest<any[]>('/ProductManufacture/available-raw-gold');
+    const response = await apiRequest<any[]>('/productmanufacture/available-raw-gold');
 
     // The API may return an array directly, or a wrapped response
     if (Array.isArray(response)) {
@@ -4912,7 +4912,7 @@ const productManufactureApi = {
 // Ownership Consolidation API
 export const ownershipConsolidationApi = {
   async consolidateOwnership(data: { productId: number; supplierId: number; branchId: number }): Promise<ConsolidationResult> {
-    const response = await apiRequest<ConsolidationResult>('/OwnershipConsolidation/consolidate', {
+    const response = await apiRequest<ConsolidationResult>('/ownershipconsolidation/consolidate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -4947,7 +4947,7 @@ export const ownershipConsolidationApi = {
   },
 
   async calculateWeightedAverageCost(ownershipIds: number[]): Promise<WeightedAverageCost> {
-    const response = await apiRequest<WeightedAverageCost>('/OwnershipConsolidation/weighted-average-cost', {
+    const response = await apiRequest<WeightedAverageCost>('/ownershipconsolidation/weighted-average-cost', {
       method: 'POST',
       body: JSON.stringify(ownershipIds),
     });
@@ -4963,7 +4963,7 @@ export const ownershipConsolidationApi = {
 // Raw Gold Purchase Orders API
 export const rawGoldPurchaseOrdersApi = {
   async createRawGoldPurchaseOrder(request: any): Promise<any> {
-    const response = await apiRequest<any>('/RawGoldPurchaseOrders', {
+    const response = await apiRequest<any>('/rawgoldpurchaseorders', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -5282,7 +5282,7 @@ export const weightedAverageCostingApi = {
 const manufacturingReportsApi = {
   // Manufacturing Reports API endpoints
   async getManufacturingDashboard(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<ManufacturingDashboardDto> {
-    let url = '/ManufacturingReports/dashboard';
+    let url = '/manufacturingreports/dashboard';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
@@ -5301,7 +5301,7 @@ const manufacturingReportsApi = {
   },
 
   async getRawGoldUtilizationReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<RawGoldUtilizationReportDto> {
-    let url = '/ManufacturingReports/raw-gold-utilization';
+    let url = '/manufacturingreports/raw-gold-utilization';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
@@ -5320,7 +5320,7 @@ const manufacturingReportsApi = {
   },
 
   async getEfficiencyReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<EfficiencyReportDto> {
-    let url = '/ManufacturingReports/efficiency';
+    let url = '/manufacturingreports/efficiency';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
@@ -5339,7 +5339,7 @@ const manufacturingReportsApi = {
   },
 
   async getCostAnalysisReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<CostAnalysisReportDto> {
-    let url = '/ManufacturingReports/cost-analysis';
+    let url = '/manufacturingreports/cost-analysis';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
@@ -5358,7 +5358,7 @@ const manufacturingReportsApi = {
   },
 
   async getWorkflowPerformanceReport(startDate?: string, endDate?: string, branchId?: number, technicianId?: number): Promise<WorkflowPerformanceReportDto> {
-    let url = '/ManufacturingReports/workflow-performance';
+    let url = '/manufacturingreports/workflow-performance';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);

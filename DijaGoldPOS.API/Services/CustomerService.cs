@@ -5,6 +5,7 @@ using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.CustomerModels;
 using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;
 

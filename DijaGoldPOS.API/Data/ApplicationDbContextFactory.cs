@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Services;
+using DijaGoldPOS.API.IServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -42,13 +42,7 @@ public class MockCurrentUserService : ICurrentUserService
 
     public string UserName => "System";
 
-    public bool IsAuthenticated => false;
-
-    public string? BranchId => null;
+    public int? BranchId => null;
 
     public string? BranchName => null;
-
-    public string? Email => null;
-
-    public IEnumerable<string> Roles => new List<string> { "Admin" };
 }

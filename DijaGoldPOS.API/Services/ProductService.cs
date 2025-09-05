@@ -5,6 +5,8 @@ using DijaGoldPOS.API.Shared;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Microsoft.EntityFrameworkCore;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.ProductModels;
 
 namespace DijaGoldPOS.API.Services;
 
@@ -247,7 +249,7 @@ public class ProductService : IProductService
             product.Brand = request.Brand;
             product.DesignStyle = request.DesignStyle;
             product.SubCategoryId = request.SubCategoryId;
-            product.SubCategory = request.SubCategory; // Keep for backward compatibility
+            // SubCategory is a computed property - no need to assign
             product.Shape = request.Shape;
             product.PurityCertificateNumber = request.PurityCertificateNumber;
             product.CountryOfOrigin = request.CountryOfOrigin;

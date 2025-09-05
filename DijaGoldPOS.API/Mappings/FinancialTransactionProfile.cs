@@ -1,6 +1,6 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.FinancialModels;
 using DijaGoldPOS.API.Services;
 
 namespace DijaGoldPOS.API.Mappings;

@@ -56,58 +56,6 @@ public class ProductOwnershipRequestValidator : AbstractValidator<ProductOwnersh
     }
 }
 
-/// <summary>
-/// Validator for ConvertRawGoldRequest
-/// </summary>
-public class ConvertRawGoldRequestValidator : AbstractValidator<ConvertRawGoldRequest>
-{
-    public ConvertRawGoldRequestValidator()
-    {
-        RuleFor(x => x.RawGoldProductId)
-            .GreaterThan(0)
-            .WithMessage("Raw gold product ID must be greater than 0");
-
-        RuleFor(x => x.BranchId)
-            .GreaterThan(0)
-            .WithMessage("Branch ID must be greater than 0");
-
-        RuleFor(x => x.WeightToConvert)
-            .GreaterThan(0)
-            .WithMessage("Weight to convert must be greater than 0");
-
-        RuleFor(x => x.QuantityToConvert)
-            .GreaterThan(0)
-            .WithMessage("Quantity to convert must be greater than 0");
-
-        RuleFor(x => x.NewProducts)
-            .NotEmpty()
-            .WithMessage("At least one new product must be specified");
-
-        RuleForEach(x => x.NewProducts)
-            .SetValidator(new NewProductFromRawGoldValidator());
-    }
-}
-
-/// <summary>
-/// Validator for NewProductFromRawGold
-/// </summary>
-public class NewProductFromRawGoldValidator : AbstractValidator<NewProductFromRawGold>
-{
-    public NewProductFromRawGoldValidator()
-    {
-        RuleFor(x => x.ProductId)
-            .GreaterThan(0)
-            .WithMessage("Product ID must be greater than 0");
-
-        RuleFor(x => x.Quantity)
-            .GreaterThan(0)
-            .WithMessage("Quantity must be greater than 0");
-
-        RuleFor(x => x.Weight)
-            .GreaterThan(0)
-            .WithMessage("Weight must be greater than 0");
-    }
-}
 
 /// <summary>
 /// Validator for CreateOwnershipMovementRequest

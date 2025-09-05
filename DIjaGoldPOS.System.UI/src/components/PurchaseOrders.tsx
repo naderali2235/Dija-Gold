@@ -15,6 +15,7 @@ import {
   usePaginatedProducts, 
   usePaginatedBranches, 
   useKaratTypes, 
+  useGoldRates,
   useSearchPurchaseOrders, 
   useCreatePurchaseOrder, 
   useReceivePurchaseOrder,
@@ -159,6 +160,7 @@ export default function PurchaseOrders() {
     loading: karatTypesLoading,
     fetchKaratTypes 
   } = useKaratTypes();
+  const goldRatesApi = useGoldRates();
 
   // Form state for regular PO
   const [poForm, setPOForm] = useState({
@@ -196,10 +198,41 @@ export default function PurchaseOrders() {
     items: [{ karatTypeId: '', weightOrdered: '', costPerGram: '', description: '', notes: '' }],
   });
 
+  // Latest prices state (placeholder for future pricing API integration)
+  const [latestPrices, setLatestPrices] = useState<Record<string, number>>({});
+  const [loadingPrices, setLoadingPrices] = useState(false);
+
+  // Fetch latest gold rates from pricing API
+  const fetchLatestPrices = async () => {
+    setLoadingPrices(true);
+    try {
+      const goldRates = await goldRatesApi.fetchRates();
+      
+      // Convert gold rates to pricing format
+      const prices: Record<string, number> = {};
+      goldRates?.forEach(rate => {
+        prices[rate.karatTypeId.toString()] = rate.ratePerGram;
+      });
+      
+      setLatestPrices(prices);
+    } catch (error) {
+      console.error('Error fetching latest prices:', error);
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
   // Load data on component mount
   useEffect(() => {
     loadData();
   }, []);
+
+  // Fetch latest prices when karat types are loaded
+  useEffect(() => {
+    if (karatTypes && karatTypes.length > 0) {
+      fetchLatestPrices();
+    }
+  }, [karatTypes]);
 
   const loadData = async () => {
     try {
@@ -404,6 +437,15 @@ export default function PurchaseOrders() {
   const updateRawGoldPOItem = (index: number, field: string, value: string) => {
     const newItems = [...rawGoldPOForm.items];
     newItems[index] = { ...newItems[index], [field]: value };
+    
+    // Auto-populate cost per gram when karat type changes
+    if (field === 'karatTypeId' && value) {
+      const latestPrice = latestPrices[value] || 0;
+      if (latestPrice > 0) {
+        newItems[index] = { ...newItems[index], costPerGram: latestPrice.toString() };
+      }
+    }
+    
     setRawGoldPOForm({ ...rawGoldPOForm, items: newItems });
   };
 
@@ -427,6 +469,22 @@ export default function PurchaseOrders() {
   const updatePOItem = (index: number, field: string, value: string) => {
     const newItems = [...poForm.items];
     newItems[index] = { ...newItems[index], [field]: value };
+    
+    // Auto-calculate unit cost when product changes
+    if (field === 'productId' && value) {
+      const product = products.find(p => p.id === parseInt(value));
+      if (product && product.karatTypeId && latestPrices[product.karatTypeId.toString()]) {
+        const pricePerGram = latestPrices[product.karatTypeId.toString()];
+        const productWeight = product.weight || 0;
+        const unitCost = (productWeight * pricePerGram).toFixed(2);
+        newItems[index] = { 
+          ...newItems[index], 
+          weight: productWeight.toString(),
+          unitCost: unitCost
+        };
+      }
+    }
+    
     setPOForm({ ...poForm, items: newItems });
   };
 
@@ -789,6 +847,7 @@ export default function PurchaseOrders() {
                 </div>
 
                 <div className="space-y-4">
+                  {/* Product Info Section - Moved Up */}
                   <div className="grid grid-cols-12 gap-3">
                     <div className="col-span-8 space-y-1">
                       <Label className="text-xs">Search Products</Label>
@@ -848,6 +907,7 @@ export default function PurchaseOrders() {
                           {item.productId && (
                             (() => {
                               const p = products.find(p => p.id === parseInt(item.productId));
+                              const karatPrice = p?.karatTypeId ? latestPrices[p.karatTypeId.toString()] : 0;
                               return (
                                 <div className="mt-1 rounded border bg-muted/30 p-2">
                                   {p ? (
@@ -855,6 +915,12 @@ export default function PurchaseOrders() {
                                       <span><span className="font-medium">Name:</span> {p.name}</span>
                                       <span><span className="font-medium">Code:</span> {p.productCode}</span>
                                       <span><span className="font-medium">Weight:</span> {p.weight} g</span>
+                                      {karatPrice > 0 && (
+                                        <span><span className="font-medium">Current Price:</span> ${karatPrice.toFixed(2)}/g</span>
+                                      )}
+                                      {p.karatType && (
+                                        <span><span className="font-medium">Karat:</span> {p.karatType.name}</span>
+                                      )}
                                     </div>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Product details unavailable.</p>
@@ -1064,8 +1130,13 @@ export default function PurchaseOrders() {
                             type="number"
                             value={item.costPerGram}
                             onChange={(e) => updateRawGoldPOItem(index, 'costPerGram', e.target.value)}
-                            placeholder="0.00"
+                            placeholder={item.karatTypeId && latestPrices[item.karatTypeId] ? `Latest: $${latestPrices[item.karatTypeId].toFixed(2)}` : "0.00"}
                           />
+                          {item.karatTypeId && latestPrices[item.karatTypeId] && (
+                            <p className="text-xs text-muted-foreground">
+                              Latest price: ${latestPrices[item.karatTypeId].toFixed(2)}/g
+                            </p>
+                          )}
                         </div>
                         <div className="col-span-4 space-y-1">
                           <Label className="text-xs">Total Cost</Label>

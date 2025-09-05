@@ -1,6 +1,6 @@
-using DijaGoldPOS.API.Models;
-
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.FinancialModels;
+using DijaGoldPOS.API.Models.SalesModels;
 
 namespace DijaGoldPOS.API.Services;
 

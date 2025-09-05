@@ -1,7 +1,9 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.IServices;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.ProductModels;
+using DijaGoldPOS.API.Models.PurchaseOrderModels;
 using DijaGoldPOS.API.Repositories;
 using DijaGoldPOS.API.Shared;
 using Microsoft.EntityFrameworkCore;

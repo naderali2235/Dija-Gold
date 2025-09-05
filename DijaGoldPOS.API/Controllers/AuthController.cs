@@ -1,11 +1,10 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using DijaGoldPOS.API.Models.Shared;
 
 namespace DijaGoldPOS.API.Controllers;
 

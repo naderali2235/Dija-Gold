@@ -1,7 +1,7 @@
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service interface for ProductManufacture business operations
@@ -109,6 +109,16 @@ public interface IProductManufactureService
     /// Gets available workflow transitions for a manufacturing record
     /// </summary>
     Task<IEnumerable<string>> GetAvailableTransitionsAsync(int id);
+
+    /// <summary>
+    /// Complete manufacturing workflow and finalize raw gold consumption
+    /// </summary>
+    Task<ProductManufactureDto> CompleteManufacturingAsync(int manufacturingId, string userId);
+
+    /// <summary>
+    /// Cancel manufacturing and reverse all reservations and records
+    /// </summary>
+    Task<ProductManufactureDto> CancelManufacturingAsync(int manufacturingId, string userId, string? cancellationReason = null);
 
     #endregion
 }

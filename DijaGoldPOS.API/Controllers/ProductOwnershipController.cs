@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Validators;
 using DijaGoldPOS.API.Shared;
 using FluentValidation;
+using DijaGoldPOS.API.IServices;
 
 namespace DijaGoldPOS.API.Controllers;
 
@@ -83,6 +83,35 @@ public class ProductOwnershipController : ControllerBase
     }
 
     /// <summary>
+    /// Validate product sale and check for unpaid supplier balances - ALERTS ONLY, NO BLOCKING
+    /// </summary>
+    [HttpPost("validate-sale")]
+    public async Task<ActionResult<ProductSaleValidationResult>> ValidateProductSale([FromBody] ValidateProductSaleRequest request)
+    {
+        try
+        {
+            var validationResult = await _productOwnershipService.ValidateProductSaleAsync(
+                request.ProductId, 
+                request.BranchId, 
+                request.RequestedQuantity);
+
+            var result = new ProductSaleValidationResult
+            {
+                CanSell = true, // Always allow sale - only provide alerts
+                Message = validationResult.Warnings.Any() ? "Sale allowed with warnings about unpaid supplier balances" : "Sale validated successfully",
+                Warnings = validationResult.Warnings
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating product sale");
+            return StatusCode(500, "An error occurred while validating product sale");
+        }
+    }
+
+    /// <summary>
     /// Update ownership after payment
     /// </summary>
     [HttpPost("payment")]
@@ -153,44 +182,44 @@ public class ProductOwnershipController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Convert raw gold to products
-    /// </summary>
-    [HttpPost("convert-raw-gold")]
-    [Authorize(Policy = "ManagerOnly")]
-    public async Task<ActionResult<ConvertRawGoldResponse>> ConvertRawGoldToProducts([FromBody] ConvertRawGoldRequest request)
-    {
-        try
-        {
-            var userId = _currentUserService.UserId;
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized("User not authenticated");
-            }
+    ///// <summary>
+    ///// Convert raw gold to products
+    ///// </summary>
+    //[HttpPost("convert-raw-gold")]
+    //[Authorize(Policy = "ManagerOnly")]
+    //public async Task<ActionResult<ConvertRawGoldResponse>> ConvertRawGoldToProducts([FromBody] ConvertRawGoldRequest request)
+    //{
+    //    try
+    //    {
+    //        var userId = _currentUserService.UserId;
+    //        if (string.IsNullOrEmpty(userId))
+    //        {
+    //            return Unauthorized("User not authenticated");
+    //        }
 
-            var (success, message) = await _productOwnershipService.ConvertRawGoldToProductsAsync(request, userId);
+    //        var (success, message) = await _productOwnershipService.ConvertRawGoldToProductsAsync(request, userId);
 
-            var response = new ConvertRawGoldResponse
-            {
-                Success = success,
-                Message = message
-            };
+    //        var response = new ConvertRawGoldResponse
+    //        {
+    //            Success = success,
+    //            Message = message
+    //        };
 
-            if (success)
-            {
-                return Ok(response);
-            }
-            else
-            {
-                return BadRequest(response);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error converting raw gold to products");
-            return StatusCode(500, "An error occurred while converting raw gold");
-        }
-    }
+    //        if (success)
+    //        {
+    //            return Ok(response);
+    //        }
+    //        else
+    //        {
+    //            return BadRequest(response);
+    //        }
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error converting raw gold to products");
+    //        return StatusCode(500, "An error occurred while converting raw gold");
+    //    }
+    //}
 
     /// <summary>
     /// Get ownership alerts

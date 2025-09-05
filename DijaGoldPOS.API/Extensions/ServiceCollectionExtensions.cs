@@ -162,6 +162,7 @@ public static class ServiceCollectionExtensions
 
         // Raw gold services
         services.AddScoped<IRawGoldPurchaseOrderService, RawGoldPurchaseOrderService>();
+        services.AddScoped<IRawGoldBalanceService, RawGoldBalanceService>();
 
         // Enhanced ownership and costing services
         services.AddScoped<IOwnershipConsolidationService, OwnershipConsolidationService>();

@@ -1,7 +1,5 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
@@ -10,6 +8,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.Shared;
 
 namespace DijaGoldPOS.API.Controllers;
 

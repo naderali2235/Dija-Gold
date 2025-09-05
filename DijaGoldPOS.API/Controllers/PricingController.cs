@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models.LookupTables;
-using DijaGoldPOS.API.Services;
 using DijaGoldPOS.API.Shared;
 using System.Security.Claims;
+using DijaGoldPOS.API.IServices;
 
 namespace DijaGoldPOS.API.Controllers;
 

@@ -65,8 +65,6 @@ import {
   ProductOwnershipRequest,
   OwnershipAlertDto,
   OwnershipMovementDto,
-  ConvertRawGoldRequest,
-  NewProductFromRawGold,
   Product,
   SupplierDto
 } from '../services/api';
@@ -76,7 +74,6 @@ import {
   useGetLowOwnershipProducts,
   useGetProductsWithOutstandingPayments,
   useCreateOrUpdateOwnership,
-  useConvertRawGoldToProducts,
   useGetOwnershipMovements,
   useUpdateOwnershipAfterPayment,
   useProducts,
@@ -88,7 +85,6 @@ export default function ProductOwnership() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isNewOwnershipOpen, setIsNewOwnershipOpen] = useState(false);
-  const [isConvertRawGoldOpen, setIsConvertRawGoldOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOwnership, setSelectedOwnership] = useState<ProductOwnershipDto | null>(null);
   const [selectedOwnershipForDetails, setSelectedOwnershipForDetails] = useState<ProductOwnershipDto | null>(null);
@@ -106,13 +102,6 @@ export default function ProductOwnership() {
     amountPaid: '',
   });
 
-  // Form state for raw gold conversion
-  const [rawGoldConversion, setRawGoldConversion] = useState({
-    rawGoldProductId: '',
-    weightToConvert: '',
-    quantityToConvert: '',
-    newProducts: [] as NewProductFromRawGold[],
-  });
 
   // State for ownership details dialog
   const [ownershipDetailsOpen, setOwnershipDetailsOpen] = useState(false);
@@ -134,7 +123,6 @@ export default function ProductOwnership() {
   const lowOwnershipProducts = useGetLowOwnershipProducts();
   const outstandingPayments = useGetProductsWithOutstandingPayments();
   const createOwnership = useCreateOrUpdateOwnership();
-  const convertRawGold = useConvertRawGoldToProducts();
   const getOwnershipMovements = useGetOwnershipMovements();
   const updateOwnershipPayment = useUpdateOwnershipAfterPayment();
   
@@ -209,51 +197,6 @@ export default function ProductOwnership() {
     }
   };
 
-  const handleConvertRawGold = async () => {
-    if (!user?.branch?.id) {
-      toast.error('Branch information not available');
-      return;
-    }
-
-    if (!rawGoldConversion.rawGoldProductId || !rawGoldConversion.weightToConvert || rawGoldConversion.newProducts.length === 0) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      const request: ConvertRawGoldRequest = {
-        rawGoldProductId: parseInt(rawGoldConversion.rawGoldProductId),
-        branchId: user.branch.id,
-        weightToConvert: parseFloat(rawGoldConversion.weightToConvert),
-        quantityToConvert: parseFloat(rawGoldConversion.quantityToConvert),
-        newProducts: rawGoldConversion.newProducts,
-      };
-
-      const result = await convertRawGold.execute(request);
-      
-      if (result.success) {
-        toast.success('Raw gold converted successfully');
-        setIsConvertRawGoldOpen(false);
-        setRawGoldConversion({
-          rawGoldProductId: '',
-          weightToConvert: '',
-          quantityToConvert: '',
-          newProducts: [],
-        });
-        
-        // Refresh data
-        productOwnershipList.fetchData();
-        ownershipAlerts.execute(user.branch.id);
-        lowOwnershipProducts.execute(0.5);
-        outstandingPayments.execute();
-      } else {
-        toast.error(result.message || 'Failed to convert raw gold');
-      }
-    } catch (error) {
-      console.error('Failed to convert raw gold:', error);
-      toast.error('Failed to convert raw gold');
-    }
-  };
 
   const handleViewOwnershipDetails = async (ownership: ProductOwnershipDto) => {
     try {
@@ -331,17 +274,13 @@ export default function ProductOwnership() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Product Ownership</h1>
           <p className="text-muted-foreground">
-            Manage product ownership, track payments, and convert raw gold
+            Manage product ownership and track payments
           </p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setIsNewOwnershipOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Ownership
-          </Button>
-          <Button variant="outline" onClick={() => setIsConvertRawGoldOpen(true)}>
-            <Package className="h-4 w-4 mr-2" />
-            Convert Raw Gold
           </Button>
         </div>
       </div>
@@ -821,7 +760,12 @@ export default function ProductOwnership() {
                 </div>
                 <div>
                   <Label>Supplier</Label>
-                  <p className="font-medium">{selectedOwnershipForDetails.supplierId || 'N/A'}</p>
+                  <p className="font-medium">
+                    {selectedOwnershipForDetails.supplierId ? 
+                      suppliers.data?.items.find((s: SupplierDto) => s.id === selectedOwnershipForDetails.supplierId)?.companyName || `Supplier ${selectedOwnershipForDetails.supplierId}` 
+                      : 'N/A'
+                    }
+                  </p>
                 </div>
                 <div>
                   <Label>Ownership Percentage</Label>
@@ -871,138 +815,6 @@ export default function ProductOwnership() {
         </DialogContent>
       </Dialog>
 
-      {/* Raw Gold Conversion Dialog */}
-      <Dialog open={isConvertRawGoldOpen} onOpenChange={setIsConvertRawGoldOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Convert Raw Gold to Products</DialogTitle>
-            <DialogDescription>
-              Convert raw gold into finished products
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="rawGoldProduct">Raw Gold Product</Label>
-              <Select value={rawGoldConversion.rawGoldProductId} onValueChange={(value) => setRawGoldConversion({...rawGoldConversion, rawGoldProductId: value})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select raw gold product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.data?.items.filter((p: Product) => p.categoryTypeId === 1).map((product: Product) => ( // Assuming categoryType 1 is raw gold
-                    <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({product.productCode})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="weightToConvert">Weight to Convert (g)</Label>
-                <Input
-                  id="weightToConvert"
-                  type="number"
-                  step="0.01"
-                  value={rawGoldConversion.weightToConvert}
-                  onChange={(e) => setRawGoldConversion({...rawGoldConversion, weightToConvert: e.target.value})}
-                />
-              </div>
-              <div>
-                <Label htmlFor="quantityToConvert">Quantity to Convert</Label>
-                <Input
-                  id="quantityToConvert"
-                  type="number"
-                  value={rawGoldConversion.quantityToConvert}
-                  onChange={(e) => setRawGoldConversion({...rawGoldConversion, quantityToConvert: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>New Products</Label>
-              <div className="space-y-2">
-                {rawGoldConversion.newProducts.map((product, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <Select 
-                      value={product.productId.toString()} 
-                      onValueChange={(value) => {
-                        const newProducts = [...rawGoldConversion.newProducts];
-                        newProducts[index].productId = parseInt(value);
-                        setRawGoldConversion({...rawGoldConversion, newProducts});
-                      }}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.data?.items.filter((p: Product) => p.categoryTypeId !== 1).map((p: Product) => (
-                          <SelectItem key={p.id} value={p.id.toString()}>
-                            {p.name} ({p.productCode})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      placeholder="Qty"
-                      value={product.quantity}
-                      onChange={(e) => {
-                        const newProducts = [...rawGoldConversion.newProducts];
-                        newProducts[index].quantity = parseFloat(e.target.value) || 0;
-                        setRawGoldConversion({...rawGoldConversion, newProducts});
-                      }}
-                      className="w-20"
-                    />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Weight"
-                      value={product.weight}
-                      onChange={(e) => {
-                        const newProducts = [...rawGoldConversion.newProducts];
-                        newProducts[index].weight = parseFloat(e.target.value) || 0;
-                        setRawGoldConversion({...rawGoldConversion, newProducts});
-                      }}
-                      className="w-24"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const newProducts = rawGoldConversion.newProducts.filter((_, i) => i !== index);
-                        setRawGoldConversion({...rawGoldConversion, newProducts});
-                      }}
-                    >
-                      <XCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const newProducts = [...rawGoldConversion.newProducts, { productId: 0, quantity: 0, weight: 0 }];
-                    setRawGoldConversion({...rawGoldConversion, newProducts});
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Product
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsConvertRawGoldOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleConvertRawGold}>
-                Convert Raw Gold
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

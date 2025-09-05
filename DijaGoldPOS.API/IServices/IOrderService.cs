@@ -1,7 +1,8 @@
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.SalesModels;
+using DijaGoldPOS.API.Services;
 
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for order processing service

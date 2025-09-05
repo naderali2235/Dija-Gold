@@ -70,7 +70,7 @@ public class CreateProductManufactureDto
     public string Status { get; set; } = "Completed";
 
     /// <summary>
-    /// Branch where the manufacturing takes place
+    /// Branch where the manufacturing is performed
     /// </summary>
 
     public int BranchId { get; set; }
@@ -78,7 +78,18 @@ public class CreateProductManufactureDto
     /// <summary>
     /// Technician performing the manufacturing
     /// </summary>
+
     public int TechnicianId { get; set; }
+    
+    /// <summary>
+    /// User who created this manufacturing record
+    /// </summary>
+    public string CreatedBy { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Raw materials used in manufacturing
+    /// </summary>
+    public List<ProductManufactureRawMaterialDto> RawMaterials { get; set; } = new();
 
     /// <summary>
     /// Manufacturing priority level
@@ -439,9 +450,29 @@ public class ProductManufactureRawMaterialDto
     public int PurchaseOrderItemId { get; set; }
 
     /// <summary>
+    /// The product ID being manufactured
+    /// </summary>
+    public int ProductId { get; set; }
+
+    /// <summary>
+    /// The supplier ID of the raw material
+    /// </summary>
+    public int SupplierId { get; set; }
+
+    /// <summary>
+    /// The karat type ID of the raw material
+    /// </summary>
+    public int KaratTypeId { get; set; }
+
+    /// <summary>
     /// Weight of raw gold consumed from this source (in grams)
     /// </summary>
     public decimal ConsumedWeight { get; set; }
+
+    /// <summary>
+    /// Weight of raw gold used from this source (in grams) - alias for ConsumedWeight
+    /// </summary>
+    public decimal WeightUsed => ConsumedWeight;
 
     /// <summary>
     /// Weight lost from this source during manufacturing (wastage) in grams
@@ -476,7 +507,6 @@ public class ProductManufactureRawMaterialDto
     // Additional details for display
     public string PurchaseOrderNumber { get; set; } = string.Empty;
     public string SupplierName { get; set; } = string.Empty;
-    public int KaratTypeId { get; set; }
     public string KaratTypeName { get; set; } = string.Empty;
 }
 

@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.Models.ProductModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;

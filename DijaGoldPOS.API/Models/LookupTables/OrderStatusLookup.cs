@@ -1,5 +1,7 @@
 
 
+using DijaGoldPOS.API.Models.Shared;
+
 namespace DijaGoldPOS.API.Models.LookupTables;
 
 /// <summary>

@@ -2,8 +2,22 @@ using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.Models.LookupTables;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using DijaGoldPOS.API.Services;
 using System.Linq.Expressions;
+using CustomerModel = DijaGoldPOS.API.Models.CustomerModels.Customer;
+using ProductModel = DijaGoldPOS.API.Models.ProductModels.Product;
+using SupplierModel = DijaGoldPOS.API.Models.SupplierModels.Supplier;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.CustomerModels;
+using DijaGoldPOS.API.Models.ProductModels;
+using DijaGoldPOS.API.Models.SupplierModels;
+using DijaGoldPOS.API.Models.Shared;
+using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.PurchaseOrderModels;
+using DijaGoldPOS.API.Models.FinancialModels;
+using DijaGoldPOS.API.Models.ManfacturingModels;
+using DijaGoldPOS.API.Models.OwneShipModels;
+using DijaGoldPOS.API.Models.SalesModels;
+using DijaGoldPOS.API.Models.InventoryModels;
 
 namespace DijaGoldPOS.API.Data;
 
@@ -21,9 +35,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     // Core business entities
     public DbSet<Branch> Branches { get; set; }
-    public DbSet<Product> Products { get; set; }
-    public DbSet<Customer> Customers { get; set; }
-    public DbSet<Supplier> Suppliers { get; set; }
+    public DbSet<ProductModel> Products { get; set; }
+    public DbSet<CustomerModel> Customers { get; set; }
+    public DbSet<SupplierModel> Suppliers { get; set; }
     public DbSet<Technician> Technicians { get; set; }
 
     // Pricing and configuration
@@ -40,6 +54,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Inventory> Inventories { get; set; }
     public DbSet<InventoryMovement> InventoryMovements { get; set; }
 
+
     // Purchasing system
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
@@ -54,6 +69,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Product ownership tracking
     public DbSet<ProductOwnership> ProductOwnerships { get; set; }
     public DbSet<OwnershipMovement> OwnershipMovements { get; set; }
+    public DbSet<RawGoldOwnership> RawGoldOwnerships { get; set; }
+
+    // New supplier-centralized gold balance management
+    public DbSet<RawGoldTransfer> RawGoldTransfers { get; set; }
+    public DbSet<SupplierGoldBalance> SupplierGoldBalances { get; set; }
 
     // Customer purchases
     public DbSet<CustomerPurchase> CustomerPurchases { get; set; }
@@ -231,7 +251,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
 
         // Configure Product
-        builder.Entity<Product>(entity =>
+        builder.Entity<ProductModel>(entity =>
         {
             entity.HasIndex(p => p.ProductCode).IsUnique();
             entity.Property(p => p.ProductCode).IsRequired().HasMaxLength(50);
@@ -277,7 +297,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
 
         // Configure Customer
-        builder.Entity<Customer>(entity =>
+        builder.Entity<CustomerModel>(entity =>
         {
             entity.HasIndex(c => c.NationalId).IsUnique().HasFilter("[NationalId] IS NOT NULL");
             entity.HasIndex(c => c.MobileNumber).IsUnique().HasFilter("[MobileNumber] IS NOT NULL");
@@ -295,7 +315,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
 
         // Configure Supplier
-        builder.Entity<Supplier>(entity =>
+        builder.Entity<SupplierModel>(entity =>
         {
             entity.Property(s => s.CompanyName).IsRequired().HasMaxLength(200);
             entity.Property(s => s.CreditLimit).HasColumnType("decimal(18,2)");
@@ -1235,6 +1255,46 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(rgim => rgim.RawGoldPurchaseOrderItemId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
+
+        // Configure RawGoldOwnership
+        builder.Entity<RawGoldOwnership>(entity =>
+        {
+            entity.HasIndex(rgo => new { rgo.KaratTypeId, rgo.BranchId, rgo.SupplierId });
+            entity.HasIndex(rgo => rgo.RawGoldPurchaseOrderId);
+            entity.HasIndex(rgo => rgo.OwnershipPercentage);
+            entity.HasIndex(rgo => rgo.OutstandingAmount);
+
+            entity.Property(rgo => rgo.TotalWeight).HasColumnType("decimal(18,3)");
+            entity.Property(rgo => rgo.OwnedWeight).HasColumnType("decimal(18,3)");
+            entity.Property(rgo => rgo.OwnershipPercentage).HasColumnType("decimal(18,4)");
+            entity.Property(rgo => rgo.TotalCost).HasColumnType("decimal(18,2)");
+            entity.Property(rgo => rgo.AmountPaid).HasColumnType("decimal(18,2)");
+            entity.Property(rgo => rgo.OutstandingAmount).HasColumnType("decimal(18,2)");
+            entity.Property(rgo => rgo.Notes).HasMaxLength(1000);
+            entity.Property(rgo => rgo.CreatedBy).IsRequired().HasMaxLength(450);
+            entity.Property(rgo => rgo.ModifiedBy).HasMaxLength(450);
+
+            // Relationships
+            entity.HasOne(rgo => rgo.KaratType)
+                  .WithMany()
+                  .HasForeignKey(rgo => rgo.KaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgo => rgo.Branch)
+                  .WithMany()
+                  .HasForeignKey(rgo => rgo.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgo => rgo.Supplier)
+                  .WithMany()
+                  .HasForeignKey(rgo => rgo.SupplierId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgo => rgo.RawGoldPurchaseOrder)
+                  .WithMany()
+                  .HasForeignKey(rgo => rgo.RawGoldPurchaseOrderId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
     }
 
     /// <summary>
@@ -1386,6 +1446,79 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(al => al.Timestamp);
             entity.HasIndex(al => new { al.EntityType, al.EntityId });
             entity.HasIndex(al => al.UserId);
+        });
+
+        // Configure RawGoldTransfer
+        builder.Entity<RawGoldTransfer>(entity =>
+        {
+            entity.HasIndex(rgt => rgt.TransferNumber).IsUnique();
+            entity.Property(rgt => rgt.TransferNumber).IsRequired().HasMaxLength(50);
+            entity.Property(rgt => rgt.TransferType).IsRequired().HasMaxLength(20);
+            entity.Property(rgt => rgt.CreatedByUserId).IsRequired().HasMaxLength(450);
+
+            // Foreign key relationships
+            entity.HasOne(rgt => rgt.Branch)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgt => rgt.FromSupplier)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.FromSupplierId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(rgt => rgt.ToSupplier)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.ToSupplierId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(rgt => rgt.FromKaratType)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.FromKaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgt => rgt.ToKaratType)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.ToKaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(rgt => rgt.CustomerPurchase)
+                  .WithMany()
+                  .HasForeignKey(rgt => rgt.CustomerPurchaseId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Indexes for performance
+            entity.HasIndex(rgt => rgt.TransferDate);
+            entity.HasIndex(rgt => rgt.TransferType);
+            entity.HasIndex(rgt => new { rgt.BranchId, rgt.TransferDate });
+        });
+
+        // Configure SupplierGoldBalance
+        builder.Entity<SupplierGoldBalance>(entity =>
+        {
+            // Composite unique constraint
+            entity.HasIndex(sgb => new { sgb.SupplierId, sgb.BranchId, sgb.KaratTypeId }).IsUnique();
+
+            // Foreign key relationships
+            entity.HasOne(sgb => sgb.Supplier)
+                  .WithMany()
+                  .HasForeignKey(sgb => sgb.SupplierId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(sgb => sgb.Branch)
+                  .WithMany()
+                  .HasForeignKey(sgb => sgb.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(sgb => sgb.KaratType)
+                  .WithMany()
+                  .HasForeignKey(sgb => sgb.KaratTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Indexes for performance
+            entity.HasIndex(sgb => sgb.SupplierId);
+            entity.HasIndex(sgb => sgb.BranchId);
+            entity.HasIndex(sgb => sgb.LastTransactionDate);
         });
 
         // Configure global soft delete filter

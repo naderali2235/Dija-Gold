@@ -1,4 +1,4 @@
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Provides information about the current authenticated user.
@@ -15,6 +15,16 @@ public interface ICurrentUserService
     /// Gets the current user's username, or "system" if unavailable.
     /// </summary>
     string UserName { get; }
+
+    /// <summary>
+    /// Gets the current user's branch ID, or null if unavailable.
+    /// </summary>
+    int? BranchId { get; }
+
+    /// <summary>
+    /// Gets the current user's branch name, or null if unavailable.
+    /// </summary>
+    string? BranchName { get; }
 }
 
 

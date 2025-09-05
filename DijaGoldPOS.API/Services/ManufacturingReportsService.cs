@@ -1,6 +1,7 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models;
+using DijaGoldPOS.API.IServices;
+using DijaGoldPOS.API.Models.ManfacturingModels;
 using DijaGoldPOS.API.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

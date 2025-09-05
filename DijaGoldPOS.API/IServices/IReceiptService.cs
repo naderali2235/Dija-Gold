@@ -1,7 +1,7 @@
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.FinancialModels;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for receipt generation and printing service

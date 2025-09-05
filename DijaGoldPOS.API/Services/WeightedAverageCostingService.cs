@@ -1,6 +1,6 @@
-using DijaGoldPOS.API.Models;
 using DijaGoldPOS.API.IRepositories;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.Models.ProductModels;
 
 namespace DijaGoldPOS.API.Services;
 
@@ -193,7 +193,8 @@ public class WeightedAverageCostingService : IWeightedAverageCostingService
             }
 
             // Update product with weighted average cost
-            product.CostPrice = weightedCost.WeightedAverageCostPerUnit;
+            // CostPrice is computed from StandardCost, so update that instead
+            product.StandardCost = weightedCost.WeightedAverageCostPerUnit;
             // You might want to add a field for cost per gram if needed
             // product.CostPerGram = weightedCost.WeightedAverageCostPerGram;
 

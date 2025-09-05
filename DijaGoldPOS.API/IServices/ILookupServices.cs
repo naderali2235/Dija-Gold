@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.DTOs;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Service interface for karat type lookups

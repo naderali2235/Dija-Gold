@@ -1,5 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.DTOs;
+using DijaGoldPOS.API.IServices;
 using DijaGoldPOS.API.Models;
 
 using DijaGoldPOS.API.Shared;

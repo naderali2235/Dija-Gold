@@ -1,7 +1,7 @@
 using DijaGoldPOS.API.DTOs;
 using DijaGoldPOS.API.Models;
 
-namespace DijaGoldPOS.API.Services;
+namespace DijaGoldPOS.API.IServices;
 
 /// <summary>
 /// Interface for repair job operations and workflow management
