@@ -95,11 +95,6 @@ public class CustomerPurchase : BaseEntity
     /// </summary>
     public string ProcessedByUserId { get; set; } = string.Empty;
 
-    /// <summary>
-    /// User who created this purchase (alias for ProcessedByUserId)
-    /// </summary>
-    [NotMapped]
-    public string CreatedByUserId => ProcessedByUserId;
 
     /// <summary>
     /// User who approved this purchase (if required)

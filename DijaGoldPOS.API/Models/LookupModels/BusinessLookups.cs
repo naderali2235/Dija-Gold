@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models.LookupModels;
@@ -6,7 +7,7 @@ namespace DijaGoldPOS.API.Models.LookupModels;
 /// Lookup table for business entity types (Customer, Supplier, Branch)
 /// </summary>
 [Table("BusinessEntityTypes", Schema = "Lookup")]
-public class BusinessEntityTypeLookup : BaseLookupEntity
+public class BusinessEntityTypeLookup : BaseEntity
 {
     /// <summary>
     /// Entity type code (CUSTOMER, SUPPLIER, BRANCH)
@@ -27,13 +28,16 @@ public class BusinessEntityTypeLookup : BaseLookupEntity
     /// Whether this entity type has credit limits
     /// </summary>
     public bool HasCreditLimit { get; set; } = false;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for payment methods (Cash, Card, Bank Transfer, etc.)
 /// </summary>
 [Table("PaymentMethods", Schema = "Lookup")]
-public class PaymentMethodLookup : BaseLookupEntity
+public class PaymentMethodLookup : BaseEntity
 {
     /// <summary>
     /// Payment method code (CASH, CARD, BANK_TRANSFER)
@@ -66,4 +70,7 @@ public class PaymentMethodLookup : BaseLookupEntity
     /// Whether this payment method is electronic
     /// </summary>
     public bool IsElectronic { get; set; } = false;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }

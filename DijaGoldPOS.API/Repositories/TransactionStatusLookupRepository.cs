@@ -1,6 +1,6 @@
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Repositories;

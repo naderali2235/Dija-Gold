@@ -1,6 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models.CoreModels;
+using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.Shared;
 
 namespace DijaGoldPOS.API.Mappings;
 
@@ -21,7 +22,6 @@ public class CoreMappingProfile : Profile
         // Branch mappings
         CreateMap<Branch, BranchDto>()
             .ForMember(dest => dest.UserCount, opt => opt.MapFrom(src => src.Users.Count))
-            .ForMember(dest => dest.IsOperational, opt => opt.MapFrom(src => src.IsOperational && src.IsActive))
             .ForMember(dest => dest.LastActivity, opt => opt.MapFrom(src => src.ModifiedAt ?? src.CreatedAt));
 
         CreateMap<CreateBranchRequestDto, Branch>()
@@ -31,7 +31,6 @@ public class CoreMappingProfile : Profile
             .ForMember(dest => dest.ModifiedAt, opt => opt.Ignore())
             .ForMember(dest => dest.ModifiedBy, opt => opt.Ignore())
             .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => true))
-            .ForMember(dest => dest.RowVersion, opt => opt.Ignore())
             .ForMember(dest => dest.Users, opt => opt.Ignore())
             .ForMember(dest => dest.FinancialTransactions, opt => opt.Ignore())
             .ForMember(dest => dest.Orders, opt => opt.Ignore())
@@ -47,7 +46,6 @@ public class CoreMappingProfile : Profile
             .ForMember(dest => dest.ModifiedAt, opt => opt.Ignore())
             .ForMember(dest => dest.ModifiedBy, opt => opt.Ignore())
             .ForMember(dest => dest.IsActive, opt => opt.Ignore())
-            .ForMember(dest => dest.RowVersion, opt => opt.Ignore())
             .ForMember(dest => dest.Users, opt => opt.Ignore())
             .ForMember(dest => dest.FinancialTransactions, opt => opt.Ignore())
             .ForMember(dest => dest.Orders, opt => opt.Ignore())

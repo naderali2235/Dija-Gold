@@ -35,32 +35,32 @@ public static class EnhancedServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddEnhancedDbContext(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<EnhancedApplicationDbContext>(options =>
-        {
-            options.UseSqlServer(
-                configuration.GetConnectionString("DefaultConnection"),
-                sqlOptions =>
-                {
-                    sqlOptions.EnableRetryOnFailure(
-                        maxRetryCount: 3,
-                        maxRetryDelay: TimeSpan.FromSeconds(30),
-                        errorNumbersToAdd: null);
+        //services.AddDbContext<EnhancedApplicationDbContext>(options =>
+        //{
+        //    options.UseSqlServer(
+        //        configuration.GetConnectionString("DefaultConnection"),
+        //        sqlOptions =>
+        //        {
+        //            sqlOptions.EnableRetryOnFailure(
+        //                maxRetryCount: 3,
+        //                maxRetryDelay: TimeSpan.FromSeconds(30),
+        //                errorNumbersToAdd: null);
                     
-                    sqlOptions.CommandTimeout(30);
-                    sqlOptions.MigrationsAssembly("DijaGoldPOS.API");
-                });
+        //            sqlOptions.CommandTimeout(30);
+        //            sqlOptions.MigrationsAssembly("DijaGoldPOS.API");
+        //        });
 
-            // Enhanced configuration for development
-            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
-            {
-                options.EnableSensitiveDataLogging();
-                options.EnableDetailedErrors();
-                options.LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information);
-            }
+        //    // Enhanced configuration for development
+        //    if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+        //    {
+        //        options.EnableSensitiveDataLogging();
+        //        options.EnableDetailedErrors();
+        //        options.LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information);
+        //    }
 
-            // Query optimization
-            options.UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll);
-        });
+        //    // Query optimization
+        //    options.UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll);
+        //});
 
         // Register the application context
         services.AddScoped<ApplicationDbContext>();

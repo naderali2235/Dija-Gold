@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models.LookupModels;
@@ -6,7 +7,7 @@ namespace DijaGoldPOS.API.Models.LookupModels;
 /// Lookup table for order types (Sale, Return, Exchange)
 /// </summary>
 [Table("OrderTypes", Schema = "Lookup")]
-public class OrderTypeLookup : BaseLookupEntity
+public class OrderTypeLookup : BaseEntity
 {
     /// <summary>
     /// Order type code (SALE, RETURN, EXCHANGE)
@@ -32,13 +33,17 @@ public class OrderTypeLookup : BaseLookupEntity
     /// Whether this order type can be voided
     /// </summary>
     public bool CanBeVoided { get; set; } = true;
+
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for order statuses (Pending, Completed, Cancelled)
 /// </summary>
 [Table("OrderStatuses", Schema = "Lookup")]
-public class OrderStatusLookup : BaseLookupEntity
+public class OrderStatusLookup : BaseEntity
 {
     /// <summary>
     /// Status code (PENDING, COMPLETED, CANCELLED)
@@ -64,13 +69,16 @@ public class OrderStatusLookup : BaseLookupEntity
     /// CSS color class for UI display
     /// </summary>
     public string? ColorClass { get; set; }
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for financial transaction types
 /// </summary>
 [Table("FinancialTransactionTypes", Schema = "Lookup")]
-public class FinancialTransactionTypeLookup : BaseLookupEntity
+public class FinancialTransactionTypeLookup : BaseEntity
 {
     /// <summary>
     /// Transaction type code (SALE, PURCHASE, PAYMENT, REFUND)
@@ -96,13 +104,16 @@ public class FinancialTransactionTypeLookup : BaseLookupEntity
     /// Whether this transaction type requires approval
     /// </summary>
     public bool RequiresApproval { get; set; } = false;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for financial transaction statuses
 /// </summary>
 [Table("FinancialTransactionStatuses", Schema = "Lookup")]
-public class FinancialTransactionStatusLookup : BaseLookupEntity
+public class FinancialTransactionStatusLookup : BaseEntity
 {
     /// <summary>
     /// Status code (PENDING, COMPLETED, FAILED, REVERSED)
@@ -128,13 +139,16 @@ public class FinancialTransactionStatusLookup : BaseLookupEntity
     /// Whether this status allows reversal
     /// </summary>
     public bool AllowsReversal { get; set; } = false;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for general transaction types
 /// </summary>
 [Table("TransactionTypes", Schema = "Lookup")]
-public class TransactionTypeLookup : BaseLookupEntity
+public class TransactionTypeLookup : BaseEntity
 {
     /// <summary>
     /// Transaction type code
@@ -145,13 +159,16 @@ public class TransactionTypeLookup : BaseLookupEntity
     /// Transaction category (CASH, INVENTORY, FINANCIAL)
     /// </summary>
     public string Category { get; set; } = string.Empty;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for general transaction statuses
 /// </summary>
 [Table("TransactionStatuses", Schema = "Lookup")]
-public class TransactionStatusLookup : BaseLookupEntity
+public class TransactionStatusLookup : BaseEntity
 {
     /// <summary>
     /// Status code
@@ -162,4 +179,7 @@ public class TransactionStatusLookup : BaseLookupEntity
     /// Status category (PROCESSING, COMPLETED, FAILED)
     /// </summary>
     public string Category { get; set; } = string.Empty;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }

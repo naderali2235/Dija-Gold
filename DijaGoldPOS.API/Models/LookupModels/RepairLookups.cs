@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models.LookupModels;
@@ -6,7 +7,7 @@ namespace DijaGoldPOS.API.Models.LookupModels;
 /// Lookup table for repair job statuses
 /// </summary>
 [Table("RepairStatuses", Schema = "Lookup")]
-public class RepairStatusLookup : BaseLookupEntity
+public class RepairStatusLookup : BaseEntity
 {
     /// <summary>
     /// Status code (RECEIVED, IN_PROGRESS, COMPLETED, CANCELLED)
@@ -42,13 +43,16 @@ public class RepairStatusLookup : BaseLookupEntity
     /// CSS color class for UI display
     /// </summary>
     public string? ColorClass { get; set; }
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for repair job priorities
 /// </summary>
 [Table("RepairPriorities", Schema = "Lookup")]
-public class RepairPriorityLookup : BaseLookupEntity
+public class RepairPriorityLookup : BaseEntity
 {
     /// <summary>
     /// Priority code (LOW, MEDIUM, HIGH, URGENT)
@@ -75,4 +79,7 @@ public class RepairPriorityLookup : BaseLookupEntity
     /// CSS color class for UI display
     /// </summary>
     public string? ColorClass { get; set; }
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }

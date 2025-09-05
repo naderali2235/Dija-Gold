@@ -19,7 +19,6 @@ public class BranchDto
     
     // Additional properties for mapping
     public int UserCount { get; set; }
-    public bool IsOperational { get; set; }
     public DateTime? LastActivity { get; set; }
 }
 

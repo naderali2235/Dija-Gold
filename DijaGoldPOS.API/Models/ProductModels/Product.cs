@@ -1,4 +1,5 @@
 using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.ManfacturingModels;
 using DijaGoldPOS.API.Models.SalesModels;
 using DijaGoldPOS.API.Models.Shared;
@@ -184,7 +185,7 @@ public class Product : BaseEntity
     /// Sub-category lookup navigation property (alias for SubCategoryLookup)
     /// </summary>
     [NotMapped]
-    public LookupTables.SubCategoryLookup? SubCategory => SubCategoryLookup;
+    public SubCategoryLookup? SubCategory => SubCategoryLookup;
 
     /// <summary>
     /// Year of minting (for coins)
@@ -213,19 +214,19 @@ public class Product : BaseEntity
     /// Navigation property to category type lookup
     /// </summary>
     [JsonIgnore]
-    public virtual LookupTables.ProductCategoryTypeLookup CategoryType { get; set; } = null!;
+    public virtual ProductCategoryTypeLookup CategoryType { get; set; } = null!;
 
     /// <summary>
     /// Navigation property to karat type lookup
     /// </summary>
     [JsonIgnore]
-    public virtual LookupTables.KaratTypeLookup KaratType { get; set; } = null!;
+    public virtual KaratTypeLookup KaratType { get; set; } = null!;
 
     /// <summary>
     /// Navigation property to sub-category lookup
     /// </summary>
     [JsonIgnore]
-    public virtual LookupTables.SubCategoryLookup? SubCategoryLookup { get; set; }
+    public virtual SubCategoryLookup? SubCategoryLookup { get; set; }
 
     /// <summary>
     /// Navigation property to order items

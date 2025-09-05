@@ -1,6 +1,5 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models.LookupTables;
 using DijaGoldPOS.API.Data;
 using DijaGoldPOS.API.IRepositories;
 using Microsoft.EntityFrameworkCore;

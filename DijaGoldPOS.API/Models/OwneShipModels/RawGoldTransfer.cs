@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using DijaGoldPOS.API.Models.BranchModels;
 using DijaGoldPOS.API.Models.CustomerModels;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.Shared;
 using DijaGoldPOS.API.Models.SupplierModels;
 

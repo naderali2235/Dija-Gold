@@ -1,4 +1,4 @@
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DijaGoldPOS.API.Data;
