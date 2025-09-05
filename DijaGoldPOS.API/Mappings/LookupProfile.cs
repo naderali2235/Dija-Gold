@@ -1,6 +1,7 @@
 using AutoMapper;
 using DijaGoldPOS.API.DTOs;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
+
 
 namespace DijaGoldPOS.API.Mappings;
 

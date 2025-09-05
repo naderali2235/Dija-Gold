@@ -1,5 +1,4 @@
-using DijaGoldPOS.API.Models;
-using DijaGoldPOS.API.Models.LookupTables;
+﻿using DijaGoldPOS.API.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
@@ -18,6 +17,7 @@ using DijaGoldPOS.API.Models.ManfacturingModels;
 using DijaGoldPOS.API.Models.OwneShipModels;
 using DijaGoldPOS.API.Models.SalesModels;
 using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.LookupModels;
 
 namespace DijaGoldPOS.API.Data;
 
@@ -844,13 +844,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(cp => cp.CustomerId);
             entity.HasIndex(cp => cp.BranchId);
             entity.HasIndex(cp => cp.PurchaseDate);
-            entity.HasIndex(cp => cp.CreatedByUserId);
+            entity.HasIndex(cp => cp.ProcessedByUserId);
 
             entity.Property(cp => cp.PurchaseNumber).IsRequired().HasMaxLength(50);
             entity.Property(cp => cp.TotalAmount).HasColumnType("decimal(18,2)");
             entity.Property(cp => cp.AmountPaid).HasColumnType("decimal(18,2)");
             entity.Property(cp => cp.Notes).HasMaxLength(1000);
-            entity.Property(cp => cp.CreatedByUserId).IsRequired().HasMaxLength(450);
+            entity.Property(cp => cp.ProcessedByUserId).IsRequired().HasMaxLength(450);
 
             // Explicitly configure relationships to avoid shadow properties
             entity.HasOne(cp => cp.Customer)
@@ -1465,12 +1465,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(rgt => rgt.FromSupplier)
                   .WithMany()
                   .HasForeignKey(rgt => rgt.FromSupplierId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(rgt => rgt.ToSupplier)
                   .WithMany()
                   .HasForeignKey(rgt => rgt.ToSupplierId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(rgt => rgt.FromKaratType)
                   .WithMany()
@@ -1501,9 +1501,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             // Foreign key relationships
             entity.HasOne(sgb => sgb.Supplier)
-                  .WithMany()
+                  .WithMany(s => s.GoldBalances)
                   .HasForeignKey(sgb => sgb.SupplierId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(sgb => sgb.Branch)
                   .WithMany()

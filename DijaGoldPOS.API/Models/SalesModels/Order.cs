@@ -1,7 +1,7 @@
 using DijaGoldPOS.API.Models.BranchModels;
 using DijaGoldPOS.API.Models.CustomerModels;
 using DijaGoldPOS.API.Models.FinancialModels;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.ProductModels;
 using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;

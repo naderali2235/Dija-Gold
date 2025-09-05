@@ -1,3 +1,4 @@
+using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DijaGoldPOS.API.Models.LookupModels;
@@ -6,11 +7,12 @@ namespace DijaGoldPOS.API.Models.LookupModels;
 /// Lookup table for karat types (18K, 21K, 22K, 24K, etc.)
 /// </summary>
 [Table("KaratTypes", Schema = "Lookup")]
-public class KaratTypeLookup : BaseLookupEntity
+public class KaratTypeLookup : BaseEntity
 {
     /// <summary>
     /// Karat value (e.g., 18, 21, 22, 24)
     /// </summary>
+    [Column(TypeName = "decimal(4,1)")]
     public decimal KaratValue { get; set; }
 
     /// <summary>
@@ -28,13 +30,16 @@ public class KaratTypeLookup : BaseLookupEntity
     /// Whether this karat type is commonly used
     /// </summary>
     public bool IsCommon { get; set; } = true;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for product category types (Jewelry, Bullion, Coins)
 /// </summary>
 [Table("ProductCategoryTypes", Schema = "Lookup")]
-public class ProductCategoryTypeLookup : BaseLookupEntity
+public class ProductCategoryTypeLookup : BaseEntity
 {
     /// <summary>
     /// Category code for internal use
@@ -56,13 +61,16 @@ public class ProductCategoryTypeLookup : BaseLookupEntity
     /// Whether this category requires weight measurement
     /// </summary>
     public bool RequiresWeight { get; set; } = true;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for product sub-categories (Rings, Necklaces, Bracelets, etc.)
 /// </summary>
 [Table("SubCategories", Schema = "Lookup")]
-public class SubCategoryLookup : BaseLookupEntity
+public class SubCategoryLookup : BaseEntity
 {
     /// <summary>
     /// Parent category type ID
@@ -100,13 +108,16 @@ public class SubCategoryLookup : BaseLookupEntity
     /// Navigation property to parent category type
     /// </summary>
     public virtual ProductCategoryTypeLookup CategoryType { get; set; } = null!;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }
 
 /// <summary>
 /// Lookup table for charge types (Fixed, Percentage, Per Gram)
 /// </summary>
 [Table("ChargeTypes", Schema = "Lookup")]
-public class ChargeTypeLookup : BaseLookupEntity
+public class ChargeTypeLookup : BaseEntity
 {
     /// <summary>
     /// Charge type code (FIXED, PERCENTAGE, PER_GRAM)
@@ -127,4 +138,7 @@ public class ChargeTypeLookup : BaseLookupEntity
     /// Whether this charge type is weight-based
     /// </summary>
     public bool IsWeightBased { get; set; } = false;
+    public string Description { get; set; }
+    public string Name { get; set; }
+    public int SortOrder { get; set; } = 0;
 }

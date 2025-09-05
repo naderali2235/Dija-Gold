@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models.BranchModels;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.PurchaseOrderModels;
 using DijaGoldPOS.API.Models.Shared;
 using DijaGoldPOS.API.Models.SupplierModels;

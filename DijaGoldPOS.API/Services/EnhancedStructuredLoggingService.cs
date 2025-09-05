@@ -8,7 +8,7 @@ namespace DijaGoldPOS.API.Services;
 /// <summary>
 /// Enhanced structured logging service with comprehensive context and correlation
 /// </summary>
-public class EnhancedStructuredLoggingService : IStructuredLoggingService
+public class EnhancedStructuredLoggingService : IEnhancedStructuredLoggingService
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -569,8 +569,8 @@ public class EnhancedStructuredLoggingService : IStructuredLoggingService
     {
         return exception switch
         {
-            ArgumentException => Serilog.Events.LogEventLevel.Warning,
             ArgumentNullException => Serilog.Events.LogEventLevel.Warning,
+            ArgumentException => Serilog.Events.LogEventLevel.Warning,
             InvalidOperationException => Serilog.Events.LogEventLevel.Warning,
             UnauthorizedAccessException => Serilog.Events.LogEventLevel.Warning,
             KeyNotFoundException => Serilog.Events.LogEventLevel.Information,

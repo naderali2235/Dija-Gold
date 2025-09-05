@@ -1,5 +1,5 @@
 using DijaGoldPOS.API.Models.FinancialModels;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;

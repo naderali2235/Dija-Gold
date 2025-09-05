@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-using DijaGoldPOS.API.Models.LookupTables;
+using DijaGoldPOS.API.Models.LookupModels;
 using DijaGoldPOS.API.Models.ManfacturingModels;
 using DijaGoldPOS.API.Models.Shared;
 

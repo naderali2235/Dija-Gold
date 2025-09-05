@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using DijaGoldPOS.API.Models.LookupTables;
+
 using DijaGoldPOS.API.Models.Shared;
 using DijaGoldPOS.API.Models.BranchModels;
+using DijaGoldPOS.API.Models.LookupModels;
 
 namespace DijaGoldPOS.API.Models.InventoryModels;
 

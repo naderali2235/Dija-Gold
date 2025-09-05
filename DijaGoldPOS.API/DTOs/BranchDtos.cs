@@ -16,6 +16,10 @@ public class BranchDto
     public bool IsHeadquarters { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
+    
+    // Additional properties for mapping
+    public int UserCount { get; set; }
+    public DateTime? LastActivity { get; set; }
 }
 
 /// <summary>

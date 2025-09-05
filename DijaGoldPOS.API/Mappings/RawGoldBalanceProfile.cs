@@ -33,7 +33,7 @@ public class RawGoldBalanceProfile : Profile
             .ForMember(d => d.ConversionFactor, o => o.Ignore()) // Calculated in service
             .ForMember(d => d.TransferValue, o => o.Ignore()) // Calculated in service
             .ForMember(d => d.TransferDate, o => o.Ignore()) // Set in service
-            .ForMember(d => d.TransferType, o => o.UseValue("Waive"))
+            .ForMember(d => d.TransferType, o => o.MapFrom(src => "Waive"))
             .ForMember(d => d.CreatedAt, o => o.Ignore())
             .ForMember(d => d.CreatedBy, o => o.Ignore())
             .ForMember(d => d.ModifiedAt, o => o.Ignore())
@@ -57,7 +57,7 @@ public class RawGoldBalanceProfile : Profile
             .ForMember(d => d.ConversionFactor, o => o.Ignore()) // Calculated in service
             .ForMember(d => d.TransferValue, o => o.Ignore()) // Calculated in service
             .ForMember(d => d.TransferDate, o => o.Ignore()) // Set in service
-            .ForMember(d => d.TransferType, o => o.UseValue("Convert"))
+            .ForMember(d => d.TransferType, o => o.MapFrom(src => "Convert"))
             .ForMember(d => d.CustomerPurchaseId, o => o.Ignore())
             .ForMember(d => d.CreatedByUserId, o => o.Ignore()) // Set in service
             .ForMember(d => d.CreatedAt, o => o.Ignore())
@@ -77,13 +77,13 @@ public class RawGoldBalanceProfile : Profile
             .ForMember(d => d.SupplierName, o => o.MapFrom(s => s.Supplier != null ? s.Supplier.CompanyName : "Unknown"))
             .ForMember(d => d.BranchName, o => o.MapFrom(s => s.Branch != null ? s.Branch.Name : "Unknown"))
             .ForMember(d => d.KaratTypeName, o => o.MapFrom(s => s.KaratType != null ? s.KaratType.Name : "Unknown"))
-            .ForMember(d => d.KaratPurity, o => o.UseValue(0)); // TODO: Add purity calculation logic
+            .ForMember(d => d.KaratPurity, o => o.MapFrom(src => 0)); // TODO: Add purity calculation logic
 
         // RawGoldInventory to MerchantRawGoldBalanceDto mapping
         CreateMap<RawGoldInventory, MerchantRawGoldBalanceDto>()
             .ForMember(d => d.BranchName, o => o.MapFrom(s => s.Branch != null ? s.Branch.Name : "Unknown"))
             .ForMember(d => d.KaratTypeName, o => o.MapFrom(s => s.KaratType != null ? s.KaratType.Name : "Unknown"))
-            .ForMember(d => d.KaratPurity, o => o.UseValue(0)) // TODO: Add purity calculation logic
+            .ForMember(d => d.KaratPurity, o => o.MapFrom(src => 0)) // TODO: Add purity calculation logic
             .ForMember(d => d.AvailableWeight, o => o.MapFrom(s => s.AvailableWeight))
             .ForMember(d => d.TotalValue, o => o.MapFrom(s => s.TotalValue))
             .ForMember(d => d.LastMovementDate, o => o.MapFrom(s => s.LastMovementDate));

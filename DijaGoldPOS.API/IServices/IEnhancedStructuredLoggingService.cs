@@ -28,7 +28,7 @@ public interface IEnhancedStructuredLoggingService : IStructuredLoggingService
     /// <summary>
     /// Log a security event
     /// </summary>
-    Task LogSecurityEventAsync(
+    new Task LogSecurityEventAsync(
         string eventType,
         string description,
         Dictionary<string, object>? securityContext = null);

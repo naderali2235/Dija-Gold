@@ -10,6 +10,9 @@ using DijaGoldPOS.API.IServices;
 using Microsoft.Extensions.Logging;
 using DijaGoldPOS.API.Models.PurchaseOrderModels;
 using DijaGoldPOS.API.Models.ManfacturingModels;
+using DijaGoldPOS.API.Models.FinancialModels;
+using DijaGoldPOS.API.Models.InventoryModels;
+using DijaGoldPOS.API.Models.OwneShipModels;
 
 namespace DijaGoldPOS.API.Services;
 
